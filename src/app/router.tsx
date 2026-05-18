@@ -13,11 +13,13 @@ import { LeagueCreatePage } from '@/pages/league-create';
 import { LeagueJoinPage } from '@/pages/league-join';
 import { ProfilePage } from '@/pages/profile';
 import { SettingsPage } from '@/pages/settings';
+import { LeagueInvitePage } from '@/pages/league-invite';
 
 export const router = createBrowserRouter([
   { path: '/', element: <SplashPage /> },
   { path: '/login', element: <LoginPage /> },
   { path: '/register', element: <RegisterPage /> },
+  { path: '/j/:code', element: <LeagueInvitePage /> },
   {
     element: <RequireAuth><AppShell /></RequireAuth>,
     children: [

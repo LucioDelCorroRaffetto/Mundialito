@@ -219,3 +219,19 @@ export const ROUND_LABELS: Record<string, string> = {
   group: 'Fase de Grupos', r32: 'Ronda de 32', r16: 'Octavos de Final',
   qf: 'Cuartos de Final', sf: 'Semifinal', '3rd': 'Tercer Puesto', final: 'Final',
 };
+
+export interface TournamentPrediction {
+  championId: number | null;   // id del equipo
+  runnerUpId: number | null;
+  topScorerId: number | null;  // id del jugador (null por ahora)
+  revelationTeamId: number | null;
+  eliminatedSurpriseId: number | null;
+}
+
+export const MY_TOURNAMENT_PREDICTION: TournamentPrediction = {
+  championId: null,
+  runnerUpId: null,
+  topScorerId: null,
+  revelationTeamId: null,
+  eliminatedSurpriseId: null,
+};

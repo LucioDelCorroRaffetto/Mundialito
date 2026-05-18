@@ -269,3 +269,121 @@ BETA PRIVADA (fin de semana 4)
 
 *Todos los files de código del prototipo están en `src/` — Mock data en `src/shared/data/mock.ts`.*
 *BLUEPRINT completo: `BLUEPRINT.md` en la raíz del proyecto.*
+
+---
+
+## 8. BUGS RONDA 2 (auditoría del código implementado)
+
+### [Auth store: doble escritura en localStorage — desincronización potencial]
+**Archivo:** `src/shared/stores/auth-store.ts:26`
+**Problema:** El store llama `localStorage.setItem('mundialito_token', token)` manualmente dentro de `login()`, pero Zustand `persist` ya serializa el estado completo (incluido `token`) bajo la key `'mundialito_auth'`. Resultado: el token queda guardado en **dos keys distintas** de localStorage (`mundialito_token` y dentro de `mundialito_auth`). Si el persist de Zustand se limpia o expira pero la key cruda no, o viceversa, `RequireAuth` y el store pueden quedar desincronizados. Lo mismo pasa en `logout()`: se borra `mundialito_token` pero si el persist de Zustand no se limpia correctamente el store puede rehidratarse con `isAuthenticated: true` al recargar.
+**Severidad:** Alta
+**Fix sugerido:** Eliminar las llamadas manuales a `localStorage.setItem/removeItem` del store. Dejar que solo el interceptor de axios lea `mundialito_token` y sincronizarlo como efecto secundario dentro del `persist` custom storage, o unificar: que `RequireAuth` lea `useAuthStore` en lugar de acceder a localStorage directamente.
+
+### [RequireAuth lee localStorage crudo en vez del store — no detecta expiración]
+**Archivo:** `src/shared/components/require-auth.tsx:4`
+**Problema:** `RequireAuth` hace `localStorage.getItem('mundialito_token')` pero no valida si el token expiró. Un access token de 15 minutos puede seguir en localStorage vencido, y `RequireAuth` lo considera válido. El usuario pasa el guard, el primer request al API falla con 401, pero no hay lógica de redirect de vuelta a `/login` en ese caso (no hay interceptor de respuesta en `api-client.ts`).
+**Severidad:** Alta
+**Fix sugerido:** (1) Agregar un interceptor de respuesta en `api-client.ts` que, ante un 401, limpie el store y haga `window.location.replace('/login')`. (2) O decodificar el token en `RequireAuth` y verificar `exp` antes de permitir el paso. (3) A largo plazo, mover la fuente de verdad de auth a `useAuthStore` y que `RequireAuth` consuma `isAuthenticated` desde el store.
+
+### [api-client.ts no tiene interceptor de respuesta para 401]
+**Archivo:** `src/shared/lib/api-client.ts`
+**Problema:** El interceptor de request adjunta el token, pero no hay interceptor de response. Si el server devuelve 401 (token expirado o revocado), el error llega al componente sin manejo centralizado. No se llama a `logout()`, no se redirige al usuario, y el token inválido sigue en localStorage.
+**Severidad:** Alta
+**Fix sugerido:** Agregar `apiClient.interceptors.response.use(undefined, async (error) => { if (error.response?.status === 401) { useAuthStore.getState().logout(); window.location.replace('/login'); } return Promise.reject(error); })`. Si se quiere refresh automático, agregar lógica de retry con el refreshToken antes del redirect.
+
+### [Hydration issue: persist de Zustand puede rehydratar con token expirado]
+**Archivo:** `src/shared/stores/auth-store.ts:20`
+**Problema:** El `persist` middleware de Zustand restaura `{ user, token, isAuthenticated: true }` desde `localStorage` al inicializar la app, sin verificar si el access token sigue vigente. Con access tokens de 15 min, el primer request va a fallar siempre después de un idle. No hay lógica de `onRehydrateStorage` que valide o limpie el estado.
+**Severidad:** Media
+**Fix sugerido:** Usar la opción `onRehydrateStorage` del persist para hacer un `GET /auth/me` silencioso al iniciar. Si falla con 401, llamar a `logout()`. Alternativamente, guardar solo el refreshToken en persist y reconstruir el accessToken al iniciar.
+
+### [register.ts: información que diferencia email vs username en error de conflicto]
+**Archivo:** `packages/api/src/routes/auth/handlers/register.ts:23-26`
+**Problema:** El handler devuelve mensajes distintos según si el email o el username ya existen (`'Email already in use'` vs `'Username already taken'`). Esto permite enumerar si un email está registrado (user enumeration attack). Un atacante puede probar emails en el endpoint de registro y saber cuáles tienen cuenta.
+**Severidad:** Media
+**Fix sugerido:** Devolver siempre el mismo mensaje genérico: `'Email or username already in use'`, sin especificar cuál. El mensaje de username podría mantenerse porque no es un dato sensible, pero el de email sí lo es.
+
+### [predictions.ts: sin foreign keys declaradas con .references()]
+**Archivo:** `packages/api/src/db/schema/predictions.ts:6-8`
+**Problema:** `userId`, `matchId` y `leagueId` están declarados como `integer().notNull()` pero sin `.references(() => users.id)`, `.references(() => matches.id)` ni `.references(() => leagues.id)`. SQLite no enforce integridad referencial por default; sin `.references()` en Drizzle tampoco se generan constraints en la migración. Es posible insertar predicciones con IDs inexistentes.
+**Severidad:** Alta
+**Fix sugerido:** Agregar `.references(() => users.id)`, `.references(() => matches.id)` y `.references(() => leagues.id)` a los tres campos. Habilitar `PRAGMA foreign_keys = ON` en la conexión a Turso/libSQL.
+
+### [predictions.ts: sin unique constraint en (userId, matchId, leagueId)]
+**Archivo:** `packages/api/src/db/schema/predictions.ts`
+**Problema:** No hay unique constraint sobre la combinación `(userId, matchId, leagueId)`. Un usuario puede guardar múltiples predicciones para el mismo partido en la misma liga. El scoring calculado con `points` quedaría duplicado.
+**Severidad:** Alta
+**Fix sugerido:** Agregar como tercer argumento de `sqliteTable`: `(t) => ({ unq: uniqueIndex('predictions_user_match_league_idx').on(t.userId, t.matchId, t.leagueId) })`. También asegurarse de que el handler de predicciones use `INSERT OR REPLACE` o un upsert.
+
+### [leagues.ts: sin unique constraint en league_members (leagueId, userId)]
+**Archivo:** `packages/api/src/db/schema/leagues.ts:14-19`
+**Problema:** La tabla `league_members` no tiene unique constraint en `(leagueId, userId)`. Un usuario puede unirse a la misma liga múltiples veces, generando filas duplicadas que distorsionan el conteo de miembros y la tabla de standings.
+**Severidad:** Alta
+**Fix sugerido:** Agregar `(t) => ({ unq: uniqueIndex('league_members_league_user_idx').on(t.leagueId, t.userId) })` al definir la tabla.
+
+### [leagues.ts: adminId sin foreign key a users]
+**Archivo:** `packages/api/src/db/schema/leagues.ts:9`
+**Problema:** `adminId: integer('admin_id').notNull()` no tiene `.references(() => users.id)`. Si el usuario admin es eliminado, la liga queda con un `adminId` huérfano sin que la DB lo detecte.
+**Severidad:** Media
+**Fix sugerido:** Agregar `.references(() => users.id)` al campo `adminId`.
+
+### [matches.ts: predictionLockUtc debe setearse manualmente — riesgo operativo]
+**Archivo:** `packages/api/src/db/schema/matches.ts:11`
+**Problema:** El campo `predictionLockUtc` (kickoff − 5 min) es un texto que se debe setear manualmente al insertar o actualizar el partido. No hay ningún `DEFAULT` ni computed column que lo derive automáticamente de `kickoffUtc`. Si el horario de un partido cambia y el worker actualiza `kickoffUtc` pero olvida recalcular `predictionLockUtc`, el lock queda desincronizado y los usuarios pueden pronosticar después del inicio real del partido.
+**Severidad:** Alta
+**Fix sugerido:** En el job del worker que actualiza kickoffs, siempre recalcular `predictionLockUtc = new Date(kickoffUtc).getTime() - 5 * 60 * 1000` y persistirlo junto con `kickoffUtc`. Considerar agregar un trigger SQLite que recalcule el lock automáticamente en UPDATE de `kickoff_utc`.
+
+### [matches.ts: valores de round no incluyen 'r32' para fase de grupos de 32]
+**Archivo:** `packages/api/src/db/schema/matches.ts:15`
+**Problema:** El comment indica `'group' | 'r32' | 'r16' | 'qf' | 'sf' | 'third' | 'final'`. El Mundial 2026 tiene 48 equipos y una nueva fase: la Ronda de 32 (antes de octavos). El valor `'r32'` está en el schema, lo cual es correcto. Sin embargo el comment omite que con 12 grupos de 4 equipos, los mejores 3 de cada grupo más 4 wildcards avanzan. Confirmar que el seed de fixtures usará `'r32'` correctamente para esa ronda intermedia y no `'r16'` por error (el Mundial 2026 no tiene fase de 16 directamente desde grupos).
+**Severidad:** Media
+**Fix sugerido:** Verificar contra el fixture oficial de FIFA que los valores de `round` matcheen exactamente con los que va a devolver la API de resultados (API-Football). Documentar el mapeo en el código del worker.
+
+### [match-detail.tsx: getPointsPreview no refleja el sistema completo de puntos]
+**Archivo:** `src/pages/match-detail.tsx:8-15`
+**Problema:** `getPointsPreview` muestra solo dos filas: "exacto" (5 pts) y "correcto/empate" (1 o 3 pts). Pero el sistema de puntuación tiene **4 niveles** (exacto=5, ganador+diferencia=3, ganador=1, empate=1). La función colapsa "ganador+diferencia" y "ganador" en un solo `correct: 3`, sin distinguir el caso intermedio. El usuario ve "+3 pts" cuando en realidad podría ganar 3 o 1 dependiendo de si acertó solo el ganador o también la diferencia. Además, el panel "Sistema de puntuación" de abajo lista los 4 niveles correctamente, creando inconsistencia visual en la misma pantalla.
+**Severidad:** Media
+**Fix sugerido:** Expandir `getPointsPreview` para mostrar las 3 filas relevantes según si es empate o resultado con diferencia: (a) exacto=5, (b) ganador+diferencia=3 (solo si no empate), (c) solo ganador/empate=1. Esto hace al preview consistente con el panel de abajo.
+
+### [matches.tsx: partidos 'finished' sin indicador visual diferenciado]
+**Archivo:** `src/pages/matches.tsx:79-87`
+**Problema:** El ícono lateral distingue `live` (pulso rojo) y "pronosticado" (`CheckCircle2` verde) y "sin pronosticar" (`Clock` gris), pero un partido `finished` sin predicción previa muestra el ícono `Clock` gris igual que un partido scheduled futuro. El usuario no puede distinguir visualmente si el partido ya terminó (y no pronosticó) o si todavía no arrancó.
+**Severidad:** Baja
+**Fix sugerido:** Agregar un caso para `match.status === 'finished'`: mostrar un ícono diferente (ej: `XCircle` o `Flag`) en color muted, o un badge "FIN" con el resultado final si está disponible.
+
+### [matches.tsx: partidos live sin prioridad en el orden de la lista]
+**Archivo:** `src/pages/matches.tsx:41-43`
+**Problema:** Los partidos se agrupan por fecha (`kickoffUtc.slice(0, 10)`) y las fechas se ordenan cronológicamente con `.sort()`. Un partido `live` aparece en su posición cronológica normal dentro del día, no al tope de la lista. Si hay partidos de fechas anteriores (de ayer) todavía en estado `live`, aparecen al final.
+**Severidad:** Baja
+**Fix sugerido:** Antes de agrupar, separar los partidos `live` en un grupo especial que se muestre siempre al tope, independientemente de la fecha. O reordenar las fechas poniendo primero las que contienen partidos `live`.
+
+### [home.tsx: countdown hardcodeado — no considera kickoff real del primer partido]
+**Archivo:** `src/pages/home.tsx:26`
+**Problema:** La fecha `'2026-06-11T19:00:00Z'` está hardcodeada en el componente. Si FIFA cambia el horario del partido inaugural (algo que históricamente ocurre), el countdown mostrará la fecha incorrecta. Tampoco está extraída como constante exportable, lo que dificulta actualizarla desde un solo lugar.
+**Severidad:** Baja
+**Fix sugerido:** Extraer la fecha como constante a `src/shared/constants.ts` (o derivarla del primer partido de la API cuando esté disponible) y referenciarla desde `CountdownHero`.
+
+### [home.tsx: formatTime hardcodea timezone 'America/Argentina/Buenos_Aires']
+**Archivo:** `src/pages/home.tsx:60` y `src/pages/match-detail.tsx:45` y `src/pages/matches.tsx:14`
+**Problema:** `formatTime` usa `timeZone: 'America/Argentina/Buenos_Aires'` hardcodeado en tres archivos distintos. Un usuario en México, España o cualquier otro país verá los horarios convertidos a hora argentina, no a su hora local. Esto genera confusión para cualquier usuario fuera de Argentina.
+**Severidad:** Media
+**Fix sugerido:** Eliminar el `timeZone` fijo para que el browser use la timezone del dispositivo del usuario (comportamiento por defecto de `toLocaleTimeString`). Si se quiere mostrar la timezone, agregar `timeZoneName: 'short'`. Centralizar la función `formatTime` en `src/shared/lib/format.ts` para no repetirla en 3 archivos.
+
+### [refresh.ts: refresh token rotation sin invalidación de token anterior]
+**Archivo:** `packages/api/src/routes/auth/handlers/refresh.ts`
+**Problema:** El handler verifica el refresh token y emite un nuevo par (access + refresh). Dado que los refresh tokens son stateless (decisión D1), el token anterior sigue siendo técnicamente válido hasta que expire en 30 días. Si un refresh token es robado, el atacante y el usuario legítimo pueden tener tokens válidos simultáneamente durante hasta 30 días sin que el sistema lo detecte.
+**Severidad:** Media
+**Fix sugerido:** Esto es una consecuencia conocida de la decisión D1 (stateless). Mitigación mínima: reducir la vida del refresh token a 7 días. Mitigación completa: persistir refresh tokens en DB con una tabla `refresh_tokens` y invalidar el anterior al emitir uno nuevo (token rotation con detección de reuso).
+
+---
+
+## 9. PREGUNTAS TÉCNICAS RONDA 2
+
+- [ ] ¿`RequireAuth` debería leer `useAuthStore().isAuthenticated` en lugar de `localStorage` directamente? Si el store es la fuente de verdad, el guard debería consumirlo para evitar divergencias.
+- [ ] ¿El persist de Zustand debe almacenar solo el `refreshToken` (en lugar del access token + user completo) para reducir el riesgo de hydration con estado stale?
+- [ ] ¿Hay planes de agregar un interceptor de respuesta en `api-client.ts` con refresh automático (silent refresh) antes de redirigir a `/login`?
+- [ ] El `round: 'r32'` del Mundial 2026 — ¿el proveedor de datos (API-Football) devuelve exactamente ese string, o hay que mapear desde otro valor? Confirmar antes del seed.
+- [ ] ¿`predictionLockUtc` se va a calcular en el worker o en el handler de creación de partidos? ¿Hay un trigger de DB o es responsabilidad de la aplicación?
+- [ ] ¿Las predicciones son globales o por liga? El schema actual tiene `leagueId` como `notNull` en `predictions`, lo que implica que un usuario necesita pertenecer a una liga para pronosticar. Si el prode es "global" (sin liga), el modelo actual no lo soporta sin crear una "liga default".
+- [ ] ¿El `adminId` de leagues debería tener lógica de transferencia de admin si el admin abandona la liga? No hay campo ni tabla para trackear eso actualmente.

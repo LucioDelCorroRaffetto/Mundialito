@@ -3,19 +3,11 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { ArrowLeft, Clock, MapPin, CheckCircle2 } from 'lucide-react';
 import { MATCHES, MY_PREDICTIONS, ROUND_LABELS } from '@/shared/data/mock';
+import { getMaxPossiblePoints } from '@/shared/lib/scoring';
 import { Button } from '@/shared/components/ui/button';
 
-function getPointsPreview(home: number, away: number) {
-  const isDraw = home === away;
-  return {
-    isDraw,
-    exact: 5,
-    correct: isDraw ? 1 : 3,
-  };
-}
-
 function PointsPreview({ home, away }: { home: number; away: number }) {
-  const { isDraw, exact, correct } = getPointsPreview(home, away);
+  const { isDraw, ifExact, ifWinnerDiff } = getMaxPossiblePoints(home, away);
   return (
     <div className="mx-4 mt-3 p-4 rounded-lg bg-elevated border border-border">
       <p className="text-sm-s font-semibold text-text mb-2">
@@ -24,11 +16,11 @@ function PointsPreview({ home, away }: { home: number; away: number }) {
       <div className="flex flex-col gap-1.5">
         <div className="flex items-center justify-between">
           <span className="text-sm-s text-muted">{isDraw ? 'Empate exacto' : 'Resultado exacto'}</span>
-          <span className="text-sm-s font-bold text-accent">+{exact} pts</span>
+          <span className="text-sm-s font-bold text-accent">+{ifExact} pts</span>
         </div>
         <div className="flex items-center justify-between">
           <span className="text-sm-s text-muted">{isDraw ? 'Empate acertado' : 'Resultado correcto'}</span>
-          <span className="text-sm-s font-bold text-accent">+{correct} pt{correct !== 1 ? 's' : ''}</span>
+          <span className="text-sm-s font-bold text-accent">+{ifWinnerDiff} pt{ifWinnerDiff !== 1 ? 's' : ''}</span>
         </div>
       </div>
     </div>

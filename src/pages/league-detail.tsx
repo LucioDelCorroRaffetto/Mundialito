@@ -4,6 +4,7 @@ import { motion } from 'framer-motion';
 import { ArrowLeft, Share2, Users, TrendingUp, TrendingDown, Minus, Trophy } from 'lucide-react';
 import { MY_LEAGUES, LEAGUE_STANDINGS, type StandingsRow } from '@/shared/data/mock';
 import { cn } from '@/shared/lib/cn';
+import { ShareSheet } from '@/shared/components/share-sheet';
 
 const TABS = ['Tabla', 'Info'] as const;
 type Tab = (typeof TABS)[number];
@@ -46,6 +47,7 @@ export function LeagueDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const [tab, setTab] = useState<Tab>('Tabla');
+  const [shareOpen, setShareOpen] = useState(false);
 
   const league = MY_LEAGUES.find((l) => l.id === Number(id));
   if (!league) { navigate('/leagues', { replace: true }); return null; }
@@ -60,7 +62,7 @@ export function LeagueDetailPage() {
           <h1 className="text-lg-s font-display font-bold text-text truncate">{league.name}</h1>
           <p className="text-sm-s text-muted">{league.memberCount} miembros · código: {league.code}</p>
         </div>
-        <button className="p-2 rounded-md bg-elevated border border-border" aria-label="Compartir">
+        <button onClick={() => setShareOpen(true)} className="p-2 rounded-md bg-elevated border border-border" aria-label="Compartir">
           <Share2 size={18} className="text-text" />
         </button>
       </div>
@@ -131,6 +133,13 @@ export function LeagueDetailPage() {
           </button>
         </div>
       )}
+
+      <ShareSheet
+        open={shareOpen}
+        onClose={() => setShareOpen(false)}
+        leagueName={league.name}
+        code={league.code}
+      />
     </div>
   );
 }
