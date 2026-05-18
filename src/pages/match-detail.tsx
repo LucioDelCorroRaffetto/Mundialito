@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { ArrowLeft, Clock, MapPin, CheckCircle2, Share2 } from 'lucide-react';
 import { MATCHES, MY_PREDICTIONS, ROUND_LABELS, PLAYERS } from '@/shared/data/mock';
@@ -8,6 +8,7 @@ import { Button } from '@/shared/components/ui/button';
 import { cn } from '@/shared/lib/cn';
 import { sharePredictionCard } from '@/shared/lib/generate-prediction-card';
 import { useAuthStore } from '@/shared/stores/auth-store';
+import { useUpsertPrediction } from '@/shared/hooks/use-predictions';
 
 function PointsPreview({ home, away, scorerCount }: { home: number; away: number; scorerCount: number }) {
   const { isDraw, ifExact, ifWinnerDiff } = getMaxPossiblePoints(home, away);
@@ -94,6 +95,38 @@ function ScorerPicker({
   );
 }
 
+function ScoreInput({
+  value,
+  onChange,
+  team,
+}: {
+  value: number;
+  onChange: (v: number) => void;
+  team: { code: string; flag: string; name: string };
+}) {
+  return (
+    <div className="flex flex-col items-center gap-2">
+      <span className="text-3xl-s">{team.flag}</span>
+      <span className="text-base-s font-bold text-text">{team.code}</span>
+      <div className="flex items-center gap-2">
+        <button
+          onClick={() => onChange(Math.max(0, value - 1))}
+          className="w-9 h-9 rounded-full bg-elevated border border-border text-text text-lg font-bold hover:border-accent-border transition-colors"
+        >
+          −
+        </button>
+        <span className="w-10 text-center text-3xl-s font-display font-bold text-accent">{value}</span>
+        <button
+          onClick={() => onChange(value + 1)}
+          className="w-9 h-9 rounded-full bg-elevated border border-border text-text text-lg font-bold hover:border-accent-border transition-colors"
+        >
+          +
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function formatDate(utc: string) {
   const d = new Date(utc);
   return d.toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
@@ -107,6 +140,9 @@ function formatTime(utc: string) {
 export function MatchDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const leagueIdParam = searchParams.get('leagueId');
+  const leagueId = leagueIdParam ? Number(leagueIdParam) : null;
 
   const match = MATCHES.find((m) => m.id === Number(id));
   if (!match) { navigate('/matches', { replace: true }); return null; }
@@ -117,9 +153,10 @@ export function MatchDetailPage() {
   const [homeScorers, setHomeScorers] = useState<number[]>([]);
   const [awayScorers, setAwayScorers] = useState<number[]>([]);
   const [saved, setSaved] = useState(!!existingPrediction);
-  const [saving, setSaving] = useState(false);
   const [sharing, setSharing] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const username = useAuthStore((s) => s.user?.username);
+  const upsertMutation = useUpsertPrediction();
 
   const handleShare = async () => {
     setSharing(true);
@@ -157,41 +194,23 @@ export function MatchDetailPage() {
   };
 
   const handleSave = async () => {
-    setSaving(true);
-    await new Promise((r) => setTimeout(r, 500));
-    setSaved(true);
-    setSaving(false);
+    if (!leagueId) {
+      setSaveError('Necesitás abrir el partido desde una liga (no hay leagueId).');
+      return;
+    }
+    setSaveError(null);
+    try {
+      await upsertMutation.mutateAsync({
+        matchId: match.id,
+        leagueId,
+        homeScore,
+        awayScore,
+      });
+      setSaved(true);
+    } catch (e: any) {
+      setSaveError(e?.response?.data?.error?.message ?? 'Error al guardar pronóstico');
+    }
   };
-
-  const ScoreInput = ({
-    value,
-    onChange,
-    team,
-  }: {
-    value: number;
-    onChange: (v: number) => void;
-    team: typeof match.homeTeam;
-  }) => (
-    <div className="flex flex-col items-center gap-2">
-      <span className="text-3xl-s">{team.flag}</span>
-      <span className="text-base-s font-bold text-text">{team.code}</span>
-      <div className="flex items-center gap-2">
-        <button
-          onClick={() => { onChange(Math.max(0, value - 1)); setSaved(false); }}
-          className="w-9 h-9 rounded-full bg-elevated border border-border text-text text-lg font-bold hover:border-accent-border transition-colors"
-        >
-          −
-        </button>
-        <span className="w-10 text-center text-3xl-s font-display font-bold text-accent">{value}</span>
-        <button
-          onClick={() => { onChange(value + 1); setSaved(false); }}
-          className="w-9 h-9 rounded-full bg-elevated border border-border text-text text-lg font-bold hover:border-accent-border transition-colors"
-        >
-          +
-        </button>
-      </div>
-    </div>
-  );
 
   return (
     <div className="flex flex-col min-h-full animate-fade-in">
@@ -275,9 +294,14 @@ export function MatchDetailPage() {
             </button>
           </>
         ) : (
-          <Button fullWidth size="lg" onClick={handleSave} loading={saving}>
-            {existingPrediction ? 'Actualizar pronóstico' : 'Guardar pronóstico'}
-          </Button>
+          <>
+            <Button fullWidth size="lg" onClick={handleSave} loading={upsertMutation.isPending}>
+              {existingPrediction ? 'Actualizar pronóstico' : 'Guardar pronóstico'}
+            </Button>
+            {saveError && (
+              <p className="text-xs-s text-red-400 mt-2 text-center">{saveError}</p>
+            )}
+          </>
         )}
       </div>
 

@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { z } from 'zod';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import { db } from '../../../db/index.js';
 import { predictions, matches, leagueMembers } from '../../../db/schema/index.js';
 import { AppError, NotFoundError } from '../../../lib/errors.js';
@@ -34,31 +34,20 @@ export async function upsertPredictionHandler(req: Request, res: Response) {
     throw new AppError('FORBIDDEN', 'You are not a member of this league', 403);
   }
 
-  // 3. Upsert (insert or replace en SQLite vía ON CONFLICT)
-  const existing = await db
-    .select()
-    .from(predictions)
-    .where(
-      and(
-        eq(predictions.userId, userId),
-        eq(predictions.matchId, matchId),
-        eq(predictions.leagueId, leagueId)
-      )
-    )
-    .get();
+  // 3. Upsert atómico vía ON CONFLICT DO UPDATE — evita race conditions
+  //    entre SELECT y INSERT/UPDATE concurrentes para el mismo (userId, matchId, leagueId).
+  const [result] = await db
+    .insert(predictions)
+    .values({ userId, matchId, leagueId, homeScore, awayScore })
+    .onConflictDoUpdate({
+      target: [predictions.userId, predictions.matchId, predictions.leagueId],
+      set: {
+        homeScore,
+        awayScore,
+        updatedAt: sql`(datetime('now'))`,
+      },
+    })
+    .returning();
 
-  if (existing) {
-    const [updated] = await db
-      .update(predictions)
-      .set({ homeScore, awayScore, updatedAt: new Date().toISOString() })
-      .where(eq(predictions.id, existing.id))
-      .returning();
-    return res.json(updated);
-  } else {
-    const [created] = await db
-      .insert(predictions)
-      .values({ userId, matchId, leagueId, homeScore, awayScore })
-      .returning();
-    return res.status(201).json(created);
-  }
+  return res.status(200).json(result);
 }

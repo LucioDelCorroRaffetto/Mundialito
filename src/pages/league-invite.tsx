@@ -3,10 +3,12 @@ import { motion } from 'framer-motion';
 import { Users, Trophy, Lock, Globe } from 'lucide-react';
 import { Button } from '@/shared/components/ui/button';
 import { MY_LEAGUES, PUBLIC_LEAGUES, LEAGUE_STANDINGS } from '@/shared/data/mock';
+import { useAuthStore } from '@/shared/stores/auth-store';
 
 export function LeagueInvitePage() {
   const { code } = useParams<{ code: string }>();
   const navigate = useNavigate();
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
 
   const allLeagues = [...MY_LEAGUES, ...PUBLIC_LEAGUES];
   const league = allLeagues.find((l) => l.code === code);
@@ -26,8 +28,7 @@ export function LeagueInvitePage() {
   const standings = LEAGUE_STANDINGS.slice(0, 3);
 
   const handleJoin = () => {
-    const token = localStorage.getItem('mundialito_token');
-    if (!token) {
+    if (!isAuthenticated) {
       navigate(`/register?returnTo=/j/${code}`);
     } else {
       navigate(`/leagues/${league.id}`);

@@ -2,7 +2,10 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { ChevronRight, Clock, CheckCircle2 } from 'lucide-react';
-import { MATCHES, MY_PREDICTIONS, ROUND_LABELS, type Match } from '@/shared/data/mock';
+import { useMatches } from '@/shared/hooks/use-matches';
+import { useTeamMap } from '@/shared/hooks/use-teams';
+import { MY_PREDICTIONS, ROUND_LABELS } from '@/shared/data/mock';
+import type { Match, Team } from '@/shared/types/api';
 import { cn } from '@/shared/lib/cn';
 
 function formatDate(utc: string) {
@@ -25,14 +28,42 @@ function groupByDate(matches: Match[]) {
   return groups;
 }
 
+const PLACEHOLDER_TEAM: Team = {
+  id: 0,
+  code: '???',
+  flag: '🏳️',
+  name: 'Cargando...',
+  group: null,
+  confederation: null,
+};
+
+function getTeam(teamMap: Map<number, Team> | undefined, id: number): Team {
+  return teamMap?.get(id) ?? PLACEHOLDER_TEAM;
+}
+
 const FILTER_TABS = ['Todos', 'Pendientes', 'Pronosticados'] as const;
 type FilterTab = (typeof FILTER_TABS)[number];
 
 export function MatchesPage() {
   const [filter, setFilter] = useState<FilterTab>('Todos');
+  const { data: matchesResponse, isLoading, error } = useMatches({ limit: 200 });
+  const { data: teamMap } = useTeamMap();
+  const matches = matchesResponse?.data ?? [];
+
   const predictedIds = new Set(MY_PREDICTIONS.map((p) => p.matchId));
 
-  const filtered = MATCHES.filter((m) => {
+  if (isLoading) {
+    return <div className="p-4 text-muted">Cargando partidos...</div>;
+  }
+  if (error) {
+    return (
+      <div className="p-4 text-red-400">
+        Error al cargar partidos: {String((error as Error).message)}
+      </div>
+    );
+  }
+
+  const filtered = matches.filter((m) => {
     if (filter === 'Pronosticados') return predictedIds.has(m.id);
     if (filter === 'Pendientes') return !predictedIds.has(m.id) && m.status === 'scheduled';
     return true;
@@ -69,6 +100,8 @@ export function MatchesPage() {
             <p className="text-sm-s font-bold text-muted capitalize">{formatDate(date)}</p>
             {grouped[date].map((match) => {
               const prediction = MY_PREDICTIONS.find((p) => p.matchId === match.id);
+              const homeTeam = getTeam(teamMap, match.homeTeamId);
+              const awayTeam = getTeam(teamMap, match.awayTeamId);
               return (
                 <Link
                   key={match.id}
@@ -96,18 +129,15 @@ export function MatchesPage() {
                         <span className="flex items-center gap-1">
                           <span className="w-2 h-2 rounded-full bg-red-400 animate-pulse" />
                           <span className="text-xs-s font-bold text-red-400">EN VIVO</span>
-                          {match.minute != null && (
-                            <span className="text-xs-s text-red-400">{match.minute}'</span>
-                          )}
                         </span>
                       ) : (
                         <span className="text-xs-s text-muted">{formatTime(match.kickoffUtc)}</span>
                       )}
                     </div>
                     <div className="flex items-center gap-2 mt-1">
-                      <span className="text-sm-s font-semibold text-text">{match.homeTeam.flag} {match.homeTeam.name}</span>
+                      <span className="text-sm-s font-semibold text-text">{homeTeam.flag} {homeTeam.name}</span>
                       <span className="text-xs-s font-bold text-muted">vs</span>
-                      <span className="text-sm-s font-semibold text-text">{match.awayTeam.name} {match.awayTeam.flag}</span>
+                      <span className="text-sm-s font-semibold text-text">{awayTeam.name} {awayTeam.flag}</span>
                     </div>
                     {prediction && (
                       <p className="text-xs-s text-accent font-semibold mt-0.5">

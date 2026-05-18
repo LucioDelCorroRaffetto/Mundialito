@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { ArrowLeft, Clock, CheckCircle2 } from 'lucide-react';
@@ -125,9 +125,18 @@ export function TournamentPredictionsPage() {
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
 
+  useEffect(() => {
+    const stored = localStorage.getItem('mundialito_tournament_picks');
+    if (stored) {
+      try { setPicks(JSON.parse(stored)); } catch {}
+    }
+  }, []);
+
   const handleSave = async () => {
     setSaving(true);
-    await new Promise((r) => setTimeout(r, 600));
+    // TODO: Sprint 6 — POST /api/v1/tournament-predictions
+    localStorage.setItem('mundialito_tournament_picks', JSON.stringify(picks));
+    await new Promise((r) => setTimeout(r, 400));
     setSaved(true);
     setSaving(false);
   };
@@ -226,20 +235,30 @@ export function TournamentPredictionsPage() {
       {/* Save button */}
       <div className="px-4 mt-4">
         {saved ? (
-          <motion.div
-            initial={{ scale: 0.9, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            className="flex items-center justify-center gap-2 py-3 rounded-lg bg-green-500/15 border border-green-500/30"
-          >
-            <CheckCircle2 size={18} className="text-green-400" />
-            <span className="text-sm-s font-semibold text-green-400">
-              Pronósticos guardados
-            </span>
-          </motion.div>
+          <>
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              className="flex items-center justify-center gap-2 py-3 rounded-lg bg-green-500/15 border border-green-500/30"
+            >
+              <CheckCircle2 size={18} className="text-green-400" />
+              <span className="text-sm-s font-semibold text-green-400">
+                Pronóstico guardado localmente
+              </span>
+            </motion.div>
+            <p className="text-xs-s text-muted text-center mt-2">
+              ⚠️ Guardado solo en este dispositivo. Sincronización con servidor próximamente.
+            </p>
+          </>
         ) : (
-          <Button fullWidth size="lg" onClick={handleSave} loading={saving}>
-            Guardar pronósticos
-          </Button>
+          <>
+            <Button fullWidth size="lg" onClick={handleSave} loading={saving}>
+              Guardar pronósticos
+            </Button>
+            <p className="text-xs-s text-muted text-center mt-2">
+              ⚠️ Guardado solo en este dispositivo. Sincronización con servidor próximamente.
+            </p>
+          </>
         )}
       </div>
     </div>

@@ -3,6 +3,10 @@ import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Plus, Search, Trophy, ChevronRight } from 'lucide-react';
 import { MY_LEAGUES, MATCHES, MY_PREDICTIONS } from '@/shared/data/mock';
+import { useMatches } from '@/shared/hooks/use-matches';
+import { useMyLeagues } from '@/shared/hooks/use-leagues';
+import { useTeamMap } from '@/shared/hooks/use-teams';
+import type { Team } from '@/shared/types/api';
 import { Button } from '@/shared/components/ui/button';
 import { cn } from '@/shared/lib/cn';
 
@@ -60,10 +64,49 @@ function formatTime(utc: string) {
   return d.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Argentina/Buenos_Aires' });
 }
 
+const PLACEHOLDER_TEAM: Team = {
+  id: 0,
+  code: '???',
+  flag: '🏳️',
+  name: 'Cargando...',
+  group: null,
+  confederation: null,
+};
+
 export function HomePage() {
-  const upcoming = MATCHES.filter((m) => m.status === 'scheduled').slice(0, 3);
+  const { data: matchesResponse } = useMatches({ status: 'scheduled', limit: 5 });
+  const { data: teamMap } = useTeamMap();
+  const { data: leaguesResponse } = useMyLeagues();
+
+  // Fallback gracioso al mock si el API no tiene datos todavía
+  const apiMatches = matchesResponse?.data ?? [];
+  const upcoming = apiMatches.length > 0
+    ? apiMatches.slice(0, 3).map((m) => ({
+        id: m.id,
+        kickoffUtc: m.kickoffUtc,
+        city: m.city,
+        homeTeam: teamMap?.get(m.homeTeamId) ?? PLACEHOLDER_TEAM,
+        awayTeam: teamMap?.get(m.awayTeamId) ?? PLACEHOLDER_TEAM,
+      }))
+    : MATCHES.filter((m) => m.status === 'scheduled').slice(0, 3);
+
+  // TODO: el endpoint /leagues/mine no devuelve memberCount/myPoints/myPosition todavía.
+  // Por ahora caemos al mock cuando no haya respuesta real, para no romper UI.
+  const apiLeagues = leaguesResponse?.data ?? [];
+  const leaguesToShow = apiLeagues.length > 0
+    ? apiLeagues.map((l) => ({
+        id: l.id,
+        name: l.name,
+        isPublic: l.isPublic,
+        memberCount: 0,
+        myPoints: 0,
+        myPosition: 0,
+      }))
+    : MY_LEAGUES;
+
   const predictedIds = new Set(MY_PREDICTIONS.map((p) => p.matchId));
-  const pendingCount = MATCHES.filter(
+  const matchesForPending = apiMatches.length > 0 ? apiMatches : MATCHES;
+  const pendingCount = matchesForPending.filter(
     (m) => m.status !== 'finished' && !predictedIds.has(m.id)
   ).length;
 
@@ -85,7 +128,7 @@ export function HomePage() {
       </div>
 
       <div className="flex flex-col gap-3">
-        {MY_LEAGUES.map((league, i) => (
+        {leaguesToShow.map((league, i) => (
           <motion.div
             key={league.id}
             initial={{ opacity: 0, y: 12 }}
