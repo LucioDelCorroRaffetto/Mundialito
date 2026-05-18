@@ -1,12 +1,24 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { ArrowLeft, Clock, CheckCircle2 } from 'lucide-react';
-import { TEAMS, MY_TOURNAMENT_PREDICTION, type TournamentPrediction } from '@/shared/data/mock';
 import { Button } from '@/shared/components/ui/button';
 import { cn } from '@/shared/lib/cn';
+import { useTeams } from '@/shared/hooks/use-teams';
+import {
+  useTournamentPrediction,
+  useUpsertTournamentPrediction,
+} from '@/shared/hooks/use-tournament-predictions';
+import { SkeletonList } from '@/shared/components/skeleton';
+import { toast } from 'sonner';
+import type { Team } from '@/shared/types/api';
 
-const TEAMS_LIST = Object.values(TEAMS);
+interface LocalPicks {
+  championTeamId: number | null;
+  runnerUpTeamId: number | null;
+  revelationTeamId: number | null;
+  surpriseEliminatedTeamId: number | null;
+}
 
 interface PickCardProps {
   title: string;
@@ -16,6 +28,7 @@ interface PickCardProps {
   sectionId: string;
   openSection: string | null;
   setOpenSection: (id: string | null) => void;
+  teams: Team[];
 }
 
 function PickCard({
@@ -26,8 +39,9 @@ function PickCard({
   sectionId,
   openSection,
   setOpenSection,
+  teams,
 }: PickCardProps) {
-  const team = TEAMS_LIST.find((t) => t.id === selectedTeamId);
+  const team = teams.find((t) => t.id === selectedTeamId);
   const isOpen = openSection === sectionId;
 
   return (
@@ -59,7 +73,7 @@ function PickCard({
       </div>
       {isOpen && (
         <div className="grid grid-cols-4 gap-2 pt-2 border-t border-border">
-          {TEAMS_LIST.map((t) => (
+          {teams.map((t) => (
             <button
               key={t.id}
               onClick={() => {
@@ -120,31 +134,117 @@ function TopScorerCard({
 
 export function TournamentPredictionsPage() {
   const navigate = useNavigate();
-  const [picks, setPicks] = useState<TournamentPrediction>({ ...MY_TOURNAMENT_PREDICTION });
-  const [openSection, setOpenSection] = useState<string | null>(null);
-  const [saved, setSaved] = useState(false);
-  const [saving, setSaving] = useState(false);
+  const [searchParams] = useSearchParams();
+  const leagueIdParam = searchParams.get('leagueId');
+  const leagueId = leagueIdParam ? Number(leagueIdParam) : undefined;
 
+  const [picks, setPicks] = useState<LocalPicks>({
+    championTeamId: null,
+    runnerUpTeamId: null,
+    revelationTeamId: null,
+    surpriseEliminatedTeamId: null,
+  });
+  const [openSection, setOpenSection] = useState<string | null>(null);
+  const [initialised, setInitialised] = useState(false);
+
+  const { data: teamsData, isLoading: teamsLoading } = useTeams();
+  const teams = teamsData ?? [];
+
+  const tournamentQuery = useTournamentPrediction(leagueId);
+  const upsertMutation = useUpsertTournamentPrediction();
+
+  // Populate picks from server data once loaded
   useEffect(() => {
-    const stored = localStorage.getItem('mundialito_tournament_picks');
-    if (stored) {
-      try { setPicks(JSON.parse(stored)); } catch {}
+    if (tournamentQuery.data && !initialised) {
+      const d = tournamentQuery.data;
+      setPicks({
+        championTeamId: d.championTeamId,
+        runnerUpTeamId: d.runnerUpTeamId,
+        revelationTeamId: d.revelationTeamId,
+        surpriseEliminatedTeamId: d.surpriseEliminatedTeamId,
+      });
+      setInitialised(true);
     }
-  }, []);
+    if (!tournamentQuery.isLoading && !tournamentQuery.data && !initialised) {
+      setInitialised(true);
+    }
+  }, [tournamentQuery.data, tournamentQuery.isLoading, initialised]);
 
   const handleSave = async () => {
-    setSaving(true);
-    // TODO: Sprint 6 — POST /api/v1/tournament-predictions
-    localStorage.setItem('mundialito_tournament_picks', JSON.stringify(picks));
-    await new Promise((r) => setTimeout(r, 400));
-    setSaved(true);
-    setSaving(false);
+    if (!leagueId) {
+      toast.error('Seleccioná una liga primero');
+      return;
+    }
+    try {
+      await upsertMutation.mutateAsync({
+        leagueId,
+        championTeamId: picks.championTeamId,
+        runnerUpTeamId: picks.runnerUpTeamId,
+        topScorerPlayerId: null,
+        revelationTeamId: picks.revelationTeamId,
+        surpriseEliminatedTeamId: picks.surpriseEliminatedTeamId,
+      });
+      toast.success('¡Pronósticos guardados!');
+    } catch {
+      toast.error('Error al guardar los pronósticos');
+    }
   };
 
-  const setField = (field: keyof TournamentPrediction) => (id: number) => {
+  const setField = (field: keyof LocalPicks) => (id: number) => {
     setPicks((prev) => ({ ...prev, [field]: id }));
-    setSaved(false);
   };
+
+  const isLoading = tournamentQuery.isLoading || teamsLoading;
+
+  if (!leagueId) {
+    return (
+      <div className="flex flex-col min-h-full animate-fade-in pb-8">
+        <div className="flex items-center gap-3 px-4 pt-5 pb-3">
+          <button
+            onClick={() => navigate(-1)}
+            className="p-2 rounded-md bg-elevated border border-border"
+            aria-label="Volver"
+          >
+            <ArrowLeft size={18} className="text-text" />
+          </button>
+          <h1 className="text-base-s font-bold text-text">Pronósticos de torneo</h1>
+        </div>
+        <div className="flex flex-col items-center justify-center flex-1 px-4 gap-3 mt-16">
+          <p className="text-base-s font-semibold text-text text-center">
+            Seleccioná una liga para ver tus pronósticos
+          </p>
+          <button
+            onClick={() => navigate('/leagues')}
+            className="px-4 py-2 rounded-lg bg-accent text-accent-on text-sm-s font-semibold"
+          >
+            Ir a ligas
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (isLoading) {
+    return (
+      <div className="flex flex-col min-h-full animate-fade-in pb-8">
+        <div className="flex items-center gap-3 px-4 pt-5 pb-3">
+          <button
+            onClick={() => navigate(-1)}
+            className="p-2 rounded-md bg-elevated border border-border"
+            aria-label="Volver"
+          >
+            <ArrowLeft size={18} className="text-text" />
+          </button>
+          <h1 className="text-base-s font-bold text-text">Pronósticos de torneo</h1>
+        </div>
+        <div className="px-4 mt-2">
+          <SkeletonList count={5} />
+        </div>
+      </div>
+    );
+  }
+
+  const saving = upsertMutation.isPending;
 
   return (
     <div className="flex flex-col min-h-full animate-fade-in pb-8">
@@ -173,20 +273,22 @@ export function TournamentPredictionsPage() {
         <PickCard
           title="Campeón"
           points={50}
-          selectedTeamId={picks.championId}
-          onSelect={setField('championId')}
+          selectedTeamId={picks.championTeamId}
+          onSelect={setField('championTeamId')}
           sectionId="champion"
           openSection={openSection}
           setOpenSection={setOpenSection}
+          teams={teams}
         />
         <PickCard
           title="Finalista"
           points={20}
-          selectedTeamId={picks.runnerUpId}
-          onSelect={setField('runnerUpId')}
+          selectedTeamId={picks.runnerUpTeamId}
+          onSelect={setField('runnerUpTeamId')}
           sectionId="runnerUp"
           openSection={openSection}
           setOpenSection={setOpenSection}
+          teams={teams}
         />
         <TopScorerCard
           sectionId="topScorer"
@@ -201,15 +303,17 @@ export function TournamentPredictionsPage() {
           sectionId="revelation"
           openSection={openSection}
           setOpenSection={setOpenSection}
+          teams={teams}
         />
         <PickCard
           title="Eliminado sorpresa"
           points={10}
-          selectedTeamId={picks.eliminatedSurpriseId}
-          onSelect={setField('eliminatedSurpriseId')}
+          selectedTeamId={picks.surpriseEliminatedTeamId}
+          onSelect={setField('surpriseEliminatedTeamId')}
           sectionId="eliminatedSurprise"
           openSection={openSection}
           setOpenSection={setOpenSection}
+          teams={teams}
         />
       </div>
 
@@ -234,31 +338,21 @@ export function TournamentPredictionsPage() {
 
       {/* Save button */}
       <div className="px-4 mt-4">
-        {saved ? (
-          <>
-            <motion.div
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              className="flex items-center justify-center gap-2 py-3 rounded-lg bg-green-500/15 border border-green-500/30"
-            >
-              <CheckCircle2 size={18} className="text-green-400" />
-              <span className="text-sm-s font-semibold text-green-400">
-                Pronóstico guardado localmente
-              </span>
-            </motion.div>
-            <p className="text-xs-s text-muted text-center mt-2">
-              ⚠️ Guardado solo en este dispositivo. Sincronización con servidor próximamente.
-            </p>
-          </>
+        {upsertMutation.isSuccess ? (
+          <motion.div
+            initial={{ scale: 0.9, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            className="flex items-center justify-center gap-2 py-3 rounded-lg bg-green-500/15 border border-green-500/30"
+          >
+            <CheckCircle2 size={18} className="text-green-400" />
+            <span className="text-sm-s font-semibold text-green-400">
+              ¡Pronósticos guardados!
+            </span>
+          </motion.div>
         ) : (
-          <>
-            <Button fullWidth size="lg" onClick={handleSave} loading={saving}>
-              Guardar pronósticos
-            </Button>
-            <p className="text-xs-s text-muted text-center mt-2">
-              ⚠️ Guardado solo en este dispositivo. Sincronización con servidor próximamente.
-            </p>
-          </>
+          <Button fullWidth size="lg" onClick={handleSave} loading={saving}>
+            Guardar pronósticos
+          </Button>
         )}
       </div>
     </div>

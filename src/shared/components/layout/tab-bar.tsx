@@ -1,11 +1,12 @@
 import { NavLink } from 'react-router-dom';
-import { Home, Trophy, Users, User } from 'lucide-react';
+import { Home, Trophy, Users, User, Calendar } from 'lucide-react';
 import { cn } from '@/shared/lib/cn';
 
 const tabs = [
   { to: '/home', label: 'Inicio', Icon: Home },
   { to: '/leagues', label: 'Ligas', Icon: Users },
-  { to: '/matches', label: 'Partidos', Icon: Trophy },
+  { to: '/matches', label: 'Partidos', Icon: Calendar },
+  { to: '/fantasy', label: 'Fantasy', Icon: Trophy },
   { to: '/profile', label: 'Perfil', Icon: User },
 ];
 

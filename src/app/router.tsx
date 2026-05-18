@@ -15,6 +15,7 @@ import { LeagueJoinPage } from '@/pages/league-join';
 import { ProfilePage } from '@/pages/profile';
 import { SettingsPage } from '@/pages/settings';
 import { LeagueInvitePage } from '@/pages/league-invite';
+import { FantasyPage } from '@/pages/fantasy';
 
 export const router = createBrowserRouter([
   { path: '/', element: <ErrorBoundary><SplashPage /></ErrorBoundary> },
@@ -33,6 +34,7 @@ export const router = createBrowserRouter([
       { path: '/leagues/:id', element: <ErrorBoundary><LeagueDetailPage /></ErrorBoundary> },
       { path: '/profile', element: <ErrorBoundary><ProfilePage /></ErrorBoundary> },
       { path: '/settings', element: <ErrorBoundary><SettingsPage /></ErrorBoundary> },
+      { path: '/fantasy', element: <ErrorBoundary><FantasyPage /></ErrorBoundary> },
     ],
   },
   { path: '*', element: <Navigate to="/" replace /> },

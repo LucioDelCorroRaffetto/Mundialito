@@ -53,6 +53,15 @@ export interface League {
   createdAt: string;
 }
 
+export interface Player {
+  id: number;
+  name: string;
+  position: 'GK' | 'DEF' | 'MID' | 'FWD';
+  teamId: number;
+  nationality: string | null;
+  shirtNumber: number | null;
+}
+
 export interface ApiList<T> {
   data: T[];
   meta: { total: number };
