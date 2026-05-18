@@ -1,3 +1,14 @@
+/**
+ * Seed script — run with: npm run db:seed
+ * Idempotent: safe to run multiple times.
+ *
+ * Requires env vars:
+ *   TURSO_DATABASE_URL=libsql://your-db.turso.io
+ *   TURSO_AUTH_TOKEN=your-token
+ *
+ * For local dev with SQLite:
+ *   TURSO_DATABASE_URL=file:local.db (no auth token needed)
+ */
 import 'dotenv/config';
 import { db } from '../db/index.js';
 import { initDb } from '../db/client.js';

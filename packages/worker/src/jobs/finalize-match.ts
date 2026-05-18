@@ -33,18 +33,20 @@ export async function finalizeMatch(
   console.log(`[finalize-match] Finalizing match ${matchId} — ${homeScore}:${awayScore}`);
 
   // 1. Update match status and scores
-  await db.run(
+  await db.execute(
     sql`UPDATE matches SET status = 'finished', home_score = ${homeScore}, away_score = ${awayScore} WHERE id = ${matchId}`,
   );
 
   // 2. Select all predictions for this match (across all leagues)
-  const preds = await db.all<{
+  // db.execute() on the libSQL adapter returns a ResultSet; rows are row objects keyed by column name.
+  const result = await db.execute(
+    sql`SELECT id, home_score, away_score FROM predictions WHERE match_id = ${matchId}`,
+  );
+  const preds = result.rows as unknown as Array<{
     id: number;
     home_score: number;
     away_score: number;
-  }>(
-    sql`SELECT id, home_score, away_score FROM predictions WHERE match_id = ${matchId}`,
-  );
+  }>;
 
   if (preds.length === 0) {
     console.log(`[finalize-match] No predictions found for match ${matchId}`);
@@ -59,7 +61,7 @@ export async function finalizeMatch(
       { homeScore, awayScore },
     );
 
-    await db.run(
+    await db.execute(
       sql`UPDATE predictions SET points = ${points} WHERE id = ${pred.id}`,
     );
     updated++;

@@ -25,10 +25,12 @@ export default defineConfig({
           { src: '/icons/icon-512.svg', sizes: '512x512', type: 'image/svg+xml', purpose: 'any' },
           { src: '/icons/icon-maskable.svg', sizes: '512x512', type: 'image/svg+xml', purpose: 'maskable' },
         ],
+        categories: ['sports', 'games'],
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,svg,png,woff2}'],
         navigateFallback: '/index.html',
+        importScripts: ['/sw-custom.js'],
         runtimeCaching: [
           {
             urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
@@ -39,6 +41,15 @@ export default defineConfig({
             urlPattern: /^https:\/\/fonts\.gstatic\.com\/.*/i,
             handler: 'CacheFirst',
             options: { cacheName: 'google-fonts-webfonts', expiration: { maxEntries: 30 } },
+          },
+          {
+            urlPattern: /^https:\/\/mundialito-api\.fly\.dev\/api\/.*/i,
+            handler: 'NetworkFirst',
+            options: {
+              cacheName: 'api-cache',
+              networkTimeoutSeconds: 10,
+              expiration: { maxEntries: 50, maxAgeSeconds: 300 },
+            },
           },
         ],
       },

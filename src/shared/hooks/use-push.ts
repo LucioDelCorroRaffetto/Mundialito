@@ -1,9 +1,17 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { apiClient } from '@/shared/lib/api-client';
 
 export function usePushNotifications() {
   const [isSubscribed, setIsSubscribed] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+
+  useEffect(() => {
+    if (!('serviceWorker' in navigator)) return;
+    navigator.serviceWorker.ready.then(async (reg) => {
+      const existing = await reg.pushManager.getSubscription();
+      if (existing) setIsSubscribed(true);
+    });
+  }, []);
 
   const subscribe = async () => {
     if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
