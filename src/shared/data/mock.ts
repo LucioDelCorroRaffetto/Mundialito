@@ -22,6 +22,13 @@ export interface Match {
   minute?: number;
 }
 
+export interface Player {
+  id: number;
+  name: string;
+  teamCode: string;
+  position: 'GK' | 'DEF' | 'MID' | 'FWD';
+}
+
 export interface Prediction {
   matchId: number;
   homeScore: number;
@@ -138,6 +145,75 @@ export const MATCHES: Match[] = [
     homeTeam: TEAMS.URU, awayTeam: TEAMS.FRA,
     kickoffUtc: '2026-06-20T20:00:00Z', venue: 'Mercedes-Benz Stadium', city: 'Atlanta', status: 'scheduled',
   },
+];
+
+export const PLAYERS: Player[] = [
+  // Argentina
+  { id: 1, name: 'Lionel Messi', teamCode: 'ARG', position: 'FWD' },
+  { id: 2, name: 'Lautaro Martínez', teamCode: 'ARG', position: 'FWD' },
+  { id: 3, name: 'Julián Álvarez', teamCode: 'ARG', position: 'FWD' },
+  { id: 4, name: 'Enzo Fernández', teamCode: 'ARG', position: 'MID' },
+  // Brasil
+  { id: 5, name: 'Vinicius Jr.', teamCode: 'BRA', position: 'FWD' },
+  { id: 6, name: 'Rodrygo', teamCode: 'BRA', position: 'FWD' },
+  { id: 7, name: 'Neymar', teamCode: 'BRA', position: 'FWD' },
+  { id: 8, name: 'Lucas Paquetá', teamCode: 'BRA', position: 'MID' },
+  // Francia
+  { id: 9, name: 'Kylian Mbappé', teamCode: 'FRA', position: 'FWD' },
+  { id: 10, name: 'Ousmane Dembélé', teamCode: 'FRA', position: 'FWD' },
+  { id: 11, name: 'Antoine Griezmann', teamCode: 'FRA', position: 'MID' },
+  // Inglaterra
+  { id: 12, name: 'Jude Bellingham', teamCode: 'ENG', position: 'MID' },
+  { id: 13, name: 'Harry Kane', teamCode: 'ENG', position: 'FWD' },
+  { id: 14, name: 'Bukayo Saka', teamCode: 'ENG', position: 'FWD' },
+  // España
+  { id: 15, name: 'Lamine Yamal', teamCode: 'ESP', position: 'FWD' },
+  { id: 16, name: 'Nico Williams', teamCode: 'ESP', position: 'FWD' },
+  { id: 17, name: 'Pedri', teamCode: 'ESP', position: 'MID' },
+  // Alemania
+  { id: 18, name: 'Florian Wirtz', teamCode: 'GER', position: 'MID' },
+  { id: 19, name: 'Jamal Musiala', teamCode: 'GER', position: 'MID' },
+  { id: 20, name: 'Kai Havertz', teamCode: 'GER', position: 'FWD' },
+  // Portugal
+  { id: 21, name: 'Cristiano Ronaldo', teamCode: 'POR', position: 'FWD' },
+  { id: 22, name: 'Bruno Fernandes', teamCode: 'POR', position: 'MID' },
+  { id: 23, name: 'Rafael Leão', teamCode: 'POR', position: 'FWD' },
+  // México
+  { id: 24, name: 'Santiago Giménez', teamCode: 'MEX', position: 'FWD' },
+  { id: 25, name: 'Hirving Lozano', teamCode: 'MEX', position: 'FWD' },
+  { id: 26, name: 'Edson Álvarez', teamCode: 'MEX', position: 'MID' },
+  // EEUU
+  { id: 27, name: 'Christian Pulisic', teamCode: 'USA', position: 'FWD' },
+  { id: 28, name: 'Folarin Balogun', teamCode: 'USA', position: 'FWD' },
+  { id: 29, name: 'Weston McKennie', teamCode: 'USA', position: 'MID' },
+  // Canadá
+  { id: 30, name: 'Alphonso Davies', teamCode: 'CAN', position: 'DEF' },
+  { id: 31, name: 'Jonathan David', teamCode: 'CAN', position: 'FWD' },
+  { id: 32, name: 'Cyle Larin', teamCode: 'CAN', position: 'FWD' },
+  // Uruguay
+  { id: 33, name: 'Darwin Núñez', teamCode: 'URU', position: 'FWD' },
+  { id: 34, name: 'Federico Valverde', teamCode: 'URU', position: 'MID' },
+  { id: 35, name: 'Maxi Araújo', teamCode: 'URU', position: 'MID' },
+  // Colombia
+  { id: 36, name: 'Luis Díaz', teamCode: 'COL', position: 'FWD' },
+  { id: 37, name: 'James Rodríguez', teamCode: 'COL', position: 'MID' },
+  { id: 38, name: 'Jhon Durán', teamCode: 'COL', position: 'FWD' },
+  // Marruecos
+  { id: 39, name: 'Hakim Ziyech', teamCode: 'MOR', position: 'MID' },
+  { id: 40, name: 'Youssef En-Nesyri', teamCode: 'MOR', position: 'FWD' },
+  { id: 41, name: 'Brahim Díaz', teamCode: 'MOR', position: 'MID' },
+  // Japón
+  { id: 42, name: 'Takefusa Kubo', teamCode: 'JPN', position: 'MID' },
+  { id: 43, name: 'Kaoru Mitoma', teamCode: 'JPN', position: 'FWD' },
+  { id: 44, name: 'Daichi Kamada', teamCode: 'JPN', position: 'MID' },
+  // Países Bajos
+  { id: 45, name: 'Cody Gakpo', teamCode: 'NED', position: 'FWD' },
+  { id: 46, name: 'Memphis Depay', teamCode: 'NED', position: 'FWD' },
+  { id: 47, name: 'Frenkie de Jong', teamCode: 'NED', position: 'MID' },
+  // Australia
+  { id: 48, name: 'Mitchell Duke', teamCode: 'AUS', position: 'FWD' },
+  { id: 49, name: 'Awer Mabil', teamCode: 'AUS', position: 'FWD' },
+  { id: 50, name: 'Ajdin Hrustic', teamCode: 'AUS', position: 'MID' },
 ];
 
 export const MY_LEAGUES: League[] = [

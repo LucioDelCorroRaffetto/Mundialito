@@ -22,15 +22,11 @@ export const useAuthStore = create<AuthState>()(
       user: null,
       token: null,
       isAuthenticated: false,
-      login: (user, token) => {
-        localStorage.setItem('mundialito_token', token);
-        set({ user, token, isAuthenticated: true });
-      },
-      logout: () => {
-        localStorage.removeItem('mundialito_token');
-        set({ user: null, token: null, isAuthenticated: false });
-      },
+      login: (user, token) => set({ user, token, isAuthenticated: true }),
+      logout: () => set({ user: null, token: null, isAuthenticated: false }),
     }),
     { name: 'mundialito_auth' }
   )
 );
+
+export const getStoredToken = () => useAuthStore.getState().token;

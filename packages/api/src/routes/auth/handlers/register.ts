@@ -21,9 +21,7 @@ export async function registerHandler(req: Request, res: Response) {
     .get();
 
   if (existing) {
-    throw new ConflictError(
-      existing.email === email ? 'Email already in use' : 'Username already taken'
-    );
+    throw new ConflictError('Email or username already in use');
   }
 
   const passwordHash = await hashPassword(password);

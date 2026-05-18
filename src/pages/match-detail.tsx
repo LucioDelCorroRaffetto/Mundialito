@@ -1,13 +1,17 @@
 import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Clock, MapPin, CheckCircle2 } from 'lucide-react';
-import { MATCHES, MY_PREDICTIONS, ROUND_LABELS } from '@/shared/data/mock';
+import { ArrowLeft, Clock, MapPin, CheckCircle2, Share2 } from 'lucide-react';
+import { MATCHES, MY_PREDICTIONS, ROUND_LABELS, PLAYERS } from '@/shared/data/mock';
 import { getMaxPossiblePoints } from '@/shared/lib/scoring';
 import { Button } from '@/shared/components/ui/button';
+import { cn } from '@/shared/lib/cn';
+import { sharePredictionCard } from '@/shared/lib/generate-prediction-card';
+import { useAuthStore } from '@/shared/stores/auth-store';
 
-function PointsPreview({ home, away }: { home: number; away: number }) {
+function PointsPreview({ home, away, scorerCount }: { home: number; away: number; scorerCount: number }) {
   const { isDraw, ifExact, ifWinnerDiff } = getMaxPossiblePoints(home, away);
+  const scorerPts = scorerCount * 2;
   return (
     <div className="mx-4 mt-3 p-4 rounded-lg bg-elevated border border-border">
       <p className="text-sm-s font-semibold text-text mb-2">
@@ -22,6 +26,69 @@ function PointsPreview({ home, away }: { home: number; away: number }) {
           <span className="text-sm-s text-muted">{isDraw ? 'Empate acertado' : 'Resultado correcto'}</span>
           <span className="text-sm-s font-bold text-accent">+{ifWinnerDiff} pt{ifWinnerDiff !== 1 ? 's' : ''}</span>
         </div>
+        {scorerCount > 0 && (
+          <div className="flex items-center justify-between">
+            <span className="text-sm-s text-muted">Goleadores ({scorerCount})</span>
+            <span className="text-sm-s font-bold text-accent">+{scorerPts} pts</span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ScorerPicker({
+  team, maxGoals, selected, onChange,
+}: {
+  team: { code: string; flag: string; name: string };
+  maxGoals: number;
+  selected: number[];
+  onChange: (ids: number[]) => void;
+}) {
+  const teamPlayers = PLAYERS.filter(
+    (p) => p.teamCode === team.code && (p.position === 'FWD' || p.position === 'MID')
+  );
+
+  const togglePlayer = (id: number) => {
+    if (selected.includes(id)) {
+      onChange(selected.filter((s) => s !== id));
+    } else if (selected.length < maxGoals) {
+      onChange([...selected, id]);
+    }
+  };
+
+  return (
+    <div>
+      <div className="flex items-center gap-2 mb-2">
+        <span className="text-lg">{team.flag}</span>
+        <span className="text-sm-s font-semibold text-text">{team.code}</span>
+        <span className="text-xs-s text-muted ml-auto">
+          {selected.length} / {maxGoals}
+        </span>
+      </div>
+      <div className="flex flex-wrap gap-1.5">
+        {teamPlayers.map((p) => {
+          const isSelected = selected.includes(p.id);
+          const isDisabled = !isSelected && selected.length >= maxGoals;
+          return (
+            <button
+              key={p.id}
+              type="button"
+              onClick={() => togglePlayer(p.id)}
+              disabled={isDisabled}
+              className={cn(
+                'px-2.5 py-1 rounded-md text-xs-s font-medium border transition-colors',
+                isSelected
+                  ? 'bg-accent text-accent-on border-accent'
+                  : isDisabled
+                  ? 'bg-elevated border-border text-muted opacity-50 cursor-not-allowed'
+                  : 'bg-elevated border-border text-text hover:border-accent-border'
+              )}
+            >
+              {p.name}
+            </button>
+          );
+        })}
       </div>
     </div>
   );
@@ -47,8 +114,47 @@ export function MatchDetailPage() {
 
   const [homeScore, setHomeScore] = useState(existingPrediction?.homeScore ?? 0);
   const [awayScore, setAwayScore] = useState(existingPrediction?.awayScore ?? 0);
+  const [homeScorers, setHomeScorers] = useState<number[]>([]);
+  const [awayScorers, setAwayScorers] = useState<number[]>([]);
   const [saved, setSaved] = useState(!!existingPrediction);
   const [saving, setSaving] = useState(false);
+  const [sharing, setSharing] = useState(false);
+  const username = useAuthStore((s) => s.user?.username);
+
+  const handleShare = async () => {
+    setSharing(true);
+    try {
+      await sharePredictionCard({
+        homeFlag: match.homeTeam.flag,
+        homeName: match.homeTeam.name,
+        homeCode: match.homeTeam.code,
+        homeScore,
+        awayFlag: match.awayTeam.flag,
+        awayName: match.awayTeam.name,
+        awayCode: match.awayTeam.code,
+        awayScore,
+        username,
+        accentColor:
+          getComputedStyle(document.documentElement).getPropertyValue('--accent')?.trim() || undefined,
+      });
+    } catch (e) {
+      console.error('Share failed', e);
+    } finally {
+      setSharing(false);
+    }
+  };
+
+  const updateHomeScore = (v: number) => {
+    setHomeScore(v);
+    if (homeScorers.length > v) setHomeScorers(homeScorers.slice(0, v));
+    setSaved(false);
+  };
+
+  const updateAwayScore = (v: number) => {
+    setAwayScore(v);
+    if (awayScorers.length > v) setAwayScorers(awayScorers.slice(0, v));
+    setSaved(false);
+  };
 
   const handleSave = async () => {
     setSaving(true);
@@ -103,9 +209,9 @@ export function MatchDetailPage() {
 
       <div className="mx-4 p-5 rounded-xl bg-card border border-border shadow-card">
         <div className="flex items-center justify-around gap-4">
-          <ScoreInput value={homeScore} onChange={setHomeScore} team={match.homeTeam} />
+          <ScoreInput value={homeScore} onChange={updateHomeScore} team={match.homeTeam} />
           <span className="text-2xl-s font-display font-bold text-muted">vs</span>
-          <ScoreInput value={awayScore} onChange={setAwayScore} team={match.awayTeam} />
+          <ScoreInput value={awayScore} onChange={updateAwayScore} team={match.awayTeam} />
         </div>
       </div>
 
@@ -120,20 +226,54 @@ export function MatchDetailPage() {
         </div>
       </div>
 
-      <PointsPreview home={homeScore} away={awayScore} />
+      {(homeScore + awayScore) > 0 && (
+        <div className="mx-4 mt-3 p-4 rounded-lg bg-card border border-border">
+          <p className="text-sm-s font-semibold text-text mb-3">⚽ Goleadores (opcional · +2 pts c/u)</p>
+          <div className="flex flex-col gap-3">
+            {homeScore > 0 && (
+              <ScorerPicker
+                team={match.homeTeam}
+                maxGoals={homeScore}
+                selected={homeScorers}
+                onChange={(ids) => { setHomeScorers(ids); setSaved(false); }}
+              />
+            )}
+            {awayScore > 0 && (
+              <ScorerPicker
+                team={match.awayTeam}
+                maxGoals={awayScore}
+                selected={awayScorers}
+                onChange={(ids) => { setAwayScorers(ids); setSaved(false); }}
+              />
+            )}
+          </div>
+        </div>
+      )}
+
+      <PointsPreview home={homeScore} away={awayScore} scorerCount={homeScorers.length + awayScorers.length} />
 
       <div className="px-4 mt-4">
         {saved ? (
-          <motion.div
-            initial={{ scale: 0.9, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            className="flex items-center justify-center gap-2 py-3 rounded-lg bg-green-500/15 border border-green-500/30"
-          >
-            <CheckCircle2 size={18} className="text-green-400" />
-            <span className="text-sm-s font-semibold text-green-400">
-              Pronóstico guardado · {homeScore} - {awayScore}
-            </span>
-          </motion.div>
+          <>
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              className="flex items-center justify-center gap-2 py-3 rounded-lg bg-green-500/15 border border-green-500/30"
+            >
+              <CheckCircle2 size={18} className="text-green-400" />
+              <span className="text-sm-s font-semibold text-green-400">
+                Pronóstico guardado · {homeScore} - {awayScore}
+              </span>
+            </motion.div>
+            <button
+              onClick={handleShare}
+              disabled={sharing}
+              className="mt-3 w-full flex items-center justify-center gap-2 py-2.5 rounded-lg border border-accent-border text-accent text-sm-s font-semibold hover:bg-accent-soft transition-colors disabled:opacity-50"
+            >
+              <Share2 size={16} />
+              {sharing ? 'Generando imagen...' : 'Compartir como imagen'}
+            </button>
+          </>
         ) : (
           <Button fullWidth size="lg" onClick={handleSave} loading={saving}>
             {existingPrediction ? 'Actualizar pronóstico' : 'Guardar pronóstico'}
@@ -149,6 +289,7 @@ export function MatchDetailPage() {
             ['Ganador + diferencia', '3 pts'],
             ['Ganador correcto', '1 pt'],
             ['Empate acertado', '1 pt'],
+            ['Goleador acertado', '+2 pts c/u'],
           ].map(([label, pts]) => (
             <div key={label} className="flex items-center justify-between">
               <span className="text-sm-s text-muted">{label}</span>

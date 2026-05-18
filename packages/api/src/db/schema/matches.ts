@@ -8,7 +8,11 @@ export const matches = sqliteTable('matches', {
   homeTeamId: integer('home_team_id').references(() => teams.id),
   awayTeamId: integer('away_team_id').references(() => teams.id),
   kickoffUtc: text('kickoff_utc').notNull(),
-  predictionLockUtc: text('prediction_lock_utc').notNull(), // kickoff - 5 min
+  /**
+   * MUST be set to kickoffUtc - 5 minutes. Use calcPredictionLock() from lib/match-helpers.
+   * Worker debe recalcular este campo cada vez que kickoffUtc cambie.
+   */
+  predictionLockUtc: text('prediction_lock_utc').notNull(),
   venue: text('venue').notNull(),
   city: text('city').notNull(),
   group: text('group'),
