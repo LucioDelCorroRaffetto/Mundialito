@@ -157,6 +157,13 @@ async function seed(): Promise<void> {
   console.log('🏆 Seeding Mundialito DB...');
   await initDb();
 
+  // Check if already seeded.
+  const existingTeams = await db.select().from(teams).limit(1);
+  if (existingTeams.length > 0) {
+    console.log('Already seeded, skipping.');
+    process.exit(0);
+  }
+
   // 1. Insertar teams (asigna `group` segun el orden secuencial A-L).
   console.log(`Inserting ${TEAMS_DATA.length} teams...`);
   const groups = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L'];
@@ -164,8 +171,10 @@ async function seed(): Promise<void> {
     ...t,
     group: groups[Math.floor(i / 4)] ?? null,
   }));
-  const insertedTeams = await db.insert(teams).values(teamsWithGroup).returning();
-  const teamByCode = new Map(insertedTeams.map((t) => [t.code, t]));
+  await db.insert(teams).values(teamsWithGroup).onConflictDoNothing();
+  // Build map from all teams in DB (in case some already existed and were skipped).
+  const allTeams = await db.select().from(teams);
+  const teamByCode = new Map(allTeams.map((t) => [t.code, t]));
 
   // 2. Insertar matches de fase de grupos.
   const groupFixtures = generateGroupStageFixtures();
@@ -178,18 +187,21 @@ async function seed(): Promise<void> {
       console.warn(`Skipping match ${m.matchNumber}: missing team`);
       continue;
     }
-    await db.insert(matches).values({
-      matchNumber: m.matchNumber,
-      homeTeamId: home.id,
-      awayTeamId: away.id,
-      kickoffUtc: m.kickoffUtc,
-      predictionLockUtc: calcPredictionLock(m.kickoffUtc),
-      venue: m.venue,
-      city: m.city,
-      group: m.group,
-      round: m.round,
-      status: m.status,
-    });
+    await db
+      .insert(matches)
+      .values({
+        matchNumber: m.matchNumber,
+        homeTeamId: home.id,
+        awayTeamId: away.id,
+        kickoffUtc: m.kickoffUtc,
+        predictionLockUtc: calcPredictionLock(m.kickoffUtc),
+        venue: m.venue,
+        city: m.city,
+        group: m.group,
+        round: m.round,
+        status: m.status,
+      })
+      .onConflictDoNothing();
   }
 
   console.log('✅ Seed complete.');

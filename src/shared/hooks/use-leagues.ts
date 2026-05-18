@@ -70,3 +70,16 @@ export function useCreateLeague() {
     },
   });
 }
+
+export function useSearchLeagues(query: string) {
+  return useQuery({
+    queryKey: ['leagues', 'search', query],
+    queryFn: async () => {
+      const { data } = await apiClient.get<ApiList<League>>('/leagues/public/search', {
+        params: { q: query, limit: 20 },
+      });
+      return data;
+    },
+    enabled: query.length >= 2,
+  });
+}

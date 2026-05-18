@@ -6,6 +6,7 @@ import { MY_LEAGUES, MATCHES, MY_PREDICTIONS } from '@/shared/data/mock';
 import { useMatches } from '@/shared/hooks/use-matches';
 import { useMyLeagues } from '@/shared/hooks/use-leagues';
 import { useTeamMap } from '@/shared/hooks/use-teams';
+import { usePwaInstall } from '@/shared/hooks/use-pwa-install';
 import type { Team } from '@/shared/types/api';
 import { Button } from '@/shared/components/ui/button';
 import { cn } from '@/shared/lib/cn';
@@ -77,6 +78,7 @@ export function HomePage() {
   const { data: matchesResponse } = useMatches({ status: 'scheduled', limit: 5 });
   const { data: teamMap } = useTeamMap();
   const { data: leaguesResponse } = useMyLeagues();
+  const { isInstallable, isInstalled, install } = usePwaInstall();
 
   // Fallback gracioso al mock si el API no tiene datos todavía
   const apiMatches = matchesResponse?.data ?? [];
@@ -112,6 +114,16 @@ export function HomePage() {
 
   return (
     <div className="flex flex-col gap-6 p-4 pt-6 animate-fade-in">
+      {isInstallable && !isInstalled && (
+        <button
+          onClick={install}
+          className="w-full flex items-center gap-2 bg-emerald-500/20 border border-emerald-400/30 rounded-xl px-4 py-3 text-sm text-emerald-300"
+        >
+          <span>📲</span>
+          <span className="flex-1 text-left">Instalá Mundialito en tu celular</span>
+          <span className="text-emerald-400 font-semibold">Instalar</span>
+        </button>
+      )}
       <CountdownHero />
       <div className="flex items-center justify-between">
         <div>

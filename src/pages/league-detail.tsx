@@ -1,21 +1,18 @@
 import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Share2, Users, TrendingUp, TrendingDown, Minus, Trophy } from 'lucide-react';
-import { MY_LEAGUES, LEAGUE_STANDINGS, type StandingsRow } from '@/shared/data/mock';
+import { ArrowLeft, Share2, Users, Trophy } from 'lucide-react';
 import { cn } from '@/shared/lib/cn';
 import { ShareSheet } from '@/shared/components/share-sheet';
+import { SkeletonList } from '@/shared/components/skeleton';
+import { useLeague, useLeagueStandings, type StandingRow } from '@/shared/hooks/use-leagues';
+import { useAuthStore } from '@/shared/stores/auth-store';
 
 const TABS = ['Tabla', 'Info'] as const;
 type Tab = (typeof TABS)[number];
 
-const TREND_ICON = {
-  up: <TrendingUp size={12} className="text-green-400" />,
-  down: <TrendingDown size={12} className="text-red-400" />,
-  same: <Minus size={12} className="text-muted" />,
-};
-
-function Row({ row, isMe }: { row: StandingsRow; isMe: boolean }) {
+function Row({ row, isMe }: { row: StandingRow; isMe: boolean }) {
+  const initials = row.username.slice(0, 1).toUpperCase();
   return (
     <motion.div
       initial={{ opacity: 0, x: -8 }}
@@ -26,17 +23,20 @@ function Row({ row, isMe }: { row: StandingsRow; isMe: boolean }) {
       <span className={cn('w-6 text-center text-sm-s font-bold', isMe ? 'text-accent' : 'text-muted')}>
         {row.position}
       </span>
-      <div className="w-8 h-8 rounded-full bg-elevated flex items-center justify-center flex-shrink-0">
-        <span className="text-sm-s font-bold text-text">{row.avatar}</span>
+      <div className="w-8 h-8 rounded-full bg-elevated flex items-center justify-center flex-shrink-0 overflow-hidden">
+        {row.avatarUrl ? (
+          <img src={row.avatarUrl} alt={row.username} className="w-full h-full object-cover" />
+        ) : (
+          <span className="text-sm-s font-bold text-text">{initials}</span>
+        )}
       </div>
       <div className="flex-1 min-w-0">
         <p className={cn('text-sm-s font-semibold truncate', isMe ? 'text-accent' : 'text-text')}>
-          {row.displayName} {isMe && '(vos)'}
+          {row.username} {isMe && '(vos)'}
         </p>
-        <p className="text-xs-s text-muted">{row.exact} exactos · {row.result} resultados</p>
+        <p className="text-xs-s text-muted">{row.matchesPlayed} jugados</p>
       </div>
       <div className="flex items-center gap-1.5">
-        {TREND_ICON[row.trend]}
         <span className={cn('text-base-s font-bold', isMe ? 'text-accent' : 'text-text')}>{row.points}</span>
       </div>
     </motion.div>
@@ -49,8 +49,45 @@ export function LeagueDetailPage() {
   const [tab, setTab] = useState<Tab>('Tabla');
   const [shareOpen, setShareOpen] = useState(false);
 
-  const league = MY_LEAGUES.find((l) => l.id === Number(id));
-  if (!league) { navigate('/leagues', { replace: true }); return null; }
+  const currentUser = useAuthStore((s) => s.user);
+
+  const leagueId = Number(id);
+  if (isNaN(leagueId)) {
+    navigate('/leagues', { replace: true });
+    return null;
+  }
+
+  const { data: league, isLoading: leagueLoading, isError: leagueError } = useLeague(leagueId);
+  const { data: standingsData, isLoading: standingsLoading } = useLeagueStandings(leagueId);
+  const standings = standingsData?.data ?? [];
+
+  if (leagueError) {
+    navigate('/leagues', { replace: true });
+    return null;
+  }
+
+  if (leagueLoading) {
+    return (
+      <div className="flex flex-col min-h-full animate-fade-in">
+        <div className="flex items-center gap-3 px-4 pt-5 pb-4">
+          <button onClick={() => navigate(-1)} className="p-2 rounded-md bg-elevated border border-border" aria-label="Volver">
+            <ArrowLeft size={18} className="text-text" />
+          </button>
+          <div className="flex-1 min-w-0">
+            <div className="animate-pulse h-5 bg-white/10 rounded w-40 mb-1" />
+            <div className="animate-pulse h-3 bg-white/10 rounded w-24" />
+          </div>
+        </div>
+        <div className="px-4">
+          <SkeletonList count={5} />
+        </div>
+      </div>
+    );
+  }
+
+  if (!league) return null;
+
+  const myStanding = standings.find((r) => r.userId === currentUser?.id);
 
   return (
     <div className="flex flex-col min-h-full animate-fade-in">
@@ -60,22 +97,24 @@ export function LeagueDetailPage() {
         </button>
         <div className="flex-1 min-w-0">
           <h1 className="text-lg-s font-display font-bold text-text truncate">{league.name}</h1>
-          <p className="text-sm-s text-muted">{league.memberCount} miembros · código: {league.code}</p>
+          <p className="text-sm-s text-muted">código: {league.code}</p>
         </div>
         <button onClick={() => setShareOpen(true)} className="p-2 rounded-md bg-elevated border border-border" aria-label="Compartir">
           <Share2 size={18} className="text-text" />
         </button>
       </div>
 
-      <div className="mx-4 mb-4 p-3 rounded-lg bg-accent-soft border border-accent-border flex items-center gap-3">
-        <Trophy size={20} className="text-accent flex-shrink-0" />
-        <div className="flex-1">
-          <p className="text-sm-s font-semibold text-text">Tu posición: #{league.myPosition}</p>
-          <p className="text-xs-s text-muted">
-            {league.myPoints} pts · Líder: {league.leader.name} ({league.leader.points} pts)
-          </p>
+      {myStanding && (
+        <div className="mx-4 mb-4 p-3 rounded-lg bg-accent-soft border border-accent-border flex items-center gap-3">
+          <Trophy size={20} className="text-accent flex-shrink-0" />
+          <div className="flex-1">
+            <p className="text-sm-s font-semibold text-text">Tu posición: #{myStanding.position}</p>
+            <p className="text-xs-s text-muted">
+              {myStanding.points} pts · {myStanding.matchesPlayed} jugados
+            </p>
+          </div>
         </div>
-      </div>
+      )}
 
       <div className="flex gap-1 px-4 mb-0">
         {TABS.map((t) => (
@@ -100,9 +139,19 @@ export function LeagueDetailPage() {
             <span className="flex-1 text-xs-s text-muted">Jugador</span>
             <span className="text-xs-s text-muted">Pts</span>
           </div>
-          {LEAGUE_STANDINGS.map((row) => (
-            <Row key={row.userId} row={row} isMe={row.userId === 1} />
-          ))}
+          {standingsLoading ? (
+            <div className="p-4">
+              <SkeletonList count={5} />
+            </div>
+          ) : standings.length === 0 ? (
+            <div className="py-8 text-center">
+              <p className="text-sm-s text-muted">Todavía no hay posiciones</p>
+            </div>
+          ) : (
+            standings.map((row) => (
+              <Row key={row.userId} row={row} isMe={row.userId === currentUser?.id} />
+            ))
+          )}
         </div>
       )}
 
@@ -113,7 +162,6 @@ export function LeagueDetailPage() {
               ['Nombre', league.name],
               ['Código', league.code],
               ['Visibilidad', league.isPublic ? 'Pública' : 'Privada'],
-              ['Admin', league.adminName],
             ].map(([label, value]) => (
               <div key={label} className="flex items-center justify-between">
                 <span className="text-sm-s text-muted">{label}</span>
@@ -124,7 +172,7 @@ export function LeagueDetailPage() {
               <span className="text-sm-s text-muted">Miembros</span>
               <div className="flex items-center gap-1.5">
                 <Users size={14} className="text-muted" />
-                <span className="text-sm-s font-semibold text-text">{league.memberCount}</span>
+                <span className="text-sm-s font-semibold text-text">{standings.length}</span>
               </div>
             </div>
           </div>
@@ -139,6 +187,7 @@ export function LeagueDetailPage() {
         onClose={() => setShareOpen(false)}
         leagueName={league.name}
         code={league.code}
+        stakesMeme={league.stakesMeme ?? undefined}
       />
     </div>
   );

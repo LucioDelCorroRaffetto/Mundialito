@@ -1,9 +1,11 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Search, Plus, Users, Lock, Globe, ChevronRight, Trophy } from 'lucide-react';
-import { MY_LEAGUES, PUBLIC_LEAGUES } from '@/shared/data/mock';
+import { Search, Plus, Lock, Globe, ChevronRight, Trophy } from 'lucide-react';
+import { toast } from 'sonner';
 import { cn } from '@/shared/lib/cn';
+import { useMyLeagues, useJoinLeague, useSearchLeagues } from '@/shared/hooks/use-leagues';
+import { SkeletonList } from '@/shared/components/skeleton';
 
 const TABS = ['Mis ligas', 'Explorar'] as const;
 type Tab = (typeof TABS)[number];
@@ -11,11 +13,32 @@ type Tab = (typeof TABS)[number];
 export function LeaguesPage() {
   const navigate = useNavigate();
   const [tab, setTab] = useState<Tab>('Mis ligas');
-  const [query, setQuery] = useState('');
+  const [rawQuery, setRawQuery] = useState('');
+  const [debouncedQuery, setDebouncedQuery] = useState('');
 
-  const publicFiltered = PUBLIC_LEAGUES.filter((l) =>
-    l.name.toLowerCase().includes(query.toLowerCase())
-  );
+  const { data: myLeaguesData, isLoading: myLeaguesLoading } = useMyLeagues();
+  const myLeagues = myLeaguesData?.data ?? [];
+
+  const { data: searchData, isLoading: searchLoading } = useSearchLeagues(debouncedQuery);
+  const searchResults = searchData?.data ?? [];
+
+  const joinMutation = useJoinLeague();
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedQuery(rawQuery), 300);
+    return () => clearTimeout(timer);
+  }, [rawQuery]);
+
+  const handleJoin = (code: string, leagueId: number) => {
+    joinMutation.mutate(code, {
+      onSuccess: () => {
+        navigate(`/leagues/${leagueId}`);
+      },
+      onError: () => {
+        toast.error('No se pudo unir a la liga. Verificá el código e intentá de nuevo.');
+      },
+    });
+  };
 
   return (
     <div className="flex flex-col gap-0 animate-fade-in">
@@ -55,7 +78,17 @@ export function LeaguesPage() {
             </Link>
           </div>
 
-          {MY_LEAGUES.map((league, i) => (
+          {myLeaguesLoading && <SkeletonList count={3} />}
+
+          {!myLeaguesLoading && myLeagues.length === 0 && (
+            <div className="py-10 text-center">
+              <p className="text-base-s text-muted">
+                Aún no pertenecés a ninguna liga. ¡Explorá y unite!
+              </p>
+            </div>
+          )}
+
+          {!myLeaguesLoading && myLeagues.map((league, i) => (
             <motion.div key={league.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.06 }}>
               <Link
                 to={`/leagues/${league.id}`}
@@ -72,15 +105,7 @@ export function LeaguesPage() {
                       : <Lock size={13} className="text-muted flex-shrink-0" />
                     }
                   </div>
-                  <div className="flex items-center gap-2 mt-0.5">
-                    <Users size={12} className="text-muted" />
-                    <span className="text-sm-s text-muted">{league.memberCount}</span>
-                    <span className="text-xs-s text-muted">·</span>
-                    <span className="text-sm-s font-semibold text-text">{league.myPoints} pts</span>
-                    <span className={cn('text-xs-s font-bold px-1.5 py-0.5 rounded', league.myPosition === 1 ? 'bg-accent text-accent-on' : 'bg-elevated text-muted')}>
-                      {league.myPosition === 1 ? '🥇 1°' : `#${league.myPosition}`}
-                    </span>
-                  </div>
+                  <p className="text-sm-s text-muted mt-0.5 font-mono">{league.code}</p>
                 </div>
                 <ChevronRight size={16} className="text-muted flex-shrink-0" />
               </Link>
@@ -95,14 +120,16 @@ export function LeaguesPage() {
             <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none" />
             <input
               type="search"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
+              value={rawQuery}
+              onChange={(e) => setRawQuery(e.target.value)}
               placeholder="Buscar ligas públicas..."
               className="w-full h-11 pl-9 pr-4 rounded-md bg-card border border-border text-text text-sm-s placeholder:text-muted focus:outline-none focus:border-accent transition-colors"
             />
           </div>
 
-          {publicFiltered.map((league, i) => (
+          {searchLoading && debouncedQuery.length >= 2 && <SkeletonList count={3} />}
+
+          {!searchLoading && searchResults.map((league, i) => (
             <motion.div key={league.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.06 }}>
               <div className="flex items-center gap-3 p-4 rounded-lg bg-card border border-border">
                 <div className="w-10 h-10 rounded-md bg-elevated flex items-center justify-center flex-shrink-0">
@@ -110,14 +137,12 @@ export function LeaguesPage() {
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-base-s font-semibold text-text truncate">{league.name}</p>
-                  <div className="flex items-center gap-2 mt-0.5">
-                    <Users size={12} className="text-muted" />
-                    <span className="text-sm-s text-muted">{league.memberCount} miembros</span>
-                  </div>
+                  <p className="text-sm-s text-muted mt-0.5 font-mono">{league.code}</p>
                 </div>
                 <button
-                  onClick={() => navigate('/leagues/' + league.id)}
-                  className="px-3 py-1.5 rounded-md bg-accent text-accent-on text-sm-s font-semibold flex-shrink-0 hover:opacity-90 transition-opacity"
+                  onClick={() => handleJoin(league.code, league.id)}
+                  disabled={joinMutation.isPending}
+                  className="px-3 py-1.5 rounded-md bg-accent text-accent-on text-sm-s font-semibold flex-shrink-0 hover:opacity-90 transition-opacity disabled:opacity-60"
                 >
                   Unirse
                 </button>
@@ -125,9 +150,15 @@ export function LeaguesPage() {
             </motion.div>
           ))}
 
-          {publicFiltered.length === 0 && (
+          {!searchLoading && debouncedQuery.length >= 2 && searchResults.length === 0 && (
             <div className="py-10 text-center">
               <p className="text-base-s text-muted">No se encontraron ligas</p>
+            </div>
+          )}
+
+          {debouncedQuery.length < 2 && !searchLoading && (
+            <div className="py-10 text-center">
+              <p className="text-base-s text-muted">Escribí al menos 2 caracteres para buscar</p>
             </div>
           )}
         </div>

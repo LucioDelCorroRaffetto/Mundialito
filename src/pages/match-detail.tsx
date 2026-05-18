@@ -9,6 +9,7 @@ import { cn } from '@/shared/lib/cn';
 import { sharePredictionCard } from '@/shared/lib/generate-prediction-card';
 import { useAuthStore } from '@/shared/stores/auth-store';
 import { useUpsertPrediction } from '@/shared/hooks/use-predictions';
+import { useHaptic } from '@/shared/hooks/use-haptic';
 
 function PointsPreview({ home, away, scorerCount }: { home: number; away: number; scorerCount: number }) {
   const { isDraw, ifExact, ifWinnerDiff } = getMaxPossiblePoints(home, away);
@@ -157,6 +158,7 @@ export function MatchDetailPage() {
   const [saveError, setSaveError] = useState<string | null>(null);
   const username = useAuthStore((s) => s.user?.username);
   const upsertMutation = useUpsertPrediction();
+  const { vibrate } = useHaptic();
 
   const handleShare = async () => {
     setSharing(true);
@@ -207,6 +209,7 @@ export function MatchDetailPage() {
         awayScore,
       });
       setSaved(true);
+      vibrate(20);
     } catch (e: any) {
       setSaveError(e?.response?.data?.error?.message ?? 'Error al guardar pronóstico');
     }

@@ -3,6 +3,10 @@ import { authRouter } from './auth/router.js';
 import { matchesRouter } from './matches/router.js';
 import { predictionsRouter } from './predictions/router.js';
 import { leaguesRouter } from './leagues/router.js';
+import { teamsRouter } from './teams/router.js';
+import { playersRouter } from './players/router.js';
+import { tournamentPredictionsRouter } from './tournament-predictions/router.js';
+import { predictionScorersRouter } from './prediction-scorers/router.js';
 
 export const apiRouter = Router();
 
@@ -10,3 +14,7 @@ apiRouter.use('/auth', authRouter);
 apiRouter.use('/matches', matchesRouter);
 apiRouter.use('/predictions', predictionsRouter);
 apiRouter.use('/leagues', leaguesRouter);
+apiRouter.use('/teams', teamsRouter);
+apiRouter.use('/players', playersRouter);
+apiRouter.use('/tournament-predictions', tournamentPredictionsRouter);
+apiRouter.use('/prediction-scorers', predictionScorersRouter);

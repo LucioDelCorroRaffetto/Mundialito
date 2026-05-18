@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -7,7 +6,7 @@ import { motion } from 'framer-motion';
 import { Logo } from '@/shared/components/logo';
 import { Button } from '@/shared/components/ui/button';
 import { Input } from '@/shared/components/ui/input';
-import { useAuthStore } from '@/shared/stores/auth-store';
+import { useRegister } from '@/shared/hooks/use-auth';
 
 const schema = z.object({
   displayName: z.string().min(2, 'Mínimo 2 caracteres').max(60, 'Máximo 60 caracteres'),
@@ -19,25 +18,21 @@ type FormValues = z.infer<typeof schema>;
 
 export function RegisterPage() {
   const navigate = useNavigate();
-  const { login } = useAuthStore();
-  const [loading, setLoading] = useState(false);
+  const registerMutation = useRegister();
 
   const { register, handleSubmit, formState: { errors } } = useForm<FormValues>({
     resolver: zodResolver(schema),
   });
 
-  const onSubmit = async (_data: FormValues) => {
-    setLoading(true);
-    await new Promise((r) => setTimeout(r, 700));
-    login({ id: 1, username: 'demo', email: 'demo@mundialito.app', avatarUrl: null }, 'mock-token-dev');
-    navigate('/home', { replace: true });
+  const onSubmit = (data: FormValues) => {
+    registerMutation.mutate(
+      { username: data.displayName, email: data.email, password: data.password },
+      { onSuccess: () => navigate('/home', { replace: true }) }
+    );
   };
 
   const handleGoogle = async () => {
-    setLoading(true);
-    await new Promise((r) => setTimeout(r, 400));
-    login({ id: 1, username: 'demo', email: 'demo@mundialito.app', avatarUrl: null }, 'mock-token-dev');
-    navigate('/home', { replace: true });
+    // Google OAuth not yet implemented
   };
 
   return (
@@ -54,7 +49,7 @@ export function RegisterPage() {
           <p className="text-sm-s text-muted text-center">Gratis · sin ads · sin pagos</p>
         </div>
 
-        <Button variant="secondary" size="lg" fullWidth onClick={handleGoogle} disabled={loading}>
+        <Button variant="secondary" size="lg" fullWidth onClick={handleGoogle} disabled={registerMutation.isPending}>
           <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true">
             <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
             <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
@@ -96,7 +91,12 @@ export function RegisterPage() {
             {...register('password')}
             error={errors.password?.message}
           />
-          <Button type="submit" size="lg" fullWidth loading={loading}>
+          {registerMutation.isError && (
+            <p className="text-sm-s text-red-400 text-center -mt-1">
+              {(registerMutation.error as { response?: { data?: { error?: { message?: string } } } })?.response?.data?.error?.message ?? 'Error al crear la cuenta. Intentá de nuevo.'}
+            </p>
+          )}
+          <Button type="submit" size="lg" fullWidth loading={registerMutation.isPending}>
             Crear cuenta
           </Button>
         </form>

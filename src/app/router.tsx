@@ -1,6 +1,7 @@
 import { createBrowserRouter, Navigate } from 'react-router-dom';
 import { AppShell } from '@/shared/components/layout/app-shell';
 import { RequireAuth } from '@/shared/components/require-auth';
+import { ErrorBoundary } from '@/shared/components/error-boundary';
 import { SplashPage } from '@/pages/splash';
 import { LoginPage } from '@/pages/login';
 import { RegisterPage } from '@/pages/register';
@@ -16,22 +17,22 @@ import { SettingsPage } from '@/pages/settings';
 import { LeagueInvitePage } from '@/pages/league-invite';
 
 export const router = createBrowserRouter([
-  { path: '/', element: <SplashPage /> },
-  { path: '/login', element: <LoginPage /> },
-  { path: '/register', element: <RegisterPage /> },
-  { path: '/j/:code', element: <LeagueInvitePage /> },
+  { path: '/', element: <ErrorBoundary><SplashPage /></ErrorBoundary> },
+  { path: '/login', element: <ErrorBoundary><LoginPage /></ErrorBoundary> },
+  { path: '/register', element: <ErrorBoundary><RegisterPage /></ErrorBoundary> },
+  { path: '/j/:code', element: <ErrorBoundary><LeagueInvitePage /></ErrorBoundary> },
   {
     element: <RequireAuth><AppShell /></RequireAuth>,
     children: [
-      { path: '/home', element: <HomePage /> },
-      { path: '/matches', element: <MatchesPage /> },
-      { path: '/matches/:id', element: <MatchDetailPage /> },
-      { path: '/leagues', element: <LeaguesPage /> },
-      { path: '/leagues/create', element: <LeagueCreatePage /> },
-      { path: '/leagues/join', element: <LeagueJoinPage /> },
-      { path: '/leagues/:id', element: <LeagueDetailPage /> },
-      { path: '/profile', element: <ProfilePage /> },
-      { path: '/settings', element: <SettingsPage /> },
+      { path: '/home', element: <ErrorBoundary><HomePage /></ErrorBoundary> },
+      { path: '/matches', element: <ErrorBoundary><MatchesPage /></ErrorBoundary> },
+      { path: '/matches/:id', element: <ErrorBoundary><MatchDetailPage /></ErrorBoundary> },
+      { path: '/leagues', element: <ErrorBoundary><LeaguesPage /></ErrorBoundary> },
+      { path: '/leagues/create', element: <ErrorBoundary><LeagueCreatePage /></ErrorBoundary> },
+      { path: '/leagues/join', element: <ErrorBoundary><LeagueJoinPage /></ErrorBoundary> },
+      { path: '/leagues/:id', element: <ErrorBoundary><LeagueDetailPage /></ErrorBoundary> },
+      { path: '/profile', element: <ErrorBoundary><ProfilePage /></ErrorBoundary> },
+      { path: '/settings', element: <ErrorBoundary><SettingsPage /></ErrorBoundary> },
     ],
   },
   { path: '*', element: <Navigate to="/" replace /> },

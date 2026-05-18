@@ -1,8 +1,9 @@
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Settings, ChevronRight, Star } from 'lucide-react';
+import { Settings, ChevronRight, Star, LogOut } from 'lucide-react';
 import { MY_STATS, ACHIEVEMENTS, RARITY_COLOR } from '@/shared/data/mock';
 import { cn } from '@/shared/lib/cn';
+import { useAuthStore } from '@/shared/stores/auth-store';
 
 function StatCard({ label, value }: { label: string; value: string | number }) {
   return (
@@ -14,18 +15,43 @@ function StatCard({ label, value }: { label: string; value: string | number }) {
 }
 
 export function ProfilePage() {
+  const navigate = useNavigate();
+  const user = useAuthStore((s) => s.user);
+  const logout = useAuthStore((s) => s.logout);
   const unlocked = ACHIEVEMENTS.filter((a) => a.unlocked);
   const locked = ACHIEVEMENTS.filter((a) => !a.unlocked);
+
+  const handleLogout = () => {
+    logout();
+    navigate('/login', { replace: true });
+  };
+
+  // Defensive: shouldn't happen inside RequireAuth, but show skeleton just in case
+  if (!user) {
+    return (
+      <div className="flex flex-col gap-4 p-4 pt-6 animate-fade-in">
+        <div className="w-16 h-16 rounded-xl bg-elevated animate-pulse" />
+        <div className="h-4 w-32 rounded bg-elevated animate-pulse" />
+        <div className="h-3 w-48 rounded bg-elevated animate-pulse" />
+      </div>
+    );
+  }
+
+  const avatarInitial = user.username.charAt(0).toUpperCase();
 
   return (
     <div className="flex flex-col gap-6 animate-fade-in">
       <div className="flex items-center gap-4 px-4 pt-6">
-        <div className="w-16 h-16 rounded-xl bg-accent flex items-center justify-center flex-shrink-0">
-          <span className="text-2xl-s font-display font-bold text-accent-on">V</span>
+        <div className="w-16 h-16 rounded-xl bg-accent flex items-center justify-center flex-shrink-0 overflow-hidden">
+          {user.avatarUrl ? (
+            <img src={user.avatarUrl} alt={user.username} className="w-full h-full object-cover" />
+          ) : (
+            <span className="text-2xl-s font-display font-bold text-accent-on">{avatarInitial}</span>
+          )}
         </div>
         <div className="flex-1">
-          <h1 className="text-xl-s font-display font-bold text-text">vos</h1>
-          <p className="text-sm-s text-muted">vos@email.com</p>
+          <h1 className="text-xl-s font-display font-bold text-text">{user.username}</h1>
+          <p className="text-sm-s text-muted">{user.email}</p>
         </div>
         <Link
           to="/settings"
@@ -90,7 +116,7 @@ export function ProfilePage() {
         </div>
       </div>
 
-      <div className="px-4 pb-4">
+      <div className="px-4 pb-4 flex flex-col gap-3">
         <Link
           to="/settings"
           className="flex items-center gap-3 p-4 rounded-lg bg-card border border-border hover:border-accent-border transition-colors"
@@ -104,6 +130,17 @@ export function ProfilePage() {
           </div>
           <ChevronRight size={16} className="text-muted" />
         </Link>
+        <button
+          onClick={handleLogout}
+          className="flex items-center gap-3 p-4 rounded-lg bg-card border border-border hover:border-red-500/40 transition-colors text-left"
+        >
+          <div className="w-9 h-9 rounded-md bg-elevated flex items-center justify-center">
+            <LogOut size={18} className="text-red-400" />
+          </div>
+          <div className="flex-1">
+            <p className="text-base-s font-semibold text-red-400">Cerrar sesión</p>
+          </div>
+        </button>
       </div>
     </div>
   );
