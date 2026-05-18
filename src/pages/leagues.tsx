@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Search, Plus, Users, Lock, Globe, ChevronRight, Trophy } from 'lucide-react';
 import { MY_LEAGUES, PUBLIC_LEAGUES } from '@/shared/data/mock';
@@ -9,6 +9,7 @@ const TABS = ['Mis ligas', 'Explorar'] as const;
 type Tab = (typeof TABS)[number];
 
 export function LeaguesPage() {
+  const navigate = useNavigate();
   const [tab, setTab] = useState<Tab>('Mis ligas');
   const [query, setQuery] = useState('');
 
@@ -114,7 +115,10 @@ export function LeaguesPage() {
                     <span className="text-sm-s text-muted">{league.memberCount} miembros</span>
                   </div>
                 </div>
-                <button className="px-3 py-1.5 rounded-md bg-accent text-accent-on text-sm-s font-semibold flex-shrink-0 hover:opacity-90 transition-opacity">
+                <button
+                  onClick={() => navigate('/leagues/' + league.id)}
+                  className="px-3 py-1.5 rounded-md bg-accent text-accent-on text-sm-s font-semibold flex-shrink-0 hover:opacity-90 transition-opacity"
+                >
                   Unirse
                 </button>
               </div>

@@ -7,6 +7,7 @@ import { motion } from 'framer-motion';
 import { Logo } from '@/shared/components/logo';
 import { Button } from '@/shared/components/ui/button';
 import { Input } from '@/shared/components/ui/input';
+import { useAuthStore } from '@/shared/stores/auth-store';
 
 const schema = z.object({
   email: z.string().email('Email inválido'),
@@ -17,6 +18,7 @@ type FormValues = z.infer<typeof schema>;
 
 export function LoginPage() {
   const navigate = useNavigate();
+  const { login } = useAuthStore();
   const [loading, setLoading] = useState(false);
 
   const {
@@ -29,12 +31,14 @@ export function LoginPage() {
     setLoading(true);
     // mock: simular llamada y entrar
     await new Promise((r) => setTimeout(r, 600));
+    login({ id: 1, username: 'demo', email: 'demo@mundialito.app', avatarUrl: null }, 'mock-token-dev');
     navigate('/home', { replace: true });
   };
 
   const handleGoogle = async () => {
     setLoading(true);
     await new Promise((r) => setTimeout(r, 400));
+    login({ id: 1, username: 'demo', email: 'demo@mundialito.app', avatarUrl: null }, 'mock-token-dev');
     navigate('/home', { replace: true });
   };
 

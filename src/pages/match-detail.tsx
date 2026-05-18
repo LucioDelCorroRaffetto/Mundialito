@@ -5,6 +5,36 @@ import { ArrowLeft, Clock, MapPin, CheckCircle2 } from 'lucide-react';
 import { MATCHES, MY_PREDICTIONS, ROUND_LABELS } from '@/shared/data/mock';
 import { Button } from '@/shared/components/ui/button';
 
+function getPointsPreview(home: number, away: number) {
+  const isDraw = home === away;
+  return {
+    isDraw,
+    exact: 5,
+    correct: isDraw ? 1 : 3,
+  };
+}
+
+function PointsPreview({ home, away }: { home: number; away: number }) {
+  const { isDraw, exact, correct } = getPointsPreview(home, away);
+  return (
+    <div className="mx-4 mt-3 p-4 rounded-lg bg-elevated border border-border">
+      <p className="text-sm-s font-semibold text-text mb-2">
+        📊 Puntos posibles con {home} - {away}
+      </p>
+      <div className="flex flex-col gap-1.5">
+        <div className="flex items-center justify-between">
+          <span className="text-sm-s text-muted">{isDraw ? 'Empate exacto' : 'Resultado exacto'}</span>
+          <span className="text-sm-s font-bold text-accent">+{exact} pts</span>
+        </div>
+        <div className="flex items-center justify-between">
+          <span className="text-sm-s text-muted">{isDraw ? 'Empate acertado' : 'Resultado correcto'}</span>
+          <span className="text-sm-s font-bold text-accent">+{correct} pt{correct !== 1 ? 's' : ''}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function formatDate(utc: string) {
   const d = new Date(utc);
   return d.toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
@@ -19,7 +49,8 @@ export function MatchDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
 
-  const match = MATCHES.find((m) => m.id === Number(id)) ?? MATCHES[0];
+  const match = MATCHES.find((m) => m.id === Number(id));
+  if (!match) { navigate('/matches', { replace: true }); return null; }
   const existingPrediction = MY_PREDICTIONS.find((p) => p.matchId === match.id);
 
   const [homeScore, setHomeScore] = useState(existingPrediction?.homeScore ?? 0);
@@ -96,6 +127,8 @@ export function MatchDetailPage() {
           <span className="text-sm-s text-text">{match.venue}, {match.city}</span>
         </div>
       </div>
+
+      <PointsPreview home={homeScore} away={awayScore} />
 
       <div className="px-4 mt-4">
         {saved ? (

@@ -3,7 +3,6 @@ export interface Team {
   code: string;
   name: string;
   flag: string;
-  group: string;
 }
 
 export interface Match {
@@ -56,44 +55,48 @@ export interface StandingsRow {
 }
 
 export const TEAMS: Record<string, Team> = {
-  ARG: { id: 1, code: 'ARG', name: 'Argentina', flag: '🇦🇷', group: 'A' },
-  BRA: { id: 2, code: 'BRA', name: 'Brasil', flag: '🇧🇷', group: 'B' },
-  FRA: { id: 3, code: 'FRA', name: 'Francia', flag: '🇫🇷', group: 'C' },
-  ENG: { id: 4, code: 'ENG', name: 'Inglaterra', flag: '🏴󠁧󠁢󠁥󠁮󠁧󠁿', group: 'D' },
-  ESP: { id: 5, code: 'ESP', name: 'España', flag: '🇪🇸', group: 'E' },
-  GER: { id: 6, code: 'GER', name: 'Alemania', flag: '🇩🇪', group: 'F' },
-  POR: { id: 7, code: 'POR', name: 'Portugal', flag: '🇵🇹', group: 'G' },
-  MEX: { id: 8, code: 'MEX', name: 'México', flag: '🇲🇽', group: 'H' },
-  USA: { id: 9, code: 'USA', name: 'EEUU', flag: '🇺🇸', group: 'A' },
-  CAN: { id: 10, code: 'CAN', name: 'Canadá', flag: '🇨🇦', group: 'B' },
-  URU: { id: 11, code: 'URU', name: 'Uruguay', flag: '🇺🇾', group: 'C' },
-  COL: { id: 12, code: 'COL', name: 'Colombia', flag: '🇨🇴', group: 'D' },
-  MOR: { id: 13, code: 'MOR', name: 'Marruecos', flag: '🇲🇦', group: 'E' },
-  JPN: { id: 14, code: 'JPN', name: 'Japón', flag: '🇯🇵', group: 'F' },
-  NED: { id: 15, code: 'NED', name: 'Países Bajos', flag: '🇳🇱', group: 'G' },
-  AUS: { id: 16, code: 'AUS', name: 'Australia', flag: '🇦🇺', group: 'H' },
+  ARG: { id: 1, code: 'ARG', name: 'Argentina', flag: '🇦🇷' },
+  BRA: { id: 2, code: 'BRA', name: 'Brasil', flag: '🇧🇷' },
+  FRA: { id: 3, code: 'FRA', name: 'Francia', flag: '🇫🇷' },
+  ENG: { id: 4, code: 'ENG', name: 'Inglaterra', flag: '🏴󠁧󠁢󠁥󠁮󠁧󠁿' },
+  ESP: { id: 5, code: 'ESP', name: 'España', flag: '🇪🇸' },
+  GER: { id: 6, code: 'GER', name: 'Alemania', flag: '🇩🇪' },
+  POR: { id: 7, code: 'POR', name: 'Portugal', flag: '🇵🇹' },
+  MEX: { id: 8, code: 'MEX', name: 'México', flag: '🇲🇽' },
+  USA: { id: 9, code: 'USA', name: 'EEUU', flag: '🇺🇸' },
+  CAN: { id: 10, code: 'CAN', name: 'Canadá', flag: '🇨🇦' },
+  URU: { id: 11, code: 'URU', name: 'Uruguay', flag: '🇺🇾' },
+  COL: { id: 12, code: 'COL', name: 'Colombia', flag: '🇨🇴' },
+  MOR: { id: 13, code: 'MOR', name: 'Marruecos', flag: '🇲🇦' },
+  JPN: { id: 14, code: 'JPN', name: 'Japón', flag: '🇯🇵' },
+  NED: { id: 15, code: 'NED', name: 'Países Bajos', flag: '🇳🇱' },
+  AUS: { id: 16, code: 'AUS', name: 'Australia', flag: '🇦🇺' },
 };
 
 export const MATCHES: Match[] = [
   {
     id: 1, matchNumber: 1, matchday: 1, round: 'group', group: 'A',
     homeTeam: TEAMS.MEX, awayTeam: TEAMS.CAN,
-    kickoffUtc: '2026-06-11T20:00:00Z', venue: 'Estadio Azteca', city: 'Ciudad de México', status: 'scheduled',
+    kickoffUtc: '2026-06-11T20:00:00Z', venue: 'Estadio Azteca', city: 'Ciudad de México',
+    status: 'finished', homeScore: 2, awayScore: 1,
   },
   {
     id: 2, matchNumber: 2, matchday: 1, round: 'group', group: 'A',
     homeTeam: TEAMS.USA, awayTeam: TEAMS.ARG,
-    kickoffUtc: '2026-06-12T00:00:00Z', venue: 'MetLife Stadium', city: 'Nueva York', status: 'scheduled',
+    kickoffUtc: '2026-06-12T00:00:00Z', venue: 'MetLife Stadium', city: 'Nueva York',
+    status: 'finished', homeScore: 0, awayScore: 3,
   },
   {
     id: 3, matchNumber: 3, matchday: 1, round: 'group', group: 'B',
     homeTeam: TEAMS.BRA, awayTeam: TEAMS.JPN,
-    kickoffUtc: '2026-06-12T20:00:00Z', venue: 'SoFi Stadium', city: 'Los Ángeles', status: 'scheduled',
+    kickoffUtc: '2026-06-12T20:00:00Z', venue: 'SoFi Stadium', city: 'Los Ángeles',
+    status: 'finished', homeScore: 4, awayScore: 1,
   },
   {
     id: 4, matchNumber: 4, matchday: 1, round: 'group', group: 'C',
     homeTeam: TEAMS.FRA, awayTeam: TEAMS.URU,
-    kickoffUtc: '2026-06-13T00:00:00Z', venue: 'AT&T Stadium', city: 'Dallas', status: 'scheduled',
+    kickoffUtc: '2026-06-13T00:00:00Z', venue: 'AT&T Stadium', city: 'Dallas',
+    status: 'live', homeScore: 1, awayScore: 0, minute: 67,
   },
   {
     id: 5, matchNumber: 5, matchday: 1, round: 'group', group: 'D',

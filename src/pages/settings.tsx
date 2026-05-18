@@ -1,6 +1,7 @@
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Moon, Sun, Zap, Type } from 'lucide-react';
 import { useThemeStore } from '@/theme/theme-store';
+import { useAuthStore } from '@/shared/stores/auth-store';
 import { accentList, type AccentKey, type ThemeMode, type FontScale } from '@/theme/palettes';
 import { cn } from '@/shared/lib/cn';
 
@@ -19,6 +20,7 @@ const FONT_OPTIONS: { value: FontScale; label: string }[] = [
 export function SettingsPage() {
   const navigate = useNavigate();
   const { mode, accent, fontScale, setMode, setAccent, setFontScale } = useThemeStore();
+  const { logout } = useAuthStore();
 
   return (
     <div className="flex flex-col min-h-full animate-fade-in">
@@ -99,7 +101,7 @@ export function SettingsPage() {
         </section>
 
         <button
-          onClick={() => navigate('/login', { replace: true })}
+          onClick={() => { logout(); navigate('/login', { replace: true }); }}
           className="w-full py-3 rounded-lg border border-red-500/40 text-red-400 text-sm-s font-semibold hover:bg-red-500/10 transition-colors mt-2"
         >
           Cerrar sesión

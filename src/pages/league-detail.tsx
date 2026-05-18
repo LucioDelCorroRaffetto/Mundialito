@@ -47,7 +47,8 @@ export function LeagueDetailPage() {
   const navigate = useNavigate();
   const [tab, setTab] = useState<Tab>('Tabla');
 
-  const league = MY_LEAGUES.find((l) => l.id === Number(id)) ?? MY_LEAGUES[0];
+  const league = MY_LEAGUES.find((l) => l.id === Number(id));
+  if (!league) { navigate('/leagues', { replace: true }); return null; }
 
   return (
     <div className="flex flex-col min-h-full animate-fade-in">
@@ -98,7 +99,7 @@ export function LeagueDetailPage() {
             <span className="text-xs-s text-muted">Pts</span>
           </div>
           {LEAGUE_STANDINGS.map((row) => (
-            <Row key={row.userId} row={row} isMe={row.userId === 99} />
+            <Row key={row.userId} row={row} isMe={row.userId === 1} />
           ))}
         </div>
       )}

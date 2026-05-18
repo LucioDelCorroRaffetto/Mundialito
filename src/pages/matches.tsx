@@ -76,10 +76,15 @@ export function MatchesPage() {
                   className="flex items-center gap-3 p-3 rounded-lg bg-card border border-border hover:border-accent-border transition-colors"
                 >
                   <div className="flex-shrink-0">
-                    {prediction
-                      ? <CheckCircle2 size={18} className="text-green-400" />
-                      : <Clock size={18} className="text-muted" />
-                    }
+                    {match.status === 'live' ? (
+                      <span className="flex items-center gap-1">
+                        <span className="w-2 h-2 rounded-full bg-red-400 animate-pulse" />
+                      </span>
+                    ) : prediction ? (
+                      <CheckCircle2 size={18} className="text-green-400" />
+                    ) : (
+                      <Clock size={18} className="text-muted" />
+                    )}
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
@@ -87,7 +92,17 @@ export function MatchesPage() {
                         {match.group ? `Grupo ${match.group}` : ROUND_LABELS[match.round]}
                       </span>
                       <span className="text-xs-s text-muted">·</span>
-                      <span className="text-xs-s text-muted">{formatTime(match.kickoffUtc)}</span>
+                      {match.status === 'live' ? (
+                        <span className="flex items-center gap-1">
+                          <span className="w-2 h-2 rounded-full bg-red-400 animate-pulse" />
+                          <span className="text-xs-s font-bold text-red-400">EN VIVO</span>
+                          {match.minute != null && (
+                            <span className="text-xs-s text-red-400">{match.minute}'</span>
+                          )}
+                        </span>
+                      ) : (
+                        <span className="text-xs-s text-muted">{formatTime(match.kickoffUtc)}</span>
+                      )}
                     </div>
                     <div className="flex items-center gap-2 mt-1">
                       <span className="text-sm-s font-semibold text-text">{match.homeTeam.flag} {match.homeTeam.name}</span>

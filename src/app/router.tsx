@@ -1,5 +1,6 @@
 import { createBrowserRouter, Navigate } from 'react-router-dom';
 import { AppShell } from '@/shared/components/layout/app-shell';
+import { RequireAuth } from '@/shared/components/require-auth';
 import { SplashPage } from '@/pages/splash';
 import { LoginPage } from '@/pages/login';
 import { RegisterPage } from '@/pages/register';
@@ -18,7 +19,7 @@ export const router = createBrowserRouter([
   { path: '/login', element: <LoginPage /> },
   { path: '/register', element: <RegisterPage /> },
   {
-    element: <AppShell />,
+    element: <RequireAuth><AppShell /></RequireAuth>,
     children: [
       { path: '/home', element: <HomePage /> },
       { path: '/matches', element: <MatchesPage /> },

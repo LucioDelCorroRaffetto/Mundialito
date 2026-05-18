@@ -1,9 +1,54 @@
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Plus, Search, Trophy, ChevronRight } from 'lucide-react';
-import { MY_LEAGUES, MATCHES } from '@/shared/data/mock';
+import { MY_LEAGUES, MATCHES, MY_PREDICTIONS } from '@/shared/data/mock';
 import { Button } from '@/shared/components/ui/button';
 import { cn } from '@/shared/lib/cn';
+
+function useCountdown(targetUtc: string) {
+  const [diff, setDiff] = useState(0);
+  useEffect(() => {
+    const update = () => setDiff(new Date(targetUtc).getTime() - Date.now());
+    update();
+    const id = setInterval(update, 1000);
+    return () => clearInterval(id);
+  }, [targetUtc]);
+  const total = Math.max(0, diff);
+  const days = Math.floor(total / 86400000);
+  const hours = Math.floor((total % 86400000) / 3600000);
+  const mins = Math.floor((total % 3600000) / 60000);
+  const secs = Math.floor((total % 60000) / 1000);
+  return { days, hours, mins, secs, started: diff <= 0 };
+}
+
+function CountdownHero() {
+  const { days, hours, mins, secs, started } = useCountdown('2026-06-11T19:00:00Z');
+  return (
+    <div className="bg-card border border-border rounded-xl p-4 mx-4 mb-4">
+      <p className="text-sm-s font-semibold text-text mb-3">Primer partido del Mundial 2026 🌎</p>
+      {started ? (
+        <p className="text-base-s font-bold text-accent text-center">¡El Mundial ya comenzó! 🏆</p>
+      ) : (
+        <div className="flex items-center justify-center gap-3">
+          {[
+            { value: days, label: 'd' },
+            { value: hours, label: 'h' },
+            { value: mins, label: 'm' },
+            { value: secs, label: 's' },
+          ].map(({ value, label }) => (
+            <div key={label} className="flex flex-col items-center gap-1">
+              <span className="text-2xl-s font-display font-bold text-accent tabular-nums w-12 text-center">
+                {String(value).padStart(2, '0')}
+              </span>
+              <span className="text-xs-s text-muted">{label}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function formatKickoff(utc: string) {
   const d = new Date(utc);
@@ -17,9 +62,14 @@ function formatTime(utc: string) {
 
 export function HomePage() {
   const upcoming = MATCHES.filter((m) => m.status === 'scheduled').slice(0, 3);
+  const predictedIds = new Set(MY_PREDICTIONS.map((p) => p.matchId));
+  const pendingCount = MATCHES.filter(
+    (m) => m.status !== 'finished' && !predictedIds.has(m.id)
+  ).length;
 
   return (
     <div className="flex flex-col gap-6 p-4 pt-6 animate-fade-in">
+      <CountdownHero />
       <div className="flex items-center justify-between">
         <div>
           <p className="text-sm-s text-muted">¡Hola, vos! 👋</p>
@@ -54,6 +104,11 @@ export function HomePage() {
                   <p className="text-base-s font-semibold text-text truncate">{league.name}</p>
                   {!league.isPublic && (
                     <span className="text-xs-s text-muted border border-border rounded px-1.5 py-0.5 flex-shrink-0">privada</span>
+                  )}
+                  {pendingCount > 0 && (
+                    <span className="px-2 py-0.5 rounded-full bg-orange-500/20 text-orange-400 text-xs-s font-bold flex-shrink-0">
+                      {pendingCount} sin pronosticar
+                    </span>
                   )}
                 </div>
                 <div className="flex items-center gap-3 mt-0.5">
