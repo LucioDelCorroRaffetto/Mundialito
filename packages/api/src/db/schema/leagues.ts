@@ -1,0 +1,22 @@
+import { sqliteTable, text, integer } from 'drizzle-orm/sqlite-core';
+import { sql } from 'drizzle-orm';
+
+export const leagues = sqliteTable('leagues', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  name: text('name').notNull(),
+  code: text('code').notNull().unique(),      // código de invitación, ej: 'ASADO42'
+  isPublic: integer('is_public', { mode: 'boolean' }).notNull().default(false),
+  adminId: integer('admin_id').notNull(),
+  stakesMeme: text('stakes_meme'),            // 'El último paga las birras'
+  createdAt: text('created_at').notNull().default(sql`(datetime('now'))`),
+});
+
+export const leagueMembers = sqliteTable('league_members', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  leagueId: integer('league_id').notNull(),
+  userId: integer('user_id').notNull(),
+  joinedAt: text('joined_at').notNull().default(sql`(datetime('now'))`),
+});
+
+export type League = typeof leagues.$inferSelect;
+export type LeagueMember = typeof leagueMembers.$inferSelect;
