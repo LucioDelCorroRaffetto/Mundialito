@@ -129,7 +129,7 @@ packages/
 | ID | Pregunta | Opciones |
 |----|----------|---------|
 | **D1** | Refresh tokens ¿stateless o en DB? | ✅ **Stateless** — JWT de 30 días, logout solo del lado del cliente |
-| **D2** | Fixture 2026 ¿disponible en OpenFootball? | Verificar `github.com/openfootball/world-cup.json`. Si no, construir seed manual |
+| **D2** | Fixture 2026 ¿disponible en OpenFootball? | ⚠️ **Verificar manualmente** — `github.com/openfootball/world-cup[.json]` historicamente publica `<year>/cup.txt` y `<year>/worldcup.json` despues del sorteo (5/12/2025). En este entorno no hubo acceso de red para confirmar. Mientras tanto, seed placeholder en `packages/api/src/scripts/seed.ts` con 48 equipos + 72 partidos de grupos. Fases eliminatorias pendientes. Alternativas: football-data.org (free tier, competition `WC`), API-Football (RapidAPI), parse de Wikipedia |
 | **D3** | WebSocket vs SSE para updates live | ✅ **WebSocket** — bidireccional, soporta chat |
 | **D4** | Worker: ¿mismo Fly.io app (2 procesos) o 2 apps separadas? | Mismo app más simple para beta |
 | **D5** | Jugadores para beta del 4 de mayo | ✅ **Fantasy entra en beta** — usar jugadores estimados con nombres reales |
@@ -217,7 +217,7 @@ packages/
 
 ### Técnicas / arquitectura
 - [x] **D1:** Stateless JWT (access 15min + refresh JWT 30d, no tabla en DB)
-- [ ] **D2:** Verificar fixture 2026 en OpenFootball
+- [x] ⚠️ **D2:** Seed placeholder creado (`packages/api/src/scripts/seed.ts`, 48 equipos + 72 partidos de grupos). Falta verificar `openfootball/world-cup` post-sorteo FIFA y reemplazar grupos/calendario reales + fases eliminatorias
 - [x] **D3:** WebSocket
 - [ ] **D4:** Mismo Fly.io app con 2 procesos (definir en sprint de deploy)
 - [x] **D5:** Fantasy entra en beta con jugadores estimados
@@ -387,3 +387,207 @@ BETA PRIVADA (fin de semana 4)
 - [ ] ¿`predictionLockUtc` se va a calcular en el worker o en el handler de creación de partidos? ¿Hay un trigger de DB o es responsabilidad de la aplicación?
 - [ ] ¿Las predicciones son globales o por liga? El schema actual tiene `leagueId` como `notNull` en `predictions`, lo que implica que un usuario necesita pertenecer a una liga para pronosticar. Si el prode es "global" (sin liga), el modelo actual no lo soporta sin crear una "liga default".
 - [ ] ¿El `adminId` de leagues debería tener lógica de transferencia de admin si el admin abandona la liga? No hay campo ni tabla para trackear eso actualmente.
+
+---
+
+## 10. BUGS RONDA 3 (auditoría post-Sprint 2 + features F-04/F-15)
+
+### [register.ts: anti-enumeration NO está corregido]
+**Archivo:** `packages/api/src/routes/auth/handlers/register.ts:19-25`
+**Problema:** El handler hace `or(eq(users.email, email), eq(users.username, username))` y lanza `ConflictError('Email or username already in use')` cuando hay match. Esto es vulnerable a enumeración: un atacante puede probar emails/usernames y deducir cuáles ya están registrados a partir del 409. El comentario de scope dice "anti-enumeration fix" pero no hay ningún fix aplicado (no se distingue por tipo, ni hay rate limiting, ni respuesta opaca, ni delay). Además el mensaje agrupa ambos campos lo cual es buena práctica, pero el código 409 sigue revelando existencia.
+**Severidad:** Media
+**Fix sugerido:** Cambiar la respuesta a 201 fake + envío de mail de "ya existe cuenta" al email real (patrón estándar), o como mínimo agregar rate-limit por IP en `/auth/register` y `/auth/login` (express-rate-limit) y constant-time delay artificial para que el atacante no pueda medir.
+
+### [upsert-prediction.ts: race condition en upsert (no atómico)]
+**Archivo:** `packages/api/src/routes/predictions/handlers/upsert-prediction.ts:38-63`
+**Problema:** El handler hace `SELECT ... WHERE userId+matchId+leagueId` y luego INSERT/UPDATE. Si llegan dos requests simultáneos (ej. doble tap en el botón), ambos pueden ver `existing=null`, ambos hacen INSERT, y el segundo falla con `UNIQUE constraint` 500 en vez de ser un upsert exitoso. El usuario ve "error desconocido" cuando en realidad debería actualizarse.
+**Severidad:** Media
+**Fix sugerido:** Usar `INSERT ... ON CONFLICT (user_id, match_id, league_id) DO UPDATE SET home_score=excluded.home_score, away_score=excluded.away_score, updated_at=...` (Drizzle: `.onConflictDoUpdate({...})`). El comentario en línea 37 incluso menciona el patrón pero no lo implementó.
+
+### [upsert-prediction.ts: leagueId no validado contra el match]
+**Archivo:** `packages/api/src/routes/predictions/handlers/upsert-prediction.ts:16-35`
+**Problema:** No hay validación de que `leagueId` y `matchId` tengan algo en común. Un usuario miembro de la "Liga Mundialito A" puede crear una predicción asociando un `matchId` del Mundial con la "Liga del Tenis 2026" si esa liga existiera y él fuese miembro. En este MVP donde todas las ligas comparten el mismo fixture, no hay daño concreto, pero a futuro (cuando haya ligas por torneo distintas) esto rompe el modelo. Tampoco se verifica que `match.status === 'scheduled'` (un partido `finished` con `predictionLockUtc` pasado bloquea, pero un partido `live` con lock pasado también — eso sí funciona, OK).
+**Severidad:** Baja
+**Fix sugerido:** Documentar la suposición ("una sola competencia activa = todas las ligas comparten matches"), o agregar un `competitionId` tanto en `leagues` como en `matches` y validar igualdad.
+
+### [my-prediction-for-match.ts: 404 cuando leagueId es inválido oculta el bug del cliente]
+**Archivo:** `packages/api/src/routes/predictions/handlers/my-prediction-for-match.ts:9-13`
+**Problema:** Si el cliente manda `?leagueId=abc` o sin query param (`Number(undefined) → NaN`), el handler responde 404 "Prediction not found" en vez de 400 VALIDATION_ERROR. Esto enmascara bugs del cliente que pasan un `leagueId` mal serializado, y hace difícil debuggear desde Sentry/logs. El query param tampoco es opcional pero no está validado con Zod como en otros handlers.
+**Severidad:** Baja
+**Fix sugerido:** Validar params/query con un schema Zod (`z.coerce.number().int().positive()`) y devolver 400 cuando falla parseo. Reservar 404 sólo para "row no existe".
+
+### [list-matches.ts: rutas públicas sin auth — leak controlado pero documentar]
+**Archivo:** `packages/api/src/routes/matches/router.ts:7-8`
+**Problema:** Las rutas `GET /matches` y `GET /matches/:id` NO tienen `authGuard`. Esto puede ser intencional (el fixture es público), pero deja abierto que un scraper bombardée el endpoint sin rate-limit. No hay un comentario que indique que fue una decisión consciente.
+**Severidad:** Baja
+**Fix sugerido:** Agregar comentario `// public — fixture is public data` en el router, o agregar rate limit por IP. Si en algún momento el fixture incluye scores en vivo, considerar cache + ETag.
+
+### [client.ts: PRAGMA foreign_keys solo se aplica a la conexión inicial]
+**Archivo:** `packages/api/src/db/client.ts:11-13`
+**Problema:** `libsql/client` mantiene un pool de conexiones (HTTP en el caso de Turso remoto). El `PRAGMA foreign_keys = ON` se aplica solo a la conexión que ejecuta el statement, no a todas las conexiones del pool. En Turso remoto cada request HTTP es una conexión nueva, así que efectivamente las FKs NO están enforced en producción. En modo embedded/local sí funciona.
+**Severidad:** Alta
+**Fix sugerido:** Verificar comportamiento en Turso. Si confirmado, ejecutar el PRAGMA en cada `db.execute` (wrapper) o, mejor, definir las FKs como `DEFERRABLE` en el schema y no depender del PRAGMA. Alternativa: usar `transaction()` para operaciones críticas que dependen del cascade.
+
+### [standings.ts: N+1 latente y recalculo en cada request]
+**Archivo:** `packages/api/src/routes/leagues/handlers/standings.ts:25-55`
+**Problema:** Cada request a `/leagues/:id/standings` (a) trae todas las predictions de la liga (potencialmente miles si tiene 100 miembros × 64 matches = 6400 rows), (b) recalcula puntos en memoria para los que tienen `points=null` y match finished, (c) NO persiste el cálculo, así que el siguiente request hace todo de nuevo. En una liga grande el endpoint puede tardar segundos y se va a llamar en cada refresh del frontend.
+**Severidad:** Media
+**Fix sugerido:** Cuando un match pasa a `finished` (worker), calcular `points` y persistir en `predictions.points` en bulk con un UPDATE...JOIN. El handler de standings se simplifica a `SUM(points) GROUP BY userId`. Si necesitás standings en vivo durante partidos en curso, mantener el path actual sólo para matches `live`.
+
+### [leagues: no hay rate limit en createLeague — spam de códigos posible]
+**Archivo:** `packages/api/src/routes/leagues/handlers/create-league.ts:21-26`
+**Problema:** El loop genera códigos de 6 chars del alphabet de 32 = 32^6 ≈ 1B combinaciones. Está OK en cardinalidad, pero un usuario malicioso puede crear miles de ligas para inflar la DB y, eventualmente, agotar el espacio de códigos cortos. No hay límite por user.
+**Severidad:** Baja
+**Fix sugerido:** Limitar a N (ej. 20) ligas creadas por usuario (`SELECT COUNT(*) FROM leagues WHERE admin_id=?`), o rate-limit la ruta.
+
+### [invite-code.ts: Math.random no es criptográficamente seguro]
+**Archivo:** `packages/api/src/lib/invite-code.ts:5-8`
+**Problema:** `Math.random()` es predecible. Un atacante con varios códigos consecutivos podría (en teoría, V8 lo dificulta) predecir el siguiente. Más importante: dos procesos arrancados al mismo tiempo con la misma seed generan los mismos códigos. Para invite codes públicos de 6 chars, el riesgo es bajo pero hay que considerarlo.
+**Severidad:** Baja
+**Fix sugerido:** Usar `crypto.randomInt(0, ALPHABET.length)` de Node `crypto` para generación CSPRNG.
+
+### [delete-league.ts: cascade depende del PRAGMA que probablemente no está activo]
+**Archivo:** `packages/api/src/routes/leagues/handlers/delete-league.ts:16`
+**Problema:** El DELETE de una league depende del `onDelete: 'cascade'` definido en `leagueMembers` y `predictions` para limpiar las rows hijas. Si el PRAGMA `foreign_keys=ON` no está activo (ver bug anterior), las rows huérfanas quedan en DB y la próxima request a `standings` o `my-predictions` puede devolver datos zombie de ligas borradas.
+**Severidad:** Alta (depende del bug del PRAGMA)
+**Fix sugerido:** Ejecutar DELETEs explícitos en una transacción: predictions → leagueMembers → leagues. No depender del cascade en Turso.
+
+### [match-helpers.ts: isLocked no valida input — NaN se trata como "no bloqueado"]
+**Archivo:** `packages/api/src/lib/match-helpers.ts:7-9`
+**Problema:** Si `predictionLockUtc` es un string inválido (corruption en DB, migración mal hecha), `new Date(...).getTime()` devuelve `NaN`, y `NaN <= Date.now()` es `false`, por lo que `isLocked` devuelve `false` y permite escribir predicciones que nunca deberían aceptarse.
+**Severidad:** Media
+**Fix sugerido:** `const t = new Date(predictionLockUtc).getTime(); if (Number.isNaN(t)) throw new Error('Invalid predictionLockUtc'); return t <= Date.now();`. Failsafe: fallar cerrado, no abierto.
+
+### [auth-store.ts: el persist guarda token + isAuthenticated → hydration con token expirado]
+**Archivo:** `src/shared/stores/auth-store.ts:19-29`
+**Problema:** Zustand persist serializa `{ user, token, isAuthenticated }`. Al rehidratar, `isAuthenticated` queda `true` aunque el `token` ya esté expirado. `RequireAuth` mitiga esto chequeando `exp`, pero hooks que sólo consumen `isAuthenticated` (ej. cualquier hook futuro de react-query con `enabled: isAuthenticated`) van a disparar requests con un token muerto, recibir 401, y el interceptor va a loguear out + redirect → flash de pantalla de login al abrir la app si el token caducó.
+**Severidad:** Media
+**Fix sugerido:** En el partialize del persist, no persistir `isAuthenticated` y derivarlo del token: `isAuthenticated: token != null && !isExpired(token)`. O agregar `onRehydrateStorage` que valida `exp` y limpia el state si está vencido.
+
+### [api-client.ts: 401 logout + window.location.replace causa pérdida del returnTo]
+**Archivo:** `src/shared/lib/api-client.ts:20-25`
+**Problema:** Al recibir 401, el interceptor hace `window.location.replace('/login')` sin preservar la ruta actual como `returnTo`. El usuario pierde el contexto (estaba viendo `/matches/15`) y, post-login, va al home. Además `window.location.replace` causa full reload (pierde estado de react-query, zustand no-persisted, etc.). El `RequireAuth` sí preserva returnTo pero esa lógica no se ejecuta acá porque el interceptor se dispara desde una mutación, no desde un navigate.
+**Severidad:** Media
+**Fix sugerido:** Reemplazar por `window.location.replace('/login?returnTo=' + encodeURIComponent(window.location.pathname + window.location.search))`. Mejor aún: emitir un evento (o usar el router de React) para evitar full reload.
+
+### [api-client.ts: 401 no distingue entre token inválido y "permiso denegado en una mutación válida"]
+**Archivo:** `src/shared/lib/api-client.ts:20`
+**Problema:** Un 401 puede venir de: (a) token expirado (correcto: logout + redirect), o (b) endpoint que el server marcó como auth-only y el cliente llamó sin token (bug del cliente). Ambos casos disparan logout, lo cual es agresivo en el caso (b) porque le destruye al usuario una sesión que era válida sólo por un bug. Más sutil: si un 403 (FORBIDDEN) llegase con shape parecida, el filtro `status === 401` lo deja pasar OK, pero un 401 que viene de un endpoint terciario (analytics, etc.) hace logout completo.
+**Severidad:** Baja
+**Fix sugerido:** Sólo loguear out si la response viene con el code `TOKEN_EXPIRED` o `INVALID_TOKEN` (que el backend debería estandarizar). De lo contrario, dejar que el componente decida.
+
+### [require-auth.tsx: validación de exp en cada render — leak del JWT en logs si atob falla]
+**Archivo:** `src/shared/components/require-auth.tsx:9-19`
+**Problema:** (a) El `JSON.parse(atob(token.split('.')[1]))` se ejecuta en cada render. Para un componente que envuelve todo el árbol autenticado, eso es 1 parse + 1 base64 decode por re-render del subtree. Use `useMemo`. (b) Si `token.split('.')[1]` es undefined (token sin puntos), `atob(undefined)` tira `InvalidCharacterError` que es silenciado por el `catch {}` — el usuario queda con un token roto navegando como autenticado. (c) El fallback comentado ("caso del mock dev-token") deja una puerta trasera: cualquier string sin formato JWT se acepta como válido siempre que `isAuthenticated` esté `true`.
+**Severidad:** Media
+**Fix sugerido:** Envolver en `useMemo([token])`. Si el parse falla → tratar como token inválido y logout. Eliminar el caso "dev-token" antes de producción (o detrás de `if (import.meta.env.DEV)`).
+
+### [generate-prediction-card.ts: emoji flag se renderiza inconsistente en Windows/Android viejos]
+**Archivo:** `src/shared/lib/generate-prediction-card.ts:51-53`
+**Problema:** El Canvas usa `'180px serif'` para renderizar emojis de banderas. En Windows (sin Segoe UI Emoji con flags) y Android < 11 los emojis de bandera se renderizan como dos letras (códigos regionales) en vez de la bandera. Resultado: la imagen compartida muestra "AR" o "🇦🇷" según el OS del usuario que la genera. La share image es la cara pública de la marca, no debería verse rota.
+**Severidad:** Media
+**Fix sugerido:** Pre-cargar imágenes SVG/PNG de las banderas en `public/flags/` y usar `ctx.drawImage()` en vez de `fillText(emoji)`. Hay que hacer `await img.decode()` antes de dibujar.
+
+### [generate-prediction-card.ts: accentColor desde CSS var no maneja transparencias mal pasadas]
+**Archivo:** `src/shared/lib/generate-prediction-card.ts:23, 33-35`
+**Problema:** `accent + '55'` y `accent + '00'` concatenan alfa hex al final del color. Si `accentColor` viene como `'rgb(59, 130, 246)'` (legítimo desde `getComputedStyle`), el resultado es `'rgb(59, 130, 246)55'` que es CSS color inválido → fill silenciosamente no pinta, gradient pierde halo. Solo funciona si el color es siempre `#rrggbb`. El call site en `match-detail.tsx:137-138` toma el CSS var `--accent` que perfectamente puede ser `oklch(...)` o `rgb(...)` según el theme.
+**Severidad:** Media
+**Fix sugerido:** Normalizar a hex antes de concatenar, o usar `ctx.globalAlpha` para el halo en vez de string concat de alfa.
+
+### [match-detail.tsx: ScoreInput definido dentro del componente → se recrea en cada render]
+**Archivo:** `src/pages/match-detail.tsx:166-194`
+**Problema:** `ScoreInput` es un componente declarado dentro de `MatchDetailPage`. React lo trata como un componente nuevo en cada render del parent, lo que (a) desmonta y remonta el subtree en cada keystroke / cambio de score, (b) hace que el `+/−` botones pierdan focus, (c) provoca re-renders en cascada en framer-motion. Esto rompe accesibilidad de teclado y performance.
+**Severidad:** Media
+**Fix sugerido:** Mover `ScoreInput` afuera del componente padre, recibir todo por props. Lo mismo con `PointsPreview` y `ScorerPicker` (esos ya están afuera, OK).
+
+### [match-detail.tsx: handleSave es un mock que setea "saved" sin llamar a la API]
+**Archivo:** `src/pages/match-detail.tsx:159-164`
+**Problema:** `handleSave` solo hace `setTimeout(500)` y marca `saved=true`. No llama al backend, no envía la predicción a `/predictions`, no maneja error. Si esto está en main, el botón "Guardar" miente al usuario. Las predicciones que el usuario cree NO se persisten. (Esto puede ser pre-integración, pero entonces falta el TODO/banner indicando estado mock.)
+**Severidad:** Alta
+**Fix sugerido:** Conectar al endpoint real `POST /predictions` con react-query mutation. Mostrar toast de error. Mientras tanto, log explícito "MOCK: prediction not persisted" en consola.
+
+### [match-detail.tsx: goleadores nunca se envían — feature incompleta]
+**Archivo:** `src/pages/match-detail.tsx:117-118, 233-249`
+**Problema:** `homeScorers` y `awayScorers` se almacenan en local state pero (a) no se persisten en backend (no existe la columna), (b) no afectan el cálculo de puntos en el backend (`scoring.ts` no contempla goleadores). El preview muestra `scorerCount * 2` pero el sistema real de puntuación del backend (`packages/api/src/lib/scoring.ts`) sólo da 5/3/1/0 pts. Inconsistencia entre lo que el usuario ve y lo que el backend va a otorgar.
+**Severidad:** Alta
+**Fix sugerido:** Decidir si goleadores está en scope. Si sí: agregar tabla `prediction_scorers` + columna en schema, extender `calculatePoints` para sumar los +2. Si no: remover el picker hasta que esté listo.
+
+### [match-detail.tsx: navigate dentro del render — warning de React]
+**Archivo:** `src/pages/match-detail.tsx:112`
+**Problema:** `if (!match) { navigate('/matches', { replace: true }); return null; }` ejecuta `navigate` durante el render del componente. React Router puede tolerarlo, pero es side-effect en render (warning oficial). Además, si el render se aborta por StrictMode, navigate se ejecuta dos veces.
+**Severidad:** Baja
+**Fix sugerido:** Mover a `useEffect(() => { if (!match) navigate('/matches', { replace: true }); }, [match])` y devolver `null` mientras tanto.
+
+### [league-invite.tsx: lee token desde localStorage en vez del store → desync]
+**Archivo:** `src/pages/league-invite.tsx:29-35`
+**Problema:** `handleJoin` hace `localStorage.getItem('mundialito_token')`. Pero el store de auth usa el key `'mundialito_auth'` (ver `auth-store.ts:28`) y guarda un objeto JSON, no el token suelto. Por lo tanto `getItem('mundialito_token')` siempre devuelve `null`, y todos los usuarios — incluso los autenticados — son redirigidos a `/register` cuando entran a un invite link. F-05 está roto.
+**Severidad:** Alta
+**Fix sugerido:** Usar `useAuthStore((s) => s.isAuthenticated)` (o `getStoredToken()` ya exportado). Esto es el patrón consistente con `RequireAuth`.
+
+### [league-invite.tsx: la liga se busca en mocks → no funciona con códigos reales]
+**Archivo:** `src/pages/league-invite.tsx:11-13`
+**Problema:** El componente busca el código en `[...MY_LEAGUES, ...PUBLIC_LEAGUES]` (mocks). Cuando alguien comparta un link real (`/j/ASADO42`), si el código no está en los mocks, muestra "Liga no encontrada" — aunque la liga exista en el backend. F-05 deep link funcionalmente roto hasta que se integre con `/leagues/by-code/:code`.
+**Severidad:** Alta
+**Fix sugerido:** Crear endpoint `GET /leagues/by-code/:code` (público o auth) que devuelva info pública de la liga (nombre, memberCount, isPublic). Reemplazar el lookup en mocks por react-query.
+
+### [league-invite.tsx: muestra LEAGUE_STANDINGS de mock en cualquier liga visitada]
+**Archivo:** `src/pages/league-invite.tsx:26, 75-86`
+**Problema:** El "Top 3 actual" siempre muestra los mismos standings hardcodeados, sin importar qué liga es. Un usuario invitado a "Liga del Asado" ve los mismos jugadores que en cualquier otra liga. Engañoso.
+**Severidad:** Media
+**Fix sugerido:** Mostrar top 3 real cuando exista el endpoint, o mostrar placeholder "Sumate para ver el ranking" hasta que se conecte.
+
+### [tournament-predictions.tsx: handleSave es mock, no persiste]
+**Archivo:** `src/pages/tournament-predictions.tsx:128-133`
+**Problema:** Igual que en match-detail: `handleSave` sólo hace `setTimeout` y marca saved. F-10 no persiste nada. Además, no existe endpoint backend para tournament predictions (no hay schema, no hay handler).
+**Severidad:** Alta
+**Fix sugerido:** Crear schema `tournament_predictions` (championId, runnerUpId, topScorerId, revelationTeamId, eliminatedSurpriseId, lockUtc), endpoints CRUD, conectar la UI.
+
+### [tournament-predictions.tsx: lock date hardcoded en UI ("11 Jun") sin enforcement]
+**Archivo:** `src/pages/tournament-predictions.tsx:158`
+**Problema:** El badge dice "Solo podés cambiarlos hasta el 11 Jun" como string literal. No hay variable, no hay validación de lock client-side, no hay lock server-side. Si la fecha del primer partido cambia (ya pasó en mundiales anteriores), el texto miente.
+**Severidad:** Media
+**Fix sugerido:** Derivar el lock de `MATCHES[0].kickoffUtc` o de una constante `TOURNAMENT_LOCK_UTC` exportada. Validar `isLocked()` antes de permitir cambios.
+
+### [share-sheet.tsx: clipboard.writeText sin try/catch — falla en HTTP / permisos]
+**Archivo:** `src/shared/components/share-sheet.tsx:21-25`
+**Problema:** `await navigator.clipboard.writeText(code)` lanza si (a) la página está en HTTP (no secure context), (b) el usuario denegó permiso de clipboard, (c) el browser es Safari < 13.1. La promesa rechazada no se cachea: la app crashea con "Uncaught (in promise)" y el toast "¡Copiado!" no aparece. El usuario asume que copió pero no hay nada en el portapapeles.
+**Severidad:** Media
+**Fix sugerido:** Wrap en `try/catch`, fallback a `document.execCommand('copy')` con un textarea temporal, o mostrar toast de error "No pude copiar — usá el botón de WhatsApp".
+
+### [share-sheet.tsx: handleNativeShare ignora AbortError vs error real]
+**Archivo:** `src/shared/components/share-sheet.tsx:27-31`
+**Problema:** `await navigator.share(...)` lanza `AbortError` cuando el usuario cancela el share sheet del OS — comportamiento esperado, no es un bug. Pero la función no tiene try/catch, así que cualquier cancel produce "Uncaught (in promise) AbortError" en consola y, en Sentry, se reporta como error.
+**Severidad:** Baja
+**Fix sugerido:** `try { await navigator.share(...) } catch (e) { if (e.name !== 'AbortError') console.error(e); }`.
+
+### [scoring.ts frontend vs backend: divergencia en goleadores]
+**Archivo:** `src/shared/lib/scoring.ts` vs `packages/api/src/lib/scoring.ts`
+**Problema:** El frontend muestra "+2 pts por goleador" en `PointsPreview` (`match-detail.tsx:30-34`) pero `getMaxPossiblePoints` en `scoring.ts` no contempla goleadores. El backend `calculatePoints` tampoco. Tres lugares con la misma lógica + dos de ellos ignorando goleadores = futuro bug al integrar. También: el frontend tiene `type ScoreType` con 5 valores y el backend usa números directos; no comparten una fuente de verdad.
+**Severidad:** Media
+**Fix sugerido:** Extraer el sistema de puntuación a un package compartido (`packages/scoring` o `packages/shared-types`) con tests, importado desde frontend y backend. Definir si los goleadores cuentan y aplicar consistentemente.
+
+### [predictions schema: no hay índice por leagueId solo]
+**Archivo:** `packages/api/src/db/schema/predictions.ts:17-19`
+**Problema:** El único índice es el compuesto `(userId, matchId, leagueId)`. Las queries de `standings.ts` filtran sólo por `leagueId` (`WHERE leagueId = ?`), que NO usa este índice (SQLite/libSQL solo lo usa con prefix match desde userId). Resultado: full table scan en `standings` por cada request. En una league con 100 miembros × 64 matches × N ligas, esto escala mal.
+**Severidad:** Media
+**Fix sugerido:** Agregar índice secundario `CREATE INDEX predictions_league_idx ON predictions(league_id)`. También index `(match_id)` si el worker recalcula puntos por match.
+
+### [leagues schema: adminId sin onDelete — DELETE de user huérfano la liga]
+**Archivo:** `packages/api/src/db/schema/leagues.ts:10`
+**Problema:** `adminId: integer('admin_id').notNull().references(() => users.id)` no especifica `onDelete`. Default es `NO ACTION` (con PRAGMA on) o nada (con PRAGMA off). Si se borra un user que es admin de una liga: con FK enforcement, el DELETE del user falla; sin enforcement, queda una liga con `adminId` huérfano. Ninguno de los dos es lo que querés.
+**Severidad:** Media
+**Fix sugerido:** Decidir política: `onDelete: 'restrict'` (no se puede borrar el user si es admin → forzar transferencia) o un sistema de "deleted user" que reasigne. Documentar.
+
+---
+
+## 11. PREGUNTAS TÉCNICAS RONDA 3
+
+- [ ] ¿Está confirmado el comportamiento del PRAGMA `foreign_keys` en Turso remoto? Si Turso usa HTTP stateless, cada request es una conexión nueva y el PRAGMA no persiste — habría que ejecutarlo por request o no depender de cascade.
+- [ ] El upsert de predictions: ¿se eligió a propósito el patrón SELECT-then-INSERT/UPDATE en vez de `ON CONFLICT DO UPDATE`? El comentario en la línea 37 sugiere lo segundo pero el código hace lo primero.
+- [ ] ¿Los goleadores del prode están en scope para el MVP? La UI los pide en `match-detail.tsx` y suma +2 pts en preview, pero no hay schema ni endpoint ni lógica de scoring backend para ellos.
+- [ ] ¿Hay plan de extraer `lib/scoring.ts` a un package compartido entre frontend/backend? Hoy hay duplicación con riesgo de divergencia (el frontend ya diverge mostrando goleadores).
+- [ ] F-05 (deep link `/j/:code`): ¿cuál es el endpoint público para resolver un código sin auth? Hoy el frontend lo busca en mocks y siempre falla con códigos reales.
+- [ ] F-10 (tournament predictions): no existe el modelo de DB ni los endpoints. ¿Está agendado para Sprint 3 o quedó fuera del MVP?
+- [ ] ¿Persistir el cálculo de `predictions.points` en el worker post-match para evitar recalcular en cada `standings` request? Hoy el handler recalcula en memoria.
+- [ ] ¿La política para `adminId` cuando se borra el user-admin de una liga: restrict + forzar transferencia, o reasignar al miembro más antiguo automáticamente?
+- [ ] ¿El interceptor 401 de api-client debería emitir un evento (event bus) en vez de hacer `window.location.replace`? El full reload pierde estado y el redirect no preserva el `returnTo`.
