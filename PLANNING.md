@@ -128,12 +128,12 @@ packages/
 
 | ID | Pregunta | Opciones |
 |----|----------|---------|
-| **D1** | Refresh tokens ¿stateless o en DB? | A: JWT de 30 días (sin revocar) · B: tabla `refresh_tokens` (logout real) |
+| **D1** | Refresh tokens ¿stateless o en DB? | ✅ **Stateless** — JWT de 30 días, logout solo del lado del cliente |
 | **D2** | Fixture 2026 ¿disponible en OpenFootball? | Verificar `github.com/openfootball/world-cup.json`. Si no, construir seed manual |
-| **D3** | WebSocket vs SSE para updates live | WS (Blueprint) · SSE más simple para picos de usuarios |
+| **D3** | WebSocket vs SSE para updates live | ✅ **WebSocket** — bidireccional, soporta chat |
 | **D4** | Worker: ¿mismo Fly.io app (2 procesos) o 2 apps separadas? | Mismo app más simple para beta |
-| **D5** | Jugadores para beta del 4 de mayo | Estimados con nombres reales · Sin fantasy en beta |
-| **D6** | Google OAuth: ¿client-side o server-side? | Client-side (estándar para PWA) — confirmar |
+| **D5** | Jugadores para beta del 4 de mayo | ✅ **Fantasy entra en beta** — usar jugadores estimados con nombres reales |
+| **D6** | Google OAuth: ¿client-side o server-side? | ✅ **Client-side** — estándar para PWA |
 
 ### Riesgos técnicos
 
@@ -216,12 +216,12 @@ packages/
 - [ ] ¿El torneo es el Mundial 2026 fijo, o la arquitectura debe soportar otros torneos (Copa América, Champions)?
 
 ### Técnicas / arquitectura
-- [ ] **D1:** ¿Refresh tokens stateless (JWT 30 días) o en DB (logout real)?
-- [ ] **D2:** ¿El fixture completo del Mundial 2026 está disponible en OpenFootball? Si no, ¿qué fuente usamos para el seed?
-- [ ] **D3:** ¿WebSocket (como dice el Blueprint) o SSE para updates live?
-- [ ] **D4:** Worker y API en el mismo Fly.io app (2 procesos) o 2 apps separadas?
-- [ ] **D5:** Para la beta del 4 de mayo, ¿jugadores estimados o arrancamos sin el módulo Fantasy?
-- [ ] **D6:** Google OAuth client-side (PWA estándar) — ¿confirmado?
+- [x] **D1:** Stateless JWT (access 15min + refresh JWT 30d, no tabla en DB)
+- [ ] **D2:** Verificar fixture 2026 en OpenFootball
+- [x] **D3:** WebSocket
+- [ ] **D4:** Mismo Fly.io app con 2 procesos (definir en sprint de deploy)
+- [x] **D5:** Fantasy entra en beta con jugadores estimados
+- [x] **D6:** Google OAuth client-side confirmado
 - [ ] ¿Las predicciones de goleadores son obligatorias o opcionales al guardar el pronóstico?
 - [ ] ¿Hay un sistema de administración para cargar resultados o solo via el worker automático (API-Football)?
 
