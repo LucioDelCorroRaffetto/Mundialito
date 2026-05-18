@@ -4,6 +4,7 @@ import { db } from '../../../db/index.js';
 import { leagues, leagueMembers } from '../../../db/schema/index.js';
 import { generateInviteCode } from '../../../lib/invite-code.js';
 import { eq } from 'drizzle-orm';
+import { checkAchievements } from '../../../services/achievement-service.js';
 
 export const createLeagueSchema = z.object({
   name: z.string().min(3).max(60),
@@ -35,6 +36,8 @@ export async function createLeagueHandler(req: Request, res: Response) {
 
   // El admin se une automáticamente
   await db.insert(leagueMembers).values({ leagueId: league.id, userId });
+
+  checkAchievements(userId, { type: 'league_created', leagueId: league.id }).catch(() => {});
 
   return res.status(201).json(league);
 }

@@ -12,7 +12,7 @@
 import 'dotenv/config';
 import { db } from '../db/index.js';
 import { initDb } from '../db/client.js';
-import { teams, matches, players } from '../db/schema/index.js';
+import { teams, matches, players, achievements } from '../db/schema/index.js';
 import { calcPredictionLock } from '../lib/match-helpers.js';
 import { sql } from 'drizzle-orm';
 
@@ -597,6 +597,43 @@ async function seedPlayers(): Promise<void> {
   console.log(`✅ Players seeded: ${totalInserted} players inserted.`);
 }
 
+const ACHIEVEMENTS_DATA = [
+  { slug: 'first_prediction', name: 'Primer Pronóstico', description: 'Guardaste tu primer pronóstico', icon: '🎯', pointsBonus: 0 },
+  { slug: 'first_league', name: 'Primera Liga', description: 'Te uniste a tu primera liga', icon: '🏟️', pointsBonus: 0 },
+  { slug: 'league_founder', name: 'Fundador', description: 'Creaste una liga', icon: '👑', pointsBonus: 0 },
+  { slug: 'invite_5', name: 'El Organizador', description: 'Tu liga tiene 5 o más miembros', icon: '🎉', pointsBonus: 0 },
+  { slug: 'exact_score', name: 'Ojo de Halcón', description: 'Acertaste el resultado exacto', icon: '🔥', pointsBonus: 0 },
+  { slug: 'triple_exact', name: 'Hat-trick Profético', description: 'Tres resultados exactos en una fecha', icon: '🎩', pointsBonus: 50 },
+  { slug: 'hot_streak_3', name: 'Racha Caliente', description: 'Acertaste 3 ganadores seguidos', icon: '🌶️', pointsBonus: 0 },
+  { slug: 'hot_streak_5', name: 'En Llamas', description: 'Acertaste 5 ganadores seguidos', icon: '🔥', pointsBonus: 25 },
+  { slug: 'prophet', name: 'Profeta', description: 'Acertaste el campeón del Mundial', icon: '🏆', pointsBonus: 100 },
+  { slug: 'top_scorer_prophet', name: 'Ojeador', description: 'Acertaste el goleador del torneo', icon: '⚽', pointsBonus: 75 },
+  { slug: 'early_bird', name: 'Madrugador', description: 'Completaste todos los pronósticos de grupos antes del partido inaugural', icon: '🌅', pointsBonus: 20 },
+  { slug: 'social_butterfly', name: 'Social', description: 'Participás en 3 o más ligas', icon: '🦋', pointsBonus: 0 },
+  { slug: 'comeback_king', name: 'Remontada', description: 'Pasaste de último a top 3 en una liga', icon: '📈', pointsBonus: 30 },
+  { slug: 'perfect_group', name: 'Grupo Perfecto', description: 'Acertaste todos los resultados (ganador) de un grupo', icon: '✨', pointsBonus: 40 },
+  { slug: 'upset_hunter', name: 'Cazador de Sorpresas', description: 'Acertaste 3 sorpresas (favorito perdió)', icon: '🐉', pointsBonus: 20 },
+  { slug: 'loyal', name: 'Fiel Seguidor', description: 'Ingresaste a la app 7 días durante el torneo', icon: '💎', pointsBonus: 0 },
+  { slug: 'share_master', name: 'Influencer', description: 'Compartiste 5 pronósticos como imagen', icon: '📸', pointsBonus: 0 },
+  { slug: 'fantasy_legend', name: 'Leyenda del Fantasy', description: 'Fuiste el mejor en fantasy de tu liga', icon: '🌟', pointsBonus: 50 },
+  { slug: 'perfect_knockout', name: 'Adivino de Octavos', description: 'Acertaste todos los resultados de octavos de final', icon: '🎰', pointsBonus: 60 },
+  { slug: 'underdog', name: 'El Underdog', description: 'Ganaste la liga sin haber estado en top 3 antes de cuartos', icon: '🐺', pointsBonus: 80 },
+];
+
+async function seedAchievements(): Promise<void> {
+  const existingCount = await db
+    .select({ count: sql<number>`count(*)` })
+    .from(achievements)
+    .get();
+  if (existingCount && existingCount.count > 0) {
+    console.log('Achievements already seeded, skipping.');
+    return;
+  }
+
+  await db.insert(achievements).values(ACHIEVEMENTS_DATA).onConflictDoNothing();
+  console.log(`✅ Achievements seeded: ${ACHIEVEMENTS_DATA.length} achievements inserted.`);
+}
+
 async function seed(): Promise<void> {
   console.log('🏆 Seeding Mundialito DB...');
   await initDb();
@@ -606,6 +643,7 @@ async function seed(): Promise<void> {
   if (existingTeams.length > 0) {
     console.log('Teams already seeded, skipping teams & matches.');
     await seedPlayers();
+    await seedAchievements();
     process.exit(0);
   }
 
@@ -651,6 +689,9 @@ async function seed(): Promise<void> {
 
   // 3. Seed players
   await seedPlayers();
+
+  // 4. Seed achievements
+  await seedAchievements();
 
   console.log('✅ Seed complete.');
   console.log(

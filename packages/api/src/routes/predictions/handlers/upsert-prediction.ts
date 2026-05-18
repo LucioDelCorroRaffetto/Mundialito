@@ -5,6 +5,7 @@ import { db } from '../../../db/index.js';
 import { predictions, matches, leagueMembers } from '../../../db/schema/index.js';
 import { AppError, NotFoundError } from '../../../lib/errors.js';
 import { isLocked } from '../../../lib/match-helpers.js';
+import { checkAchievements } from '../../../services/achievement-service.js';
 
 export const upsertPredictionSchema = z.object({
   matchId: z.number().int().positive(),
@@ -48,6 +49,8 @@ export async function upsertPredictionHandler(req: Request, res: Response) {
       },
     })
     .returning();
+
+  checkAchievements(req.user!.id, { type: 'prediction_saved', matchId }).catch(() => {});
 
   return res.status(200).json(result);
 }

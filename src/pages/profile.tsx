@@ -117,6 +117,11 @@ export function ProfilePage() {
       </div>
 
       <div className="px-4 pb-4 flex flex-col gap-3">
+        <Link to="/achievements" className="flex items-center gap-3 py-3 border-b border-border">
+          <span className="text-xl">🏆</span>
+          <span className="flex-1 text-sm-s text-text">Mis Logros</span>
+          <span className="text-muted">→</span>
+        </Link>
         <Link
           to="/settings"
           className="flex items-center gap-3 p-4 rounded-lg bg-card border border-border hover:border-accent-border transition-colors"

@@ -33,7 +33,8 @@ fly secrets set \
   JWT_REFRESH_SECRET="$(node -e "console.log(require('crypto').randomBytes(64).toString('hex'))")" \
   VAPID_PUBLIC_KEY="your-public-key" \
   VAPID_PRIVATE_KEY="your-private-key" \
-  VAPID_SUBJECT="mailto:you@example.com"
+  VAPID_SUBJECT="mailto:you@example.com" \
+  GOOGLE_CLIENT_ID="your-google-client-id.apps.googleusercontent.com"
 ```
 
 ### 4. Set secrets (Worker)
@@ -44,7 +45,8 @@ fly secrets set \
   TURSO_AUTH_TOKEN="your-token" \
   VAPID_PUBLIC_KEY="your-public-key" \
   VAPID_PRIVATE_KEY="your-private-key" \
-  VAPID_SUBJECT="mailto:you@example.com"
+  VAPID_SUBJECT="mailto:you@example.com" \
+  API_FOOTBALL_KEY="your-api-football-key"
 ```
 
 ### 5. Deploy

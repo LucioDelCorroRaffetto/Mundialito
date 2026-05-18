@@ -5,7 +5,8 @@ export const users = sqliteTable('users', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   email: text('email').notNull().unique(),
   username: text('username').notNull().unique(),
-  passwordHash: text('password_hash').notNull(),
+  passwordHash: text('password_hash'),        // nullable for OAuth users
+  googleId: text('google_id').unique(),       // nullable for email/password users
   avatarUrl: text('avatar_url'),
   createdAt: text('created_at').notNull().default(sql`(datetime('now'))`),
 });

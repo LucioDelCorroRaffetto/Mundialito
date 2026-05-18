@@ -20,6 +20,7 @@ export const matches = sqliteTable('matches', {
   status: text('status').notNull().default('scheduled'), // 'scheduled' | 'live' | 'finished'
   homeScore: integer('home_score'),
   awayScore: integer('away_score'),
+  apiFixtureId: integer('api_fixture_id'), // nullable — API-Football fixture ID for live polling
   createdAt: text('created_at').notNull().default(sql`(datetime('now'))`),
 });
 

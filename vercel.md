@@ -19,6 +19,7 @@ Go to https://vercel.com/new → import your GitHub repo.
 |----------|-------|
 | `VITE_API_URL` | `https://mundialito-api.fly.dev/api/v1` |
 | `VITE_WS_URL` | `wss://mundialito-api.fly.dev` |
+| `VITE_GOOGLE_CLIENT_ID` | `your-google-client-id.apps.googleusercontent.com` |
 
 ### 4. Deploy
 Click "Deploy" — subsequent pushes to `main` auto-deploy.

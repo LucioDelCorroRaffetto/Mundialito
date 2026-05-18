@@ -9,6 +9,7 @@ import { tournamentPredictionsRouter } from './tournament-predictions/router.js'
 import { predictionScorersRouter } from './prediction-scorers/router.js';
 import { fantasyRouter } from './fantasy/router.js';
 import { pushRouter } from './push/router.js';
+import { achievementsRouter } from './achievements/router.js';
 
 export const apiRouter = Router();
 
@@ -22,3 +23,4 @@ apiRouter.use('/tournament-predictions', tournamentPredictionsRouter);
 apiRouter.use('/prediction-scorers', predictionScorersRouter);
 apiRouter.use('/fantasy', fantasyRouter);
 apiRouter.use('/push', pushRouter);
+apiRouter.use('/achievements', achievementsRouter);

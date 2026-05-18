@@ -5,8 +5,13 @@ import { registerHandler, registerSchema } from './handlers/register.js';
 import { loginHandler, loginSchema } from './handlers/login.js';
 import { meHandler } from './handlers/me.js';
 import { refreshHandler, refreshSchema } from './handlers/refresh.js';
+import { googleAuthHandler } from './handlers/google.js';
 
 export const authRouter = Router();
+
+authRouter.post('/google', (req, res, next) => {
+  googleAuthHandler(req, res).catch(next);
+});
 
 authRouter.post('/register', validate(registerSchema), (req, res, next) => {
   registerHandler(req, res).catch(next);

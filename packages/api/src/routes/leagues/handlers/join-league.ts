@@ -4,6 +4,7 @@ import { db } from '../../../db/index.js';
 import { leagues, leagueMembers } from '../../../db/schema/index.js';
 import { NotFoundError, ConflictError } from '../../../lib/errors.js';
 import { and, eq } from 'drizzle-orm';
+import { checkAchievements } from '../../../services/achievement-service.js';
 
 export const joinLeagueSchema = z.object({
   code: z.string().min(4).max(12),
@@ -21,5 +22,6 @@ export async function joinLeagueHandler(req: Request, res: Response) {
   if (existing) throw new ConflictError('Already a member of this league');
 
   await db.insert(leagueMembers).values({ leagueId: league.id, userId });
+  checkAchievements(userId, { type: 'league_joined', leagueId: league.id }).catch(() => {});
   return res.status(201).json(league);
 }
