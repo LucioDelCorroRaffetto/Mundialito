@@ -1,0 +1,47 @@
+services:
+  # ── API ─────────────────────────────────────────────────────────────────────
+  - type: web
+    name: mundialito-api
+    runtime: docker
+    dockerfilePath: ./packages/api/Dockerfile
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3000
+      - key: TURSO_DATABASE_URL
+        sync: false
+      - key: TURSO_AUTH_TOKEN
+        sync: false
+      - key: JWT_ACCESS_SECRET
+        sync: false
+      - key: JWT_REFRESH_SECRET
+        sync: false
+      - key: VAPID_PUBLIC_KEY
+        sync: false
+      - key: VAPID_PRIVATE_KEY
+        sync: false
+      - key: VAPID_EMAIL
+        value: mailto:delcorroraffetto@gmail.com
+      - key: ALLOWED_ORIGINS
+        sync: false
+
+  # ── Worker (Cron Job — free tier) ────────────────────────────────────────────
+  - type: cron
+    name: mundialito-worker
+    runtime: docker
+    dockerfilePath: ./packages/worker/Dockerfile
+    plan: free
+    schedule: "*/2 * * * *"
+    startCommand: node dist/run-once.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: TURSO_DATABASE_URL
+        sync: false
+      - key: TURSO_AUTH_TOKEN
+        sync: false
+      - key: API_FOOTBALL_KEY
+        sync: false
