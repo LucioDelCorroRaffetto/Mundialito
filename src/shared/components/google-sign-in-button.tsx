@@ -8,9 +8,14 @@ interface Props {
   redirectTo?: string;
 }
 
+const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID ?? '';
+
 export function GoogleSignInButton({ redirectTo = '/home' }: Props) {
   const { login } = useAuthStore();
   const navigate = useNavigate();
+
+  // No mostrar si no hay Client ID configurado
+  if (!GOOGLE_CLIENT_ID) return null;
 
   const handleSuccess = async (credentialResponse: { credential?: string }) => {
     if (!credentialResponse.credential) return;

@@ -10,6 +10,8 @@ import { Input } from '@/shared/components/ui/input';
 import { GoogleSignInButton } from '@/shared/components/google-sign-in-button';
 import { useLogin } from '@/shared/hooks/use-auth';
 
+const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID ?? '';
+
 const schema = z.object({
   email: z.string().email('Email inválido'),
   password: z.string().min(6, 'Mínimo 6 caracteres'),
@@ -55,15 +57,18 @@ export function LoginPage() {
           <p className="text-sm-s text-muted text-center">Entrá para crear o unirte a tu prode</p>
         </div>
 
-        <div className="flex justify-center w-full">
-          <GoogleSignInButton />
-        </div>
-
-        <div className="flex items-center gap-3 w-full">
-          <div className="flex-1 h-px bg-border" />
-          <span className="text-xs-s text-muted">o con email</span>
-          <div className="flex-1 h-px bg-border" />
-        </div>
+        {GOOGLE_CLIENT_ID && (
+          <>
+            <div className="flex justify-center w-full">
+              <GoogleSignInButton />
+            </div>
+            <div className="flex items-center gap-3 w-full">
+              <div className="flex-1 h-px bg-border" />
+              <span className="text-xs-s text-muted">o con email</span>
+              <div className="flex-1 h-px bg-border" />
+            </div>
+          </>
+        )}
 
         <form onSubmit={handleSubmit(onSubmit)} className="w-full flex flex-col gap-4">
           <Input
