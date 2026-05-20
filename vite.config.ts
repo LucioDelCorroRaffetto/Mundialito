@@ -43,7 +43,7 @@ export default defineConfig({
             options: { cacheName: 'google-fonts-webfonts', expiration: { maxEntries: 30 } },
           },
           {
-            urlPattern: /^https:\/\/mundialito-api\.fly\.dev\/api\/.*/i,
+            urlPattern: /^https:\/\/mundialito-d2jk\.onrender\.com\/api\/.*/i,
             handler: 'NetworkFirst',
             options: {
               cacheName: 'api-cache',
