@@ -122,7 +122,7 @@ export function useLeaveLeague() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (leagueId: number) => {
-      await apiClient.post(`/leagues/${leagueId}/leave`);
+      await apiClient.delete(`/leagues/${leagueId}/leave`);
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['leagues', 'mine'] });
