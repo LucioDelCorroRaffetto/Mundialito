@@ -17,6 +17,7 @@ import { SettingsPage } from '@/pages/settings';
 import { LeagueInvitePage } from '@/pages/league-invite';
 import { FantasyPage } from '@/pages/fantasy';
 import { AchievementsPage } from '@/pages/achievements';
+import { AdminPage } from '@/pages/admin';
 
 export const router = createBrowserRouter([
   { path: '/', element: <ErrorBoundary><SplashPage /></ErrorBoundary> },
@@ -37,6 +38,7 @@ export const router = createBrowserRouter([
       { path: '/settings', element: <ErrorBoundary><SettingsPage /></ErrorBoundary> },
       { path: '/fantasy', element: <ErrorBoundary><FantasyPage /></ErrorBoundary> },
       { path: '/achievements', element: <ErrorBoundary><AchievementsPage /></ErrorBoundary> },
+      { path: '/admin', element: <ErrorBoundary><AdminPage /></ErrorBoundary> },
     ],
   },
   { path: '*', element: <Navigate to="/" replace /> },

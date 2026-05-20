@@ -72,3 +72,16 @@ export function broadcastMatchUpdate(matchId: number, homeScore: number, awaySco
     }
   }
 }
+
+// Broadcast a full match object to all connected clients.
+// Sends { type: 'match_updated', data: match } — used from admin update-match handler.
+export function broadcastMatchUpdated(match: object) {
+  const msg = JSON.stringify({ type: 'match_updated', data: match });
+  for (const [, room] of rooms) {
+    for (const client of room) {
+      if (client.readyState === WebSocket.OPEN) {
+        client.send(msg);
+      }
+    }
+  }
+}

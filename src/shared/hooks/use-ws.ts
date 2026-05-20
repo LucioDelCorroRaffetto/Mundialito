@@ -27,6 +27,14 @@ export function useLeagueSocket(leagueId: number | undefined) {
           qc.invalidateQueries({ queryKey: ['match', msg.matchId] });
         }
 
+        if (msg.type === 'match_updated') {
+          // Full match object broadcast — invalidate matches list and specific match
+          qc.invalidateQueries({ queryKey: ['matches'] });
+          if (msg.data?.id) {
+            qc.invalidateQueries({ queryKey: ['match', msg.data.id] });
+          }
+        }
+
         if (msg.type === 'standings:updated') {
           qc.invalidateQueries({ queryKey: ['league', leagueId, 'standings'] });
         }

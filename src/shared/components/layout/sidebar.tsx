@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom';
-import { Home, Trophy, Users, User, Calendar, Settings } from 'lucide-react';
+import { Home, Trophy, Users, User, Calendar, Settings, ShieldCheck } from 'lucide-react';
 import { cn } from '@/shared/lib/cn';
 import { Logo } from '@/shared/components/logo';
 
@@ -10,6 +10,7 @@ const navItems = [
   { to: '/fantasy', label: 'Fantasy',  Icon: Trophy },
   { to: '/profile', label: 'Perfil',   Icon: User },
   { to: '/settings',label: 'Config',   Icon: Settings },
+  { to: '/admin',   label: 'Admin',    Icon: ShieldCheck },
 ];
 
 export function Sidebar() {

@@ -1,9 +1,10 @@
 import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Settings, ChevronRight, Star, LogOut } from 'lucide-react';
-import { MY_STATS, ACHIEVEMENTS, RARITY_COLOR } from '@/shared/data/mock';
+import { ACHIEVEMENTS, RARITY_COLOR } from '@/shared/data/mock';
 import { cn } from '@/shared/lib/cn';
 import { useAuthStore } from '@/shared/stores/auth-store';
+import { useMyStats } from '@/shared/hooks/use-my-stats';
 
 function StatCard({ label, value }: { label: string; value: string | number }) {
   return (
@@ -18,6 +19,7 @@ export function ProfilePage() {
   const navigate = useNavigate();
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
+  const { data: stats, isLoading: statsLoading } = useMyStats();
   const unlocked = ACHIEVEMENTS.filter((a) => a.unlocked);
   const locked = ACHIEVEMENTS.filter((a) => !a.unlocked);
 
@@ -64,14 +66,21 @@ export function ProfilePage() {
 
       <div className="px-4">
         <h2 className="text-base-s font-display font-bold text-text mb-3">Mis estadísticas</h2>
-        <div className="grid grid-cols-3 gap-2">
-          <StatCard label="Puntos totales" value={MY_STATS.totalPoints} />
-          <StatCard label="Exactos 🎯" value={MY_STATS.exactPredictions} />
-          <StatCard label="Resultados ✓" value={MY_STATS.resultPredictions} />
-          <StatCard label="Pronósticos" value={MY_STATS.totalPredictions} />
-          <StatCard label="% Acierto" value={`${MY_STATS.accuracy}%`} />
-          <StatCard label="Racha actual" value={`${MY_STATS.currentStreak}🔥`} />
-        </div>
+        {statsLoading ? (
+          <div className="grid grid-cols-3 gap-2">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <div key={i} className="h-16 rounded-lg bg-elevated animate-pulse" />
+            ))}
+          </div>
+        ) : (
+          <div className="grid grid-cols-3 gap-2">
+            <StatCard label="🎯 Predicciones" value={stats?.totalPredictions ?? 0} />
+            <StatCard label="⚽ Exactos" value={stats?.exactScores ?? 0} />
+            <StatCard label="✅ Resultados" value={stats?.correctResults ?? 0} />
+            <StatCard label="🏆 Puntos" value={stats?.totalPoints ?? 0} />
+            <StatCard label="📊 % Acierto" value={`${stats?.accuracy ?? 0}%`} />
+          </div>
+        )}
       </div>
 
       <div className="px-4">

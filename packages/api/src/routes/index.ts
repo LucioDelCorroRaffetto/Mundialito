@@ -10,6 +10,8 @@ import { predictionScorersRouter } from './prediction-scorers/router.js';
 import { fantasyRouter } from './fantasy/router.js';
 import { pushRouter } from './push/router.js';
 import { achievementsRouter } from './achievements/router.js';
+import { adminRouter } from './admin/router.js';
+import { usersRouter } from './users/router.js';
 
 export const apiRouter = Router();
 
@@ -24,3 +26,5 @@ apiRouter.use('/prediction-scorers', predictionScorersRouter);
 apiRouter.use('/fantasy', fantasyRouter);
 apiRouter.use('/push', pushRouter);
 apiRouter.use('/achievements', achievementsRouter);
+apiRouter.use('/admin', adminRouter);
+apiRouter.use('/users', usersRouter);
