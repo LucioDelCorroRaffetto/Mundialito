@@ -112,6 +112,9 @@ export function HomePage() {
     (m) => m.status !== 'finished' && !predictedIds.has(m.id)
   ).length;
 
+  // Use first league ID for quick match links (user can change in match detail)
+  const firstLeagueId = apiLeagues[0]?.id ?? null;
+
   return (
     <div className="flex flex-col gap-6 p-4 pt-6 animate-fade-in">
       {isInstallable && !isInstalled && (
@@ -207,7 +210,7 @@ export function HomePage() {
           {upcoming.map((match) => (
             <Link
               key={match.id}
-              to={`/matches/${match.id}`}
+              to={firstLeagueId ? `/matches/${match.id}?leagueId=${firstLeagueId}` : `/matches/${match.id}`}
               className="flex items-center gap-3 p-3 rounded-lg bg-card border border-border hover:border-accent-border transition-colors"
             >
               <div className="text-center min-w-0 flex-1">
