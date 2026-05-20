@@ -2,10 +2,11 @@ import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { ArrowLeft, Share2, Users, Trophy } from 'lucide-react';
+import { toast } from 'sonner';
 import { cn } from '@/shared/lib/cn';
 import { ShareSheet } from '@/shared/components/share-sheet';
 import { SkeletonList } from '@/shared/components/skeleton';
-import { useLeague, useLeagueStandings, type StandingRow } from '@/shared/hooks/use-leagues';
+import { useLeague, useLeagueStandings, useLeaveLeague, type StandingRow } from '@/shared/hooks/use-leagues';
 import { useAuthStore } from '@/shared/stores/auth-store';
 
 const TABS = ['Tabla', 'Info'] as const;
@@ -59,6 +60,7 @@ export function LeagueDetailPage() {
 
   const { data: league, isLoading: leagueLoading, isError: leagueError } = useLeague(leagueId);
   const { data: standingsData, isLoading: standingsLoading } = useLeagueStandings(leagueId);
+  const leaveMutation = useLeaveLeague();
   const standings = standingsData?.data ?? [];
 
   if (leagueError) {
@@ -176,8 +178,20 @@ export function LeagueDetailPage() {
               </div>
             </div>
           </div>
-          <button className="w-full py-3 rounded-lg border border-red-500/40 text-red-400 text-sm-s font-semibold hover:bg-red-500/10 transition-colors">
-            Salir de la liga
+          <button
+            className="w-full py-3 rounded-lg border border-red-500/40 text-red-400 text-sm-s font-semibold hover:bg-red-500/10 transition-colors disabled:opacity-50"
+            disabled={leaveMutation.isPending}
+            onClick={async () => {
+              if (!window.confirm('¿Seguro que querés salir de la liga?')) return;
+              try {
+                await leaveMutation.mutateAsync(leagueId);
+                navigate('/leagues', { replace: true });
+              } catch (e: any) {
+                toast.error(e?.response?.data?.error?.message ?? 'Error al salir de la liga');
+              }
+            }}
+          >
+            {leaveMutation.isPending ? 'Saliendo...' : 'Salir de la liga'}
           </button>
         </div>
       )}

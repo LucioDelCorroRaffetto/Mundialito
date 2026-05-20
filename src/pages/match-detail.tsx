@@ -1,16 +1,21 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { ArrowLeft, Clock, MapPin, CheckCircle2, Share2 } from 'lucide-react';
-import { MATCHES, MY_PREDICTIONS, ROUND_LABELS, PLAYERS } from '@/shared/data/mock';
+import { ROUND_LABELS } from '@/shared/data/mock';
 import { getMaxPossiblePoints } from '@/shared/lib/scoring';
 import { Button } from '@/shared/components/ui/button';
 import { cn } from '@/shared/lib/cn';
 import { sharePredictionCard } from '@/shared/lib/generate-prediction-card';
 import { useAuthStore } from '@/shared/stores/auth-store';
-import { useUpsertPrediction, useLeagueMatchPredictions } from '@/shared/hooks/use-predictions';
+import { useUpsertPrediction, useLeagueMatchPredictions, useMyPredictionForMatch } from '@/shared/hooks/use-predictions';
 import type { LeagueMemberPrediction } from '@/shared/hooks/use-predictions';
 import { useHaptic } from '@/shared/hooks/use-haptic';
+import { useMatch } from '@/shared/hooks/use-matches';
+import { useTeamMap } from '@/shared/hooks/use-teams';
+import { useMyLeagues } from '@/shared/hooks/use-leagues';
+import { usePlayers } from '@/shared/hooks/use-players';
+import type { Team } from '@/shared/types/api';
 
 function PointsPreview({ home, away, scorerCount }: { home: number; away: number; scorerCount: number }) {
   const { isDraw, ifExact, ifWinnerDiff } = getMaxPossiblePoints(home, away);
@@ -41,15 +46,16 @@ function PointsPreview({ home, away, scorerCount }: { home: number; away: number
 }
 
 function ScorerPicker({
-  team, maxGoals, selected, onChange,
+  team, maxGoals, selected, onChange, players,
 }: {
-  team: { code: string; flag: string; name: string };
+  team: Team;
   maxGoals: number;
   selected: number[];
   onChange: (ids: number[]) => void;
+  players: { id: number; name: string; position: string; teamId: number }[];
 }) {
-  const teamPlayers = PLAYERS.filter(
-    (p) => p.teamCode === team.code && (p.position === 'FWD' || p.position === 'MID')
+  const teamPlayers = players.filter(
+    (p) => p.teamId === team.id && (p.position === 'FWD' || p.position === 'MID')
   );
 
   const togglePlayer = (id: number) => {
@@ -222,34 +228,79 @@ export function MatchDetailPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const leagueIdParam = searchParams.get('leagueId');
-  const leagueId = leagueIdParam ? Number(leagueIdParam) : null;
+  const leagueIdFromParams = leagueIdParam ? Number(leagueIdParam) : null;
 
-  const match = MATCHES.find((m) => m.id === Number(id));
-  if (!match) { navigate('/matches', { replace: true }); return null; }
-  const existingPrediction = MY_PREDICTIONS.find((p) => p.matchId === match.id);
+  const matchId = id ? Number(id) : undefined;
 
-  const [homeScore, setHomeScore] = useState(existingPrediction?.homeScore ?? 0);
-  const [awayScore, setAwayScore] = useState(existingPrediction?.awayScore ?? 0);
+  const { data: match, isLoading: matchLoading } = useMatch(matchId);
+  const { data: teamMap, isLoading: teamsLoading } = useTeamMap();
+  const { data: myLeagues } = useMyLeagues();
+  const { data: players } = usePlayers();
+
+  const [selectedLeagueId, setSelectedLeagueId] = useState<number | null>(leagueIdFromParams);
+  const leagueId = selectedLeagueId;
+
+  const { data: existingPrediction } = useMyPredictionForMatch(matchId, leagueId ?? undefined);
+
+  const [homeScore, setHomeScore] = useState(0);
+  const [awayScore, setAwayScore] = useState(0);
   const [homeScorers, setHomeScorers] = useState<number[]>([]);
   const [awayScorers, setAwayScorers] = useState<number[]>([]);
-  const [saved, setSaved] = useState(!!existingPrediction);
+  const [saved, setSaved] = useState(false);
   const [sharing, setSharing] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const username = useAuthStore((s) => s.user?.username);
   const upsertMutation = useUpsertPrediction();
   const { vibrate } = useHaptic();
 
+  // Initialize scores and saved state when existing prediction loads
+  useEffect(() => {
+    if (existingPrediction) {
+      setHomeScore(existingPrediction.homeScore ?? 0);
+      setAwayScore(existingPrediction.awayScore ?? 0);
+      setSaved(true);
+    }
+  }, [existingPrediction]);
+
+  const isLoading = matchLoading || teamsLoading;
+
+  // Once loading is done, if match not found navigate away
+  useEffect(() => {
+    if (!isLoading && matchId !== undefined && !match) {
+      navigate('/matches', { replace: true });
+    }
+  }, [isLoading, match, matchId, navigate]);
+
+  if (isLoading) {
+    return (
+      <div className="flex flex-col min-h-full animate-fade-in items-center justify-center">
+        <div className="animate-spin w-8 h-8 border-2 border-accent border-t-transparent rounded-full" />
+      </div>
+    );
+  }
+
+  if (!match) return null;
+
+  const homeTeam = teamMap?.get(match.homeTeamId);
+  const awayTeam = teamMap?.get(match.awayTeamId);
+
+  // Fallback team objects when teamMap is not yet available
+  const homeTeamDisplay = homeTeam ?? { id: match.homeTeamId, name: String(match.homeTeamId), code: '?', flag: '🏳️', group: null, confederation: null };
+  const awayTeamDisplay = awayTeam ?? { id: match.awayTeamId, name: String(match.awayTeamId), code: '?', flag: '🏳️', group: null, confederation: null };
+
+  const playersList = players ?? [];
+
   const handleShare = async () => {
     setSharing(true);
     try {
       await sharePredictionCard({
-        homeFlag: match.homeTeam.flag,
-        homeName: match.homeTeam.name,
-        homeCode: match.homeTeam.code,
+        homeFlag: homeTeamDisplay.flag,
+        homeName: homeTeamDisplay.name,
+        homeCode: homeTeamDisplay.code,
         homeScore,
-        awayFlag: match.awayTeam.flag,
-        awayName: match.awayTeam.name,
-        awayCode: match.awayTeam.code,
+        awayFlag: awayTeamDisplay.flag,
+        awayName: awayTeamDisplay.name,
+        awayCode: awayTeamDisplay.code,
         awayScore,
         username,
         accentColor:
@@ -276,7 +327,7 @@ export function MatchDetailPage() {
 
   const handleSave = async () => {
     if (!leagueId) {
-      setSaveError('Necesitás abrir el partido desde una liga (no hay leagueId).');
+      setSaveError('Seleccioná una liga para guardar tu pronóstico.');
       return;
     }
     setSaveError(null);
@@ -294,6 +345,9 @@ export function MatchDetailPage() {
     }
   };
 
+  const myLeagueList = myLeagues?.data ?? [];
+  const showLeaguePicker = !leagueIdFromParams && myLeagueList.length > 0;
+
   return (
     <div className="flex flex-col min-h-full animate-fade-in">
       <div className="flex items-center gap-3 px-4 pt-5 pb-3">
@@ -310,9 +364,9 @@ export function MatchDetailPage() {
 
       <div className="mx-4 p-5 rounded-xl bg-card border border-border shadow-card">
         <div className="flex items-center justify-around gap-4">
-          <ScoreInput value={homeScore} onChange={updateHomeScore} team={match.homeTeam} />
+          <ScoreInput value={homeScore} onChange={updateHomeScore} team={homeTeamDisplay} />
           <span className="text-2xl-s font-display font-bold text-muted">vs</span>
-          <ScoreInput value={awayScore} onChange={updateAwayScore} team={match.awayTeam} />
+          <ScoreInput value={awayScore} onChange={updateAwayScore} team={awayTeamDisplay} />
         </div>
       </div>
 
@@ -327,24 +381,49 @@ export function MatchDetailPage() {
         </div>
       </div>
 
+      {showLeaguePicker && (
+        <div className="mx-4 mt-3">
+          <p className="text-xs-s text-muted mb-2">Liga para el pronóstico</p>
+          <div className="flex gap-2 overflow-x-auto pb-1">
+            {myLeagueList.map((league) => (
+              <button
+                key={league.id}
+                type="button"
+                onClick={() => { setSelectedLeagueId(league.id); setSaved(false); setSaveError(null); }}
+                className={cn(
+                  'flex-shrink-0 px-3 py-1.5 rounded-full text-xs-s font-semibold border transition-colors',
+                  selectedLeagueId === league.id
+                    ? 'bg-accent text-accent-on border-accent'
+                    : 'bg-elevated border-border text-text hover:border-accent-border'
+                )}
+              >
+                {league.name}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {(homeScore + awayScore) > 0 && (
         <div className="mx-4 mt-3 p-4 rounded-lg bg-card border border-border">
           <p className="text-sm-s font-semibold text-text mb-3">⚽ Goleadores (opcional · +2 pts c/u)</p>
           <div className="flex flex-col gap-3">
-            {homeScore > 0 && (
+            {homeScore > 0 && homeTeam && (
               <ScorerPicker
-                team={match.homeTeam}
+                team={homeTeam}
                 maxGoals={homeScore}
                 selected={homeScorers}
                 onChange={(ids) => { setHomeScorers(ids); setSaved(false); }}
+                players={playersList}
               />
             )}
-            {awayScore > 0 && (
+            {awayScore > 0 && awayTeam && (
               <ScorerPicker
-                team={match.awayTeam}
+                team={awayTeam}
                 maxGoals={awayScore}
                 selected={awayScorers}
                 onChange={(ids) => { setAwayScorers(ids); setSaved(false); }}
+                players={playersList}
               />
             )}
           </div>
