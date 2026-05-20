@@ -18,6 +18,7 @@ export async function loginHandler(req: Request, res: Response) {
   const user = await db.select().from(users).where(eq(users.email, email)).get();
   if (!user) throw new UnauthorizedError('Invalid credentials');
 
+  if (!user.passwordHash) throw new UnauthorizedError('Invalid credentials');
   const valid = await comparePassword(password, user.passwordHash);
   if (!valid) throw new UnauthorizedError('Invalid credentials');
 

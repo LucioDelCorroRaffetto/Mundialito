@@ -15,9 +15,9 @@ export function signRefresh(payload: JwtPayload): string {
 }
 
 export function verifyAccess(token: string): JwtPayload {
-  return jwt.verify(token, JWT_ACCESS_SECRET) as JwtPayload;
+  return jwt.verify(token, JWT_ACCESS_SECRET) as unknown as JwtPayload;
 }
 
 export function verifyRefresh(token: string): JwtPayload {
-  return jwt.verify(token, JWT_REFRESH_SECRET) as JwtPayload;
+  return jwt.verify(token, JWT_REFRESH_SECRET) as unknown as JwtPayload;
 }

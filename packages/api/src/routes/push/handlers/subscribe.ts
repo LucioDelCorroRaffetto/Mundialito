@@ -14,7 +14,7 @@ export const subscribeSchema = z.object({
 
 export async function subscribeHandler(req: Request, res: Response) {
   const { endpoint, keys } = req.body as z.infer<typeof subscribeSchema>;
-  const userId = req.user!.sub;
+  const userId = req.user!.id;
 
   await db
     .insert(pushSubscriptions)
