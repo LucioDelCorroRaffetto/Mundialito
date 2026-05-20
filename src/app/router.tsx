@@ -19,6 +19,7 @@ import { FantasyPage } from '@/pages/fantasy';
 import { AchievementsPage } from '@/pages/achievements';
 import { AdminPage } from '@/pages/admin';
 import { LeaderboardPage } from '@/pages/leaderboard';
+import { TournamentPredictionsPage } from '@/pages/tournament-predictions';
 
 export const router = createBrowserRouter([
   { path: '/', element: <ErrorBoundary><SplashPage /></ErrorBoundary> },
@@ -40,6 +41,7 @@ export const router = createBrowserRouter([
       { path: '/fantasy', element: <ErrorBoundary><FantasyPage /></ErrorBoundary> },
       { path: '/achievements', element: <ErrorBoundary><AchievementsPage /></ErrorBoundary> },
       { path: '/leaderboard', element: <ErrorBoundary><LeaderboardPage /></ErrorBoundary> },
+      { path: '/tournament', element: <ErrorBoundary><TournamentPredictionsPage /></ErrorBoundary> },
       { path: '/admin', element: <ErrorBoundary><AdminPage /></ErrorBoundary> },
     ],
   },

@@ -128,6 +128,20 @@ export function HomePage() {
         </button>
       )}
       <CountdownHero />
+
+      {/* Tournament predictions shortcut */}
+      <Link
+        to="/tournament"
+        className="flex items-center gap-3 p-4 rounded-xl bg-card border border-border hover:border-accent-border transition-colors"
+      >
+        <span className="text-2xl-s">🌎</span>
+        <div className="flex-1">
+          <p className="text-base-s font-semibold text-text">Predicciones del Torneo</p>
+          <p className="text-sm-s text-muted">Campeón, goleador, sorpresas</p>
+        </div>
+        <ChevronRight size={16} className="text-muted" />
+      </Link>
+
       <div className="flex items-center justify-between">
         <div>
           <p className="text-sm-s text-muted">¡Hola, vos! 👋</p>
