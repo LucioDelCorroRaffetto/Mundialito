@@ -363,11 +363,43 @@ export function MatchDetailPage() {
       </div>
 
       <div className="mx-4 p-5 rounded-xl bg-card border border-border shadow-card">
-        <div className="flex items-center justify-around gap-4">
-          <ScoreInput value={homeScore} onChange={updateHomeScore} team={homeTeamDisplay} />
-          <span className="text-2xl-s font-display font-bold text-muted">vs</span>
-          <ScoreInput value={awayScore} onChange={updateAwayScore} team={awayTeamDisplay} />
-        </div>
+        {match.status !== 'scheduled' && match.homeScore !== null ? (
+          // Live / finished: show actual score
+          <div className="flex flex-col items-center gap-2">
+            {match.status === 'live' && (
+              <span className="flex items-center gap-1.5 mb-1">
+                <span className="w-2 h-2 rounded-full bg-red-400 animate-pulse" />
+                <span className="text-xs-s font-bold text-red-400 uppercase tracking-wider">En Vivo</span>
+              </span>
+            )}
+            <div className="flex items-center justify-around w-full gap-4">
+              <div className="flex flex-col items-center gap-2">
+                <span className="text-3xl-s">{homeTeamDisplay.flag}</span>
+                <span className="text-base-s font-bold text-text">{homeTeamDisplay.code}</span>
+              </div>
+              <span className={cn(
+                'text-4xl font-display font-bold tabular-nums',
+                match.status === 'live' ? 'text-red-400' : 'text-text'
+              )}>
+                {match.homeScore} – {match.awayScore}
+              </span>
+              <div className="flex flex-col items-center gap-2">
+                <span className="text-3xl-s">{awayTeamDisplay.flag}</span>
+                <span className="text-base-s font-bold text-text">{awayTeamDisplay.code}</span>
+              </div>
+            </div>
+            {match.status === 'finished' && (
+              <span className="text-xs-s text-muted mt-1">Resultado final</span>
+            )}
+          </div>
+        ) : (
+          // Scheduled: show score input
+          <div className="flex items-center justify-around gap-4">
+            <ScoreInput value={homeScore} onChange={updateHomeScore} team={homeTeamDisplay} />
+            <span className="text-2xl-s font-display font-bold text-muted">vs</span>
+            <ScoreInput value={awayScore} onChange={updateAwayScore} team={awayTeamDisplay} />
+          </div>
+        )}
       </div>
 
       <div className="mx-4 mt-3 p-4 rounded-lg bg-elevated border border-border flex flex-col gap-2">
@@ -404,7 +436,7 @@ export function MatchDetailPage() {
         </div>
       )}
 
-      {(homeScore + awayScore) > 0 && (
+      {match.status === 'scheduled' && (homeScore + awayScore) > 0 && (
         <div className="mx-4 mt-3 p-4 rounded-lg bg-card border border-border">
           <p className="text-sm-s font-semibold text-text mb-3">⚽ Goleadores (opcional · +2 pts c/u)</p>
           <div className="flex flex-col gap-3">
@@ -430,41 +462,58 @@ export function MatchDetailPage() {
         </div>
       )}
 
-      <PointsPreview home={homeScore} away={awayScore} scorerCount={homeScorers.length + awayScorers.length} />
+      {match.status === 'scheduled' && (
+        <PointsPreview home={homeScore} away={awayScore} scorerCount={homeScorers.length + awayScorers.length} />
+      )}
 
-      <div className="px-4 mt-4">
-        {saved ? (
-          <>
-            <motion.div
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              className="flex items-center justify-center gap-2 py-3 rounded-lg bg-green-500/15 border border-green-500/30"
-            >
-              <CheckCircle2 size={18} className="text-green-400" />
-              <span className="text-sm-s font-semibold text-green-400">
-                Pronóstico guardado · {homeScore} - {awayScore}
-              </span>
-            </motion.div>
-            <button
-              onClick={handleShare}
-              disabled={sharing}
-              className="mt-3 w-full flex items-center justify-center gap-2 py-2.5 rounded-lg border border-accent-border text-accent text-sm-s font-semibold hover:bg-accent-soft transition-colors disabled:opacity-50"
-            >
-              <Share2 size={16} />
-              {sharing ? 'Generando imagen...' : 'Compartir como imagen'}
-            </button>
-          </>
-        ) : (
-          <>
-            <Button fullWidth size="lg" onClick={handleSave} loading={upsertMutation.isPending}>
-              {existingPrediction ? 'Actualizar pronóstico' : 'Guardar pronóstico'}
-            </Button>
-            {saveError && (
-              <p className="text-xs-s text-red-400 mt-2 text-center">{saveError}</p>
+      {match.status === 'scheduled' ? (
+        <div className="px-4 mt-4">
+          {saved ? (
+            <>
+              <motion.div
+                initial={{ scale: 0.9, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                className="flex items-center justify-center gap-2 py-3 rounded-lg bg-green-500/15 border border-green-500/30"
+              >
+                <CheckCircle2 size={18} className="text-green-400" />
+                <span className="text-sm-s font-semibold text-green-400">
+                  Pronóstico guardado · {homeScore} - {awayScore}
+                </span>
+              </motion.div>
+              <button
+                onClick={handleShare}
+                disabled={sharing}
+                className="mt-3 w-full flex items-center justify-center gap-2 py-2.5 rounded-lg border border-accent-border text-accent text-sm-s font-semibold hover:bg-accent-soft transition-colors disabled:opacity-50"
+              >
+                <Share2 size={16} />
+                {sharing ? 'Generando imagen...' : 'Compartir como imagen'}
+              </button>
+            </>
+          ) : (
+            <>
+              <Button fullWidth size="lg" onClick={handleSave} loading={upsertMutation.isPending}>
+                {existingPrediction ? 'Actualizar pronóstico' : 'Guardar pronóstico'}
+              </Button>
+              {saveError && (
+                <p className="text-xs-s text-red-400 mt-2 text-center">{saveError}</p>
+              )}
+            </>
+          )}
+        </div>
+      ) : existingPrediction && (
+        // Show user's prediction with points for live/finished matches
+        <div className="mx-4 mt-4 p-4 rounded-lg bg-accent-soft border border-accent-border">
+          <p className="text-xs-s text-accent font-semibold mb-1">Tu pronóstico</p>
+          <div className="flex items-center justify-between">
+            <span className="text-base-s font-display font-bold text-text">
+              {existingPrediction.homeScore} – {existingPrediction.awayScore}
+            </span>
+            {existingPrediction.points !== null && (
+              <span className="text-sm-s font-bold text-accent">+{existingPrediction.points} pts</span>
             )}
-          </>
-        )}
-      </div>
+          </div>
+        </div>
+      )}
 
       <div className="mx-4 mt-4 p-4 rounded-lg bg-elevated border border-border">
         <p className="text-sm-s font-semibold text-text mb-2">Sistema de puntuación</p>
