@@ -2,10 +2,11 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Plus, Search, Trophy, ChevronRight } from 'lucide-react';
-import { MY_LEAGUES, MATCHES, MY_PREDICTIONS } from '@/shared/data/mock';
+import { MY_LEAGUES, MATCHES } from '@/shared/data/mock';
 import { useMatches } from '@/shared/hooks/use-matches';
 import { useMyLeagues } from '@/shared/hooks/use-leagues';
 import { useTeamMap } from '@/shared/hooks/use-teams';
+import { useMyPredictions } from '@/shared/hooks/use-predictions';
 import { usePwaInstall } from '@/shared/hooks/use-pwa-install';
 import type { Team } from '@/shared/types/api';
 import { Button } from '@/shared/components/ui/button';
@@ -78,6 +79,7 @@ export function HomePage() {
   const { data: matchesResponse } = useMatches({ status: 'scheduled', limit: 5 });
   const { data: teamMap } = useTeamMap();
   const { data: leaguesResponse } = useMyLeagues();
+  const { data: myPredictionsData } = useMyPredictions();
   const { isInstallable, isInstalled, install } = usePwaInstall();
 
   // Fallback gracioso al mock si el API no tiene datos todavía
@@ -92,21 +94,19 @@ export function HomePage() {
       }))
     : MATCHES.filter((m) => m.status === 'scheduled').slice(0, 3);
 
-  // TODO: el endpoint /leagues/mine no devuelve memberCount/myPoints/myPosition todavía.
-  // Por ahora caemos al mock cuando no haya respuesta real, para no romper UI.
   const apiLeagues = leaguesResponse?.data ?? [];
   const leaguesToShow = apiLeagues.length > 0
     ? apiLeagues.map((l) => ({
         id: l.id,
         name: l.name,
         isPublic: l.isPublic,
-        memberCount: 0,
-        myPoints: 0,
-        myPosition: 0,
+        memberCount: l.memberCount ?? 0,
+        myPoints: l.myPoints ?? 0,
+        myPosition: 0, // Position requires full standings; shown in league detail
       }))
     : MY_LEAGUES;
 
-  const predictedIds = new Set(MY_PREDICTIONS.map((p) => p.matchId));
+  const predictedIds = new Set((myPredictionsData?.data ?? []).map((p) => p.matchId));
   const matchesForPending = apiMatches.length > 0 ? apiMatches : MATCHES;
   const pendingCount = matchesForPending.filter(
     (m) => m.status !== 'finished' && !predictedIds.has(m.id)

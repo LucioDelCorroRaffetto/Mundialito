@@ -4,7 +4,8 @@ import { motion } from 'framer-motion';
 import { ChevronRight, Clock, CheckCircle2 } from 'lucide-react';
 import { useMatches } from '@/shared/hooks/use-matches';
 import { useTeamMap } from '@/shared/hooks/use-teams';
-import { MY_PREDICTIONS, ROUND_LABELS } from '@/shared/data/mock';
+import { useMyPredictions } from '@/shared/hooks/use-predictions';
+import { ROUND_LABELS } from '@/shared/data/mock';
 import type { Match, Team } from '@/shared/types/api';
 import { cn } from '@/shared/lib/cn';
 
@@ -48,9 +49,10 @@ export function MatchesPage() {
   const [filter, setFilter] = useState<FilterTab>('Todos');
   const { data: matchesResponse, isLoading, error } = useMatches({ limit: 200 });
   const { data: teamMap } = useTeamMap();
+  const { data: myPredictionsData } = useMyPredictions();
   const matches = matchesResponse?.data ?? [];
 
-  const predictedIds = new Set(MY_PREDICTIONS.map((p) => p.matchId));
+  const predictedIds = new Set((myPredictionsData?.data ?? []).map((p) => p.matchId));
 
   if (isLoading) {
     return <div className="p-4 text-muted">Cargando partidos...</div>;
@@ -99,7 +101,7 @@ export function MatchesPage() {
           <motion.div key={date} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="flex flex-col gap-2">
             <p className="text-sm-s font-bold text-muted capitalize">{formatDate(date)}</p>
             {grouped[date].map((match) => {
-              const prediction = MY_PREDICTIONS.find((p) => p.matchId === match.id);
+              const prediction = (myPredictionsData?.data ?? []).find((p) => p.matchId === match.id);
               const homeTeam = getTeam(teamMap, match.homeTeamId);
               const awayTeam = getTeam(teamMap, match.awayTeamId);
               return (

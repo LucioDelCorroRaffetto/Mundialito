@@ -51,6 +51,10 @@ export interface League {
   adminId: number;
   stakesMeme: string | null;
   createdAt: string;
+  // Enriched fields returned by /leagues/mine
+  memberCount?: number;
+  myPoints?: number;
+  myMatchesPlayed?: number;
 }
 
 export interface Player {
