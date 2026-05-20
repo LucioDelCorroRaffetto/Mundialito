@@ -2,7 +2,9 @@ import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Moon, Sun, Zap, Type } from 'lucide-react';
 import { useThemeStore } from '@/theme/theme-store';
 import { useAuthStore } from '@/shared/stores/auth-store';
-import { accentList, type AccentKey, type ThemeMode, type FontScale } from '@/theme/palettes';
+import { accentList, type ThemeMode } from '@/theme/palettes';
+
+type FontScale = 1.0 | 1.15 | 1.3;
 import { cn } from '@/shared/lib/cn';
 
 const MODE_OPTIONS: { value: ThemeMode; label: string; Icon: React.ElementType }[] = [

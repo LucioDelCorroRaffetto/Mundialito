@@ -17,7 +17,7 @@ export function FantasyPage() {
   const [params] = useSearchParams();
   const leagueId = params.get('leagueId') ? Number(params.get('leagueId')) : undefined;
   const [selectedPosition, setSelectedPosition] = useState<Position>('Todo');
-  const [selectedPlayerIds, setSelectedPlayerIds] = useState<number[]>([]);
+  const [selectedPlayerIds, _setSelectedPlayerIds] = useState<number[]>([]);
   const [expandedTeam, setExpandedTeam] = useState<number | null>(null);
 
   const { data: teamsData, isLoading: teamsLoading } = useTeams();

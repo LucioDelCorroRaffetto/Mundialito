@@ -85,19 +85,19 @@ export const MATCHES: Match[] = [
     id: 1, matchNumber: 1, matchday: 1, round: 'group', group: 'A',
     homeTeam: TEAMS.MEX, awayTeam: TEAMS.CAN,
     kickoffUtc: '2026-06-11T20:00:00Z', venue: 'Estadio Azteca', city: 'Ciudad de México',
-    status: 'finished', homeScore: 2, awayScore: 1,
+    status: 'ft', homeScore: 2, awayScore: 1,
   },
   {
     id: 2, matchNumber: 2, matchday: 1, round: 'group', group: 'A',
     homeTeam: TEAMS.USA, awayTeam: TEAMS.ARG,
     kickoffUtc: '2026-06-12T00:00:00Z', venue: 'MetLife Stadium', city: 'Nueva York',
-    status: 'finished', homeScore: 0, awayScore: 3,
+    status: 'ft', homeScore: 0, awayScore: 3,
   },
   {
     id: 3, matchNumber: 3, matchday: 1, round: 'group', group: 'B',
     homeTeam: TEAMS.BRA, awayTeam: TEAMS.JPN,
     kickoffUtc: '2026-06-12T20:00:00Z', venue: 'SoFi Stadium', city: 'Los Ángeles',
-    status: 'finished', homeScore: 4, awayScore: 1,
+    status: 'ft', homeScore: 4, awayScore: 1,
   },
   {
     id: 4, matchNumber: 4, matchday: 1, round: 'group', group: 'C',

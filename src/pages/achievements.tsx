@@ -1,6 +1,5 @@
 import { motion } from 'framer-motion';
 import { Lock } from 'lucide-react';
-import { cn } from '@/shared/lib/cn';
 import { useAllAchievements, useMyAchievements } from '@/shared/hooks/use-achievements';
 import { SkeletonList } from '@/shared/components/skeleton';
 
