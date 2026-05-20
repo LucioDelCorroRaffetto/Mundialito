@@ -1,10 +1,9 @@
 import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Settings, ChevronRight, Star, LogOut } from 'lucide-react';
-import { ACHIEVEMENTS, RARITY_COLOR } from '@/shared/data/mock';
-import { cn } from '@/shared/lib/cn';
 import { useAuthStore } from '@/shared/stores/auth-store';
 import { useMyStats } from '@/shared/hooks/use-my-stats';
+import { useMyAchievements, useAllAchievements } from '@/shared/hooks/use-achievements';
 
 function StatCard({ label, value }: { label: string; value: string | number }) {
   return (
@@ -20,8 +19,13 @@ export function ProfilePage() {
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
   const { data: stats, isLoading: statsLoading } = useMyStats();
-  const unlocked = ACHIEVEMENTS.filter((a) => a.unlocked);
-  const locked = ACHIEVEMENTS.filter((a) => !a.unlocked);
+  const { data: myAchievementsData } = useMyAchievements();
+  const { data: allAchievementsData } = useAllAchievements();
+
+  const myAchievementSlugs = new Set((myAchievementsData?.data ?? []).map((a) => a.slug));
+  const allAchievements = allAchievementsData?.data ?? [];
+  const myEarned = (myAchievementsData?.data ?? []);
+  const locked = allAchievements.filter((a) => !myAchievementSlugs.has(a.slug));
 
   const handleLogout = () => {
     logout();
@@ -86,38 +90,38 @@ export function ProfilePage() {
       <div className="px-4">
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-base-s font-display font-bold text-text">
-            Logros ({unlocked.length}/{ACHIEVEMENTS.length})
+            Logros ({myEarned.length}/{allAchievements.length})
           </h2>
           <Star size={16} className="text-accent" />
         </div>
 
-        {unlocked.length > 0 && (
+        {myEarned.length > 0 && (
           <div className="flex flex-col gap-2 mb-3">
-            {unlocked.map((a) => (
+            {myEarned.map((a) => (
               <motion.div
-                key={a.code}
+                key={a.slug}
                 initial={{ opacity: 0, x: -8 }}
                 animate={{ opacity: 1, x: 0 }}
                 className="flex items-center gap-3 p-3 rounded-lg bg-card border border-accent-border"
               >
-                <span className="text-2xl-s">{a.emoji}</span>
+                <span className="text-2xl-s">{a.icon}</span>
                 <div className="flex-1">
                   <p className="text-sm-s font-semibold text-text">{a.name}</p>
-                  <p className={cn('text-xs-s font-semibold capitalize', RARITY_COLOR[a.rarity])}>{a.rarity}</p>
+                  <p className="text-xs-s text-muted">{a.description}</p>
                 </div>
-                <span className="text-xs-s text-muted">{a.unlockedAt}</span>
+                <span className="text-xs-s text-accent font-semibold">+{a.pointsBonus} pts</span>
               </motion.div>
             ))}
           </div>
         )}
 
         <div className="flex flex-col gap-2">
-          {locked.map((a) => (
-            <div key={a.code} className="flex items-center gap-3 p-3 rounded-lg bg-elevated border border-border opacity-60">
-              <span className="text-2xl-s grayscale">{'secret' in a && a.secret ? '❓' : a.emoji}</span>
+          {locked.slice(0, 5).map((a) => (
+            <div key={a.slug} className="flex items-center gap-3 p-3 rounded-lg bg-elevated border border-border opacity-60">
+              <span className="text-2xl-s grayscale">{a.icon}</span>
               <div className="flex-1">
-                <p className="text-sm-s font-semibold text-muted">{'secret' in a && a.secret ? '???' : a.name}</p>
-                <p className={cn('text-xs-s font-semibold capitalize', RARITY_COLOR[a.rarity])}>{a.rarity}</p>
+                <p className="text-sm-s font-semibold text-muted">{a.name}</p>
+                <p className="text-xs-s text-muted">{a.description}</p>
               </div>
               <span className="text-xs-s text-muted">🔒</span>
             </div>

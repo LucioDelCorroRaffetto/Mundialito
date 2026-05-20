@@ -22,9 +22,16 @@ export async function loginHandler(req: Request, res: Response) {
   const valid = await comparePassword(password, user.passwordHash);
   if (!valid) throw new UnauthorizedError('Invalid credentials');
 
+  const adminIds = process.env.ADMIN_USER_IDS?.split(',').map(Number).filter(Boolean) ?? [];
   const payload = { sub: user.id, username: user.username };
   return res.json({
-    user: { id: user.id, email: user.email, username: user.username, avatarUrl: user.avatarUrl },
+    user: {
+      id: user.id,
+      email: user.email,
+      username: user.username,
+      avatarUrl: user.avatarUrl,
+      isAdmin: adminIds.includes(user.id),
+    },
     accessToken: signAccess(payload),
     refreshToken: signRefresh(payload),
   });

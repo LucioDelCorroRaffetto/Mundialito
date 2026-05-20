@@ -27,9 +27,16 @@ export async function registerHandler(req: Request, res: Response) {
   const passwordHash = await hashPassword(password);
   const [user] = await db.insert(users).values({ email, username, passwordHash }).returning();
 
+  const adminIds = process.env.ADMIN_USER_IDS?.split(',').map(Number).filter(Boolean) ?? [];
   const payload = { sub: user.id, username: user.username };
   return res.status(201).json({
-    user: { id: user.id, email: user.email, username: user.username, avatarUrl: user.avatarUrl },
+    user: {
+      id: user.id,
+      email: user.email,
+      username: user.username,
+      avatarUrl: user.avatarUrl,
+      isAdmin: adminIds.includes(user.id),
+    },
     accessToken: signAccess(payload),
     refreshToken: signRefresh(payload),
   });

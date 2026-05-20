@@ -2,19 +2,23 @@ import { NavLink } from 'react-router-dom';
 import { Home, Trophy, Users, User, Calendar, Settings, ShieldCheck, BarChart2 } from 'lucide-react';
 import { cn } from '@/shared/lib/cn';
 import { Logo } from '@/shared/components/logo';
+import { useAuthStore } from '@/shared/stores/auth-store';
 
-const navItems = [
-  { to: '/home',    label: 'Inicio',   Icon: Home },
-  { to: '/leagues', label: 'Ligas',    Icon: Users },
-  { to: '/matches', label: 'Partidos', Icon: Calendar },
+const baseNavItems = [
+  { to: '/home',        label: 'Inicio',   Icon: Home },
+  { to: '/leagues',     label: 'Ligas',    Icon: Users },
+  { to: '/matches',     label: 'Partidos', Icon: Calendar },
   { to: '/leaderboard', label: 'Global',   Icon: BarChart2 },
-  { to: '/fantasy', label: 'Fantasy',  Icon: Trophy },
-  { to: '/profile', label: 'Perfil',   Icon: User },
-  { to: '/settings',label: 'Config',   Icon: Settings },
-  { to: '/admin',   label: 'Admin',    Icon: ShieldCheck },
+  { to: '/fantasy',     label: 'Fantasy',  Icon: Trophy },
+  { to: '/profile',     label: 'Perfil',   Icon: User },
+  { to: '/settings',    label: 'Config',   Icon: Settings },
 ];
 
 export function Sidebar() {
+  const isAdmin = useAuthStore((s) => s.user?.isAdmin);
+  const navItems = isAdmin
+    ? [...baseNavItems, { to: '/admin', label: 'Admin', Icon: ShieldCheck }]
+    : baseNavItems;
   return (
     <aside className="hidden lg:flex flex-col w-56 xl:w-64 shrink-0 h-screen sticky top-0 border-r border-border bg-card">
       {/* Logo */}
