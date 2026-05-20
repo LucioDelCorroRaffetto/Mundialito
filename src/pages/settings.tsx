@@ -1,8 +1,9 @@
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Moon, Sun, Zap, Type } from 'lucide-react';
+import { ArrowLeft, Moon, Sun, Zap, Type, Bell, BellOff } from 'lucide-react';
 import { useThemeStore } from '@/theme/theme-store';
 import { useAuthStore } from '@/shared/stores/auth-store';
 import { accentList, type ThemeMode } from '@/theme/palettes';
+import { usePushNotifications } from '@/shared/hooks/use-push';
 
 type FontScale = 1.0 | 1.15 | 1.3;
 import { cn } from '@/shared/lib/cn';
@@ -23,6 +24,7 @@ export function SettingsPage() {
   const navigate = useNavigate();
   const { mode, accent, fontScale, setMode, setAccent, setFontScale } = useThemeStore();
   const { logout } = useAuthStore();
+  const { isSubscribed, isLoading: pushLoading, subscribe } = usePushNotifications();
 
   return (
     <div className="flex flex-col min-h-full animate-fade-in">
@@ -93,6 +95,40 @@ export function SettingsPage() {
               </button>
             ))}
           </div>
+        </section>
+
+        <section className="flex flex-col gap-3">
+          <p className="text-sm-s font-semibold text-text">Notificaciones</p>
+          <button
+            onClick={subscribe}
+            disabled={isSubscribed || pushLoading || !('serviceWorker' in navigator)}
+            className={cn(
+              'flex items-center gap-3 p-4 rounded-lg border transition-colors text-left',
+              isSubscribed
+                ? 'bg-accent-soft border-accent-border cursor-default'
+                : 'bg-card border-border hover:border-accent-border'
+            )}
+          >
+            <div className="w-9 h-9 rounded-md bg-elevated flex items-center justify-center flex-shrink-0">
+              {isSubscribed ? (
+                <Bell size={18} className="text-accent" />
+              ) : (
+                <BellOff size={18} className="text-muted" />
+              )}
+            </div>
+            <div className="flex-1">
+              <p className={cn('text-base-s font-semibold', isSubscribed ? 'text-accent' : 'text-text')}>
+                {isSubscribed ? '¡Notificaciones activas!' : 'Activar notificaciones'}
+              </p>
+              <p className="text-xs-s text-muted mt-0.5">
+                {isSubscribed
+                  ? 'Recibirás recordatorios antes de cada partido'
+                  : pushLoading
+                  ? 'Configurando...'
+                  : 'Te avisamos 30 min antes del cierre de pronósticos'}
+              </p>
+            </div>
+          </button>
         </section>
 
         <section className="p-4 rounded-lg bg-card border border-border">
