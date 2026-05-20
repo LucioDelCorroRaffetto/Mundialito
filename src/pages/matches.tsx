@@ -43,7 +43,7 @@ function getTeam(teamMap: Map<number, Team> | undefined, id: number): Team {
   return teamMap?.get(id) ?? PLACEHOLDER_TEAM;
 }
 
-const FILTER_TABS = ['Todos', 'Pendientes', 'Pronosticados'] as const;
+const FILTER_TABS = ['Todos', 'En vivo', 'Pendientes', 'Pronosticados'] as const;
 type FilterTab = (typeof FILTER_TABS)[number];
 
 export function MatchesPage() {
@@ -69,6 +69,7 @@ export function MatchesPage() {
   }
 
   const filtered = matches.filter((m) => {
+    if (filter === 'En vivo') return m.status === 'live';
     if (filter === 'Pronosticados') return predictedIds.has(m.id);
     if (filter === 'Pendientes') return !predictedIds.has(m.id) && m.status === 'scheduled';
     return true;
@@ -140,13 +141,23 @@ export function MatchesPage() {
                       )}
                     </div>
                     <div className="flex items-center gap-2 mt-1">
-                      <span className="text-sm-s font-semibold text-text">{homeTeam.flag} {homeTeam.name}</span>
-                      <span className="text-xs-s font-bold text-muted">vs</span>
-                      <span className="text-sm-s font-semibold text-text">{awayTeam.name} {awayTeam.flag}</span>
+                      <span className="text-sm-s font-semibold text-text">{homeTeam.flag} {homeTeam.code}</span>
+                      {(match.status === 'live' || match.status === 'finished') && match.homeScore !== null ? (
+                        <span className={cn(
+                          'text-base-s font-display font-bold tabular-nums px-2',
+                          match.status === 'live' ? 'text-red-400' : 'text-text'
+                        )}>
+                          {match.homeScore} – {match.awayScore}
+                        </span>
+                      ) : (
+                        <span className="text-xs-s font-bold text-muted">vs</span>
+                      )}
+                      <span className="text-sm-s font-semibold text-text">{awayTeam.code} {awayTeam.flag}</span>
                     </div>
                     {prediction && (
                       <p className="text-xs-s text-accent font-semibold mt-0.5">
-                        Tu pronóstico: {prediction.homeScore} - {prediction.awayScore}
+                        Tu pronóstico: {prediction.homeScore} – {prediction.awayScore}
+                        {prediction.points !== null && ` · +${prediction.points} pts`}
                       </p>
                     )}
                   </div>
