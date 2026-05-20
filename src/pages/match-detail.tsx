@@ -8,7 +8,8 @@ import { Button } from '@/shared/components/ui/button';
 import { cn } from '@/shared/lib/cn';
 import { sharePredictionCard } from '@/shared/lib/generate-prediction-card';
 import { useAuthStore } from '@/shared/stores/auth-store';
-import { useUpsertPrediction } from '@/shared/hooks/use-predictions';
+import { useUpsertPrediction, useLeagueMatchPredictions } from '@/shared/hooks/use-predictions';
+import type { LeagueMemberPrediction } from '@/shared/hooks/use-predictions';
 import { useHaptic } from '@/shared/hooks/use-haptic';
 
 function PointsPreview({ home, away, scorerCount }: { home: number; away: number; scorerCount: number }) {
@@ -136,6 +137,84 @@ function formatDate(utc: string) {
 function formatTime(utc: string) {
   const d = new Date(utc);
   return d.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Argentina/Buenos_Aires' });
+}
+
+function MemberAvatar({ username, avatarUrl }: { username: string; avatarUrl: string | null }) {
+  if (avatarUrl) {
+    return (
+      <img
+        src={avatarUrl}
+        alt={username}
+        className="w-8 h-8 rounded-full object-cover flex-shrink-0"
+      />
+    );
+  }
+  return (
+    <div className="w-8 h-8 rounded-full bg-accent/20 border border-accent-border flex items-center justify-center flex-shrink-0">
+      <span className="text-xs-s font-bold text-accent uppercase">
+        {username.charAt(0)}
+      </span>
+    </div>
+  );
+}
+
+function LeaguePredictionsSection({
+  matchId,
+  leagueId,
+}: {
+  matchId: number;
+  leagueId: number;
+}) {
+  const { data, isLoading, isError } = useLeagueMatchPredictions(matchId, leagueId);
+
+  return (
+    <div className="mx-4 mt-4 p-4 rounded-lg bg-card border border-border">
+      <p className="text-sm-s font-semibold text-text mb-3">Pronósticos de la liga</p>
+
+      {isLoading && (
+        <p className="text-xs-s text-muted text-center py-2">Cargando pronósticos...</p>
+      )}
+
+      {isError && (
+        <p className="text-xs-s text-red-400 text-center py-2">No se pudieron cargar los pronósticos.</p>
+      )}
+
+      {data && data.meta.revealed === false && (
+        <div className="flex items-center justify-center gap-2 py-3 rounded-md bg-elevated border border-border">
+          <span className="text-base-s">🔒</span>
+          <span className="text-sm-s text-muted">Se revelan al inicio del partido</span>
+        </div>
+      )}
+
+      {data && data.meta.revealed === true && data.data.length === 0 && (
+        <p className="text-xs-s text-muted text-center py-2">Nadie en la liga pronosticó este partido.</p>
+      )}
+
+      {data && data.meta.revealed === true && data.data.length > 0 && (
+        <div className="flex flex-col gap-2">
+          {data.data.map((pred: LeagueMemberPrediction) => (
+            <div
+              key={pred.predictionId}
+              className="flex items-center gap-3 px-3 py-2.5 rounded-md bg-elevated border border-border"
+            >
+              <MemberAvatar username={pred.username} avatarUrl={pred.avatarUrl} />
+              <span className="text-sm-s font-medium text-text flex-1 truncate">{pred.username}</span>
+              <div className="flex items-center gap-2">
+                <span className="text-base-s font-display font-bold text-text tabular-nums">
+                  {pred.homeScore} – {pred.awayScore}
+                </span>
+                {pred.points !== null && (
+                  <span className="text-xs-s font-semibold text-accent bg-accent/10 px-1.5 py-0.5 rounded">
+                    +{pred.points} pts
+                  </span>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }
 
 export function MatchDetailPage() {
@@ -325,6 +404,15 @@ export function MatchDetailPage() {
           ))}
         </div>
       </div>
+
+      {leagueId && (
+        <LeaguePredictionsSection
+          matchId={match.id}
+          leagueId={leagueId}
+        />
+      )}
+
+      <div className="h-6" />
     </div>
   );
 }

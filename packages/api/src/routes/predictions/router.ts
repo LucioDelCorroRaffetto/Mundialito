@@ -4,6 +4,7 @@ import { validate } from '../../middleware/validate.js';
 import { upsertPredictionHandler, upsertPredictionSchema } from './handlers/upsert-prediction.js';
 import { myPredictionsHandler } from './handlers/my-predictions.js';
 import { myPredictionForMatchHandler } from './handlers/my-prediction-for-match.js';
+import { matchPredictionsHandler } from './handlers/match-predictions.js';
 import { deletePredictionHandler } from './handlers/delete-prediction.js';
 
 export const predictionsRouter = Router();
@@ -16,5 +17,8 @@ predictionsRouter.post('/', validate(upsertPredictionSchema), (req, res, next) =
 predictionsRouter.get('/mine', (req, res, next) => myPredictionsHandler(req, res).catch(next));
 predictionsRouter.get('/match/:matchId/mine', (req, res, next) =>
   myPredictionForMatchHandler(req, res).catch(next)
+);
+predictionsRouter.get('/match/:matchId', (req, res, next) =>
+  matchPredictionsHandler(req, res).catch(next)
 );
 predictionsRouter.delete('/:id', (req, res, next) => deletePredictionHandler(req, res).catch(next));

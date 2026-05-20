@@ -2,6 +2,23 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '@/shared/lib/api-client';
 import type { ApiList, Prediction } from '@/shared/types/api';
 
+export interface LeagueMemberPrediction {
+  predictionId: number;
+  userId: number;
+  username: string;
+  avatarUrl: string | null;
+  homeScore: number | null;
+  awayScore: number | null;
+  points: number | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface LeagueMatchPredictionsResponse {
+  data: LeagueMemberPrediction[];
+  meta: { total: number; matchStatus: string; revealed: boolean };
+}
+
 export function useMyPredictions(leagueId?: number) {
   return useQuery({
     queryKey: ['predictions', 'mine', leagueId],
@@ -50,6 +67,20 @@ export function useUpsertPrediction() {
       qc.invalidateQueries({ queryKey: ['predictions', 'mine', data.leagueId] });
       qc.invalidateQueries({ queryKey: ['prediction', data.matchId, data.leagueId] });
     },
+  });
+}
+
+export function useLeagueMatchPredictions(matchId: number | undefined, leagueId: number | null | undefined) {
+  return useQuery({
+    queryKey: ['predictions', 'league-match', matchId, leagueId],
+    queryFn: async () => {
+      const { data } = await apiClient.get<LeagueMatchPredictionsResponse>(
+        `/predictions/match/${matchId}`,
+        { params: { leagueId } },
+      );
+      return data;
+    },
+    enabled: matchId !== undefined && leagueId != null,
   });
 }
 

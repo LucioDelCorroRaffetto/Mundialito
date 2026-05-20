@@ -701,6 +701,119 @@ async function seedAchievements(): Promise<void> {
   console.log(`✅ Achievements seeded: ${ACHIEVEMENTS_DATA.length} achievements inserted.`);
 }
 
+/**
+ * Knockout stage venue rotation for the 32 elimination matches.
+ * Venues indices into WC2026_VENUES (same array used above).
+ * Distribution follows FIFA's stated intent:
+ *  - R32 (matches 73-88): spread across all 16 venues
+ *  - R16 (matches 89-96): premium US venues + Canada/Mexico marquee
+ *  - QF  (matches 97-100): top 4 US venues
+ *  - SF  (matches 101-102): MetLife + SoFi
+ *  - Third (match 103): Hard Rock Stadium Miami
+ *  - Final (match 104): MetLife Stadium
+ */
+const KNOCKOUT_VENUE_IDX: Record<number, number> = {
+  // R32 — all 16 venues
+  73: 3,  74: 4,  75: 5,  76: 7,
+  77: 0,  78: 1,  79: 2,  80: 6,
+  81: 8,  82: 9,  83: 10, 84: 11,
+  85: 12, 86: 13, 87: 14, 88: 15,
+  // R16
+  89: 3,  90: 4,  91: 5,  92: 7,
+  93: 0,  94: 6,  95: 13, 96: 8,
+  // QF
+  97: 3,  98: 4,  99: 5,  100: 13,
+  // SF
+  101: 3, 102: 4,
+  // Third place / Final
+  103: 7, 104: 3,
+};
+
+type KnockoutRound = 'r32' | 'r16' | 'qf' | 'sf' | 'third' | 'final';
+
+type KnockoutSpec = {
+  round: KnockoutRound;
+  count: number;
+  /** ISO date string for the first match of this round */
+  startDate: string;
+  /** Hours between consecutive matches in this round */
+  hoursStep: number;
+};
+
+/**
+ * R32 starts ~July 4 2026, Final ~July 19 2026.
+ * Dates are approximate placeholders consistent with FIFA's compressed 2026 schedule.
+ */
+const KNOCKOUT_ROUNDS: KnockoutSpec[] = [
+  { round: 'r32',   count: 16, startDate: '2026-07-04T18:00:00Z', hoursStep: 12 },
+  { round: 'r16',   count:  8, startDate: '2026-07-10T18:00:00Z', hoursStep: 12 },
+  { round: 'qf',    count:  4, startDate: '2026-07-14T18:00:00Z', hoursStep: 24 },
+  { round: 'sf',    count:  2, startDate: '2026-07-17T18:00:00Z', hoursStep: 24 },
+  { round: 'third', count:  1, startDate: '2026-07-19T15:00:00Z', hoursStep: 0  },
+  { round: 'final', count:  1, startDate: '2026-07-19T20:00:00Z', hoursStep: 0  },
+];
+
+/**
+ * Seeds 32 placeholder knockout matches (matchNumbers 73-104).
+ * Idempotent: skips if any match with matchNumber > 72 already exists.
+ * homeTeamId / awayTeamId use the first team in the DB as a placeholder
+ * (will be updated via admin panel once group stage results are known).
+ */
+async function seedKnockoutStage(): Promise<void> {
+  // Check for existing knockout matches
+  const existingKnockout = await db
+    .select({ count: sql<number>`count(*)` })
+    .from(matches)
+    .where(sql`${matches.matchNumber} > 72`)
+    .get();
+
+  if (existingKnockout && existingKnockout.count > 0) {
+    console.log('Knockout matches already seeded, skipping.');
+    return;
+  }
+
+  // Get a placeholder team id (first team in DB)
+  const placeholderTeam = await db.select({ id: teams.id }).from(teams).limit(1).get();
+  if (!placeholderTeam) {
+    console.warn('No teams found in DB — cannot seed knockout matches.');
+    return;
+  }
+  const placeholderId = placeholderTeam.id;
+
+  let matchNumber = 73;
+  let inserted = 0;
+
+  for (const spec of KNOCKOUT_ROUNDS) {
+    const roundStart = new Date(spec.startDate);
+    for (let i = 0; i < spec.count; i++) {
+      const kickoff = new Date(roundStart.getTime() + i * spec.hoursStep * 60 * 60 * 1000);
+      const kickoffUtc = kickoff.toISOString();
+      const venueData = WC2026_VENUES[KNOCKOUT_VENUE_IDX[matchNumber] ?? 3];
+
+      await db
+        .insert(matches)
+        .values({
+          matchNumber,
+          homeTeamId: placeholderId,
+          awayTeamId: placeholderId,
+          kickoffUtc,
+          predictionLockUtc: calcPredictionLock(kickoffUtc),
+          venue: venueData.venue,
+          city: venueData.city,
+          group: null,
+          round: spec.round,
+          status: 'scheduled',
+        })
+        .onConflictDoNothing();
+
+      matchNumber++;
+      inserted++;
+    }
+  }
+
+  console.log(`✅ Knockout stage seeded: ${inserted} matches inserted (matches 73–104).`);
+}
+
 async function seed(): Promise<void> {
   console.log('🏆 Seeding Mundialito DB...');
   await initDb();
@@ -727,6 +840,7 @@ async function seed(): Promise<void> {
     console.log('Matches already seeded, skipping match insert.');
     await seedPlayers();
     await seedAchievements();
+    await seedKnockoutStage();
     process.exit(0);
   }
 
@@ -768,10 +882,10 @@ async function seed(): Promise<void> {
   // 4. Seed achievements
   await seedAchievements();
 
+  // 5. Seed knockout stage placeholder matches
+  await seedKnockoutStage();
+
   console.log('✅ Seed complete.');
-  console.log(
-    '⚠️  Pendiente: fases R32, R16, QF, SF, 3er puesto y Final (requieren clasificacion).',
-  );
   process.exit(0);
 }
 
