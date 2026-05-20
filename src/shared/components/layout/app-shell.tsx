@@ -1,8 +1,22 @@
+import { useEffect } from 'react';
 import { Outlet } from 'react-router-dom';
 import { TabBar } from './tab-bar';
 import { Sidebar } from './sidebar';
+import { useMe } from '@/shared/hooks/use-auth';
+import { useAuthStore } from '@/shared/stores/auth-store';
 
 export function AppShell() {
+  const { data: meData } = useMe();
+  const storeLogin = useAuthStore((s) => s.login);
+  const token = useAuthStore((s) => s.token);
+
+  // Refresh user data (including isAdmin) whenever /auth/me resolves
+  useEffect(() => {
+    if (meData && token) {
+      storeLogin(meData, token);
+    }
+  }, [meData, token, storeLogin]);
+
   return (
     <div className="min-h-screen bg-bg text-text flex">
       {/* Desktop sidebar */}

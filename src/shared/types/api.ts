@@ -4,6 +4,7 @@ export interface User {
   email: string;
   avatarUrl: string | null;
   createdAt?: string;
+  isAdmin?: boolean;
 }
 
 export interface Team {
