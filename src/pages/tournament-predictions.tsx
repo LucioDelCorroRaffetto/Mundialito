@@ -1,21 +1,23 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Clock, CheckCircle2 } from 'lucide-react';
+import { ArrowLeft, Clock, CheckCircle2, Search, X } from 'lucide-react';
 import { Button } from '@/shared/components/ui/button';
 import { cn } from '@/shared/lib/cn';
 import { useTeams } from '@/shared/hooks/use-teams';
+import { usePlayers } from '@/shared/hooks/use-players';
 import {
   useTournamentPrediction,
   useUpsertTournamentPrediction,
 } from '@/shared/hooks/use-tournament-predictions';
 import { SkeletonList } from '@/shared/components/skeleton';
 import { toast } from 'sonner';
-import type { Team } from '@/shared/types/api';
+import type { Player, Team } from '@/shared/types/api';
 
 interface LocalPicks {
   championTeamId: number | null;
   runnerUpTeamId: number | null;
+  topScorerPlayerId: number | null;
   revelationTeamId: number | null;
   surpriseEliminatedTeamId: number | null;
 }
@@ -97,16 +99,73 @@ function PickCard({
   );
 }
 
+interface TopScorerCardProps {
+  sectionId: string;
+  openSection: string | null;
+  setOpenSection: (id: string | null) => void;
+  selectedPlayerId: number | null;
+  onSelect: (id: number) => void;
+  players: Player[];
+  teams: Team[];
+}
+
 function TopScorerCard({
   sectionId,
   openSection,
   setOpenSection,
-}: {
-  sectionId: string;
-  openSection: string | null;
-  setOpenSection: (id: string | null) => void;
-}) {
+  selectedPlayerId,
+  onSelect,
+  players,
+  teams,
+}: TopScorerCardProps) {
   const isOpen = openSection === sectionId;
+  const [query, setQuery] = useState('');
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const teamMap = useMemo(
+    () => new Map(teams.map((t) => [t.id, t])),
+    [teams],
+  );
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return players;
+    return players.filter((p) => {
+      const team = teamMap.get(p.teamId);
+      return (
+        p.name.toLowerCase().includes(q) ||
+        (team?.name.toLowerCase().includes(q) ?? false) ||
+        (team?.code.toLowerCase().includes(q) ?? false)
+      );
+    });
+  }, [players, query, teamMap]);
+
+  // Group filtered players by team
+  const grouped = useMemo(() => {
+    const map = new Map<number, { team: Team; players: Player[] }>();
+    for (const p of filtered) {
+      const team = teamMap.get(p.teamId);
+      if (!team) continue;
+      if (!map.has(team.id)) map.set(team.id, { team, players: [] });
+      map.get(team.id)!.players.push(p);
+    }
+    return Array.from(map.values()).sort((a, b) =>
+      a.team.name.localeCompare(b.team.name),
+    );
+  }, [filtered, teamMap]);
+
+  const selectedPlayer = players.find((p) => p.id === selectedPlayerId);
+  const selectedTeam = selectedPlayer ? teamMap.get(selectedPlayer.teamId) : undefined;
+
+  // Focus search input when panel opens
+  useEffect(() => {
+    if (isOpen) {
+      setTimeout(() => inputRef.current?.focus(), 50);
+    } else {
+      setQuery('');
+    }
+  }, [isOpen]);
+
   return (
     <div className="p-4 rounded-xl bg-card border border-border flex flex-col gap-3">
       <div className="flex items-center justify-between">
@@ -114,18 +173,105 @@ function TopScorerCard({
           <p className="text-base-s font-bold text-text">Goleador del torneo</p>
           <p className="text-xs-s text-accent font-semibold">+15 pts</p>
         </div>
-        <button
-          onClick={() => setOpenSection(isOpen ? null : sectionId)}
-          className="px-3 py-1.5 rounded-lg bg-accent text-accent-on text-sm-s font-semibold"
-        >
-          Elegir
-        </button>
+        {selectedPlayer ? (
+          <div className="flex items-center gap-2">
+            {selectedTeam && <span className="text-xl-s">{selectedTeam.flag}</span>}
+            <div className="flex flex-col items-end">
+              <span className="text-sm-s font-semibold text-text leading-tight">
+                {selectedPlayer.name}
+              </span>
+              {selectedTeam && (
+                <span className="text-xs-s text-muted">{selectedTeam.code}</span>
+              )}
+            </div>
+            <button
+              onClick={() => setOpenSection(isOpen ? null : sectionId)}
+              className="text-xs-s text-muted underline ml-1"
+            >
+              Cambiar
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={() => setOpenSection(isOpen ? null : sectionId)}
+            className="px-3 py-1.5 rounded-lg bg-accent text-accent-on text-sm-s font-semibold"
+          >
+            Elegir
+          </button>
+        )}
       </div>
+
       {isOpen && (
-        <div className="pt-2 border-t border-border">
-          <p className="text-xs-s text-muted text-center py-4">
-            Los jugadores estarán disponibles próximamente
-          </p>
+        <div className="pt-2 border-t border-border flex flex-col gap-2">
+          {/* Search box */}
+          <div className="relative">
+            <Search
+              size={14}
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none"
+            />
+            <input
+              ref={inputRef}
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Buscar jugador o selección..."
+              className="w-full pl-8 pr-8 py-2 rounded-lg bg-elevated border border-border text-sm-s text-text placeholder:text-muted outline-none focus:border-accent"
+            />
+            {query && (
+              <button
+                onClick={() => setQuery('')}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted"
+                aria-label="Limpiar búsqueda"
+              >
+                <X size={13} />
+              </button>
+            )}
+          </div>
+
+          {/* Results */}
+          {players.length === 0 ? (
+            <p className="text-xs-s text-muted text-center py-3">
+              Cargando jugadores...
+            </p>
+          ) : grouped.length === 0 ? (
+            <p className="text-xs-s text-muted text-center py-3">
+              No se encontraron jugadores
+            </p>
+          ) : (
+            <div className="flex flex-col gap-3 max-h-72 overflow-y-auto pr-1">
+              {grouped.map(({ team, players: teamPlayers }) => (
+                <div key={team.id}>
+                  <div className="flex items-center gap-1.5 mb-1.5">
+                    <span className="text-base-s">{team.flag}</span>
+                    <span className="text-xs-s font-bold text-muted uppercase tracking-wide">
+                      {team.name}
+                    </span>
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    {teamPlayers.map((p) => (
+                      <button
+                        key={p.id}
+                        onClick={() => {
+                          onSelect(p.id);
+                          setOpenSection(null);
+                        }}
+                        className={cn(
+                          'flex items-center justify-between px-3 py-2 rounded-lg border text-left',
+                          selectedPlayerId === p.id
+                            ? 'border-accent bg-accent-soft'
+                            : 'border-border bg-elevated',
+                        )}
+                      >
+                        <span className="text-sm-s text-text font-medium">
+                          {p.name}
+                        </span>
+                        <span className="text-xs-s text-muted">{p.position}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -141,6 +287,7 @@ export function TournamentPredictionsPage() {
   const [picks, setPicks] = useState<LocalPicks>({
     championTeamId: null,
     runnerUpTeamId: null,
+    topScorerPlayerId: null,
     revelationTeamId: null,
     surpriseEliminatedTeamId: null,
   });
@@ -149,6 +296,9 @@ export function TournamentPredictionsPage() {
 
   const { data: teamsData, isLoading: teamsLoading } = useTeams();
   const teams = teamsData ?? [];
+
+  const { data: playersData } = usePlayers();
+  const players = playersData ?? [];
 
   const tournamentQuery = useTournamentPrediction(leagueId);
   const upsertMutation = useUpsertTournamentPrediction();
@@ -160,6 +310,7 @@ export function TournamentPredictionsPage() {
       setPicks({
         championTeamId: d.championTeamId,
         runnerUpTeamId: d.runnerUpTeamId,
+        topScorerPlayerId: d.topScorerPlayerId,
         revelationTeamId: d.revelationTeamId,
         surpriseEliminatedTeamId: d.surpriseEliminatedTeamId,
       });
@@ -180,7 +331,7 @@ export function TournamentPredictionsPage() {
         leagueId,
         championTeamId: picks.championTeamId,
         runnerUpTeamId: picks.runnerUpTeamId,
-        topScorerPlayerId: null,
+        topScorerPlayerId: picks.topScorerPlayerId,
         revelationTeamId: picks.revelationTeamId,
         surpriseEliminatedTeamId: picks.surpriseEliminatedTeamId,
       });
@@ -294,6 +445,10 @@ export function TournamentPredictionsPage() {
           sectionId="topScorer"
           openSection={openSection}
           setOpenSection={setOpenSection}
+          selectedPlayerId={picks.topScorerPlayerId}
+          onSelect={(id) => setPicks((prev) => ({ ...prev, topScorerPlayerId: id }))}
+          players={players}
+          teams={teams}
         />
         <PickCard
           title="Revelación"

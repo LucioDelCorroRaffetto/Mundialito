@@ -4,6 +4,7 @@ import { validate } from '../../middleware/validate.js';
 import { createLeagueHandler, createLeagueSchema } from './handlers/create-league.js';
 import { listMineHandler } from './handlers/list-mine.js';
 import { getLeagueHandler } from './handlers/get-league.js';
+import { getLeagueByCodeHandler } from './handlers/get-league-by-code.js';
 import { updateLeagueHandler, updateLeagueSchema } from './handlers/update-league.js';
 import { deleteLeagueHandler } from './handlers/delete-league.js';
 import { joinLeagueHandler, joinLeagueSchema } from './handlers/join-league.js';
@@ -14,6 +15,9 @@ import { standingsHandler } from './handlers/standings.js';
 import { searchPublicHandler } from './handlers/search-public.js';
 
 export const leaguesRouter = Router();
+
+// Public route — no auth required (league preview before joining)
+leaguesRouter.get('/by-code/:code', (req, res, next) => getLeagueByCodeHandler(req, res).catch(next));
 
 leaguesRouter.use(authGuard);
 

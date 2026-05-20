@@ -118,6 +118,72 @@ type GroupFixture = {
 };
 
 /**
+ * Venue data for World Cup 2026.
+ * 16 official venues across USA (11), Mexico (3), Canada (2).
+ */
+const WC2026_VENUES: Array<{ city: string; venue: string }> = [
+  { city: 'Ciudad de México', venue: 'Estadio Azteca' },      // 0
+  { city: 'Guadalajara',      venue: 'Estadio Akron' },       // 1
+  { city: 'Monterrey',        venue: 'Estadio BBVA' },        // 2
+  { city: 'New York/NJ',      venue: 'MetLife Stadium' },     // 3
+  { city: 'Los Angeles',      venue: 'SoFi Stadium' },        // 4
+  { city: 'Dallas',           venue: 'AT&T Stadium' },        // 5
+  { city: 'San Francisco',    venue: "Levi's Stadium" },      // 6
+  { city: 'Miami',            venue: 'Hard Rock Stadium' },   // 7
+  { city: 'Seattle',          venue: 'Lumen Field' },         // 8
+  { city: 'Kansas City',      venue: 'Arrowhead Stadium' },   // 9
+  { city: 'Boston',           venue: 'Gillette Stadium' },    // 10
+  { city: 'Philadelphia',     venue: 'Lincoln Financial Field' }, // 11
+  { city: 'Houston',          venue: 'NRG Stadium' },         // 12
+  { city: 'Atlanta',          venue: 'Mercedes-Benz Stadium' }, // 13
+  { city: 'Vancouver',        venue: 'BC Place' },            // 14
+  { city: 'Toronto',          venue: 'BMO Field' },           // 15
+];
+
+/**
+ * Per-match venue index into WC2026_VENUES (match numbers 1-72).
+ * Distribution criteria:
+ *   - MEX plays at Mexican venues (azteca/akron) for home-feel games.
+ *   - CAN plays at Canadian venues (bc/bmo).
+ *   - USA games go to marquee US venues.
+ *   - All 16 venues are used.
+ *
+ * Groups:
+ *   A (ARG,BRA,URU,COL)  #1-6   D (ESP,ENG,FRA,GER)  #19-24  G (AUT,SRB,TUR,NOR) #37-42
+ *   B (ECU,PAR,MEX,USA)  #7-12  E (POR,ITA,NED,BEL)  #25-30  H (JPN,KOR,AUS,IRN) #43-48
+ *   C (CAN,PAN,CRC,JAM)  #13-18 F (CRO,SUI,DEN,POL)  #31-36  I (KSA,QAT,UZB,JOR) #49-54
+ *                                                               J (MAR,SEN,EGY,NGA) #55-60
+ *                                                               K (ALG,TUN,CMR,CIV) #61-66
+ *                                                               L (GHA,NZL,PO1,PO2) #67-72
+ */
+const MATCH_VENUE_IDX: Record<number, number> = {
+  // Group A — South American heavyweights
+  1: 3,  2: 4,  3: 5,  4: 7,  5: 10, 6: 13,
+  // Group B — MEX & USA (Mexican + US venues)
+  7: 0,  8: 4,  9: 1,  10: 5, 11: 2, 12: 0,
+  // Group C — CAN (Canadian + US venues)
+  13: 14, 14: 8, 15: 15, 16: 9, 17: 12, 18: 11,
+  // Group D — European giants
+  19: 3, 20: 4, 21: 5, 22: 3, 23: 4, 24: 5,
+  // Group E — European sides
+  25: 6, 26: 13, 27: 7, 28: 10, 29: 11, 30: 6,
+  // Group F — European sides
+  31: 9, 32: 12, 33: 8, 34: 13, 35: 15, 36: 9,
+  // Group G — European/mixed
+  37: 6, 38: 10, 39: 12, 40: 11, 41: 7, 42: 8,
+  // Group H — Asian teams
+  43: 6, 44: 4, 45: 5, 46: 3, 47: 9, 48: 4,
+  // Group I — Middle East / Central Asian
+  49: 5, 50: 13, 51: 12, 52: 7, 53: 10, 54: 8,
+  // Group J — African teams
+  55: 3, 56: 5, 57: 13, 58: 4, 59: 6, 60: 7,
+  // Group K — African teams
+  61: 11, 62: 10, 63: 15, 64: 9, 65: 8, 66: 12,
+  // Group L — Mixed
+  67: 14, 68: 15, 69: 1, 70: 2, 71: 0, 72: 1,
+};
+
+/**
  * Genera fixture de fase de grupos: 12 grupos (A-L) x 6 partidos round-robin
  * = 72 partidos. Equipos asignados secuencialmente desde TEAMS_DATA.
  *
@@ -149,13 +215,14 @@ function generateGroupStageFixtures(): GroupFixture[] {
       const kickoff = new Date(
         baseDate.getTime() + matchNumber * 12 * 60 * 60 * 1000,
       ).toISOString();
+      const venueData = WC2026_VENUES[MATCH_VENUE_IDX[matchNumber] ?? 3];
       fixtures.push({
         matchNumber: matchNumber++,
         homeCode: teamCodes[pair[0]],
         awayCode: teamCodes[pair[1]],
         kickoffUtc: kickoff,
-        venue: 'TBD',
-        city: 'TBD',
+        venue: venueData.venue,
+        city: venueData.city,
         group,
         round: 'group',
         status: 'scheduled',
@@ -638,24 +705,32 @@ async function seed(): Promise<void> {
   console.log('🏆 Seeding Mundialito DB...');
   await initDb();
 
-  // Check if already seeded.
+  // Check if teams already seeded.
   const existingTeams = await db.select().from(teams).limit(1);
   if (existingTeams.length > 0) {
-    console.log('Teams already seeded, skipping teams & matches.');
+    console.log('Teams already seeded, skipping team insert.');
+  } else {
+    // 1. Insertar teams
+    console.log(`Inserting ${TEAMS_DATA.length} teams...`);
+    const groups = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L'];
+    const teamsWithGroup = TEAMS_DATA.map((t, i) => ({
+      ...t,
+      group: groups[Math.floor(i / 4)] ?? null,
+    }));
+    await db.insert(teams).values(teamsWithGroup).onConflictDoNothing();
+    console.log('✅ Teams inserted.');
+  }
+
+  // Check if matches already seeded.
+  const existingMatches = await db.select().from(matches).limit(1);
+  if (existingMatches.length > 0) {
+    console.log('Matches already seeded, skipping match insert.');
     await seedPlayers();
     await seedAchievements();
     process.exit(0);
   }
 
-  // 1. Insertar teams (asigna `group` segun el orden secuencial A-L).
-  console.log(`Inserting ${TEAMS_DATA.length} teams...`);
-  const groups = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L'];
-  const teamsWithGroup = TEAMS_DATA.map((t, i) => ({
-    ...t,
-    group: groups[Math.floor(i / 4)] ?? null,
-  }));
-  await db.insert(teams).values(teamsWithGroup).onConflictDoNothing();
-  // Build map from all teams in DB (in case some already existed and were skipped).
+  // Build map from all teams in DB.
   const allTeams = await db.select().from(teams);
   const teamByCode = new Map(allTeams.map((t) => [t.code, t]));
 

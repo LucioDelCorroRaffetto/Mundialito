@@ -2,6 +2,16 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '@/shared/lib/api-client';
 import type { ApiList, League } from '@/shared/types/api';
 
+export interface LeaguePreview {
+  id: number;
+  name: string;
+  code: string;
+  isPublic: boolean;
+  stakesMeme: string | null;
+  memberCount: number;
+  adminName: string | null;
+}
+
 export interface StandingRow {
   userId: number;
   username: string;
@@ -29,6 +39,18 @@ export function useLeague(id: number | undefined) {
       return data;
     },
     enabled: id !== undefined && Number.isInteger(id),
+  });
+}
+
+export function useLeagueByCode(code: string | undefined) {
+  return useQuery({
+    queryKey: ['league', 'by-code', code],
+    queryFn: async () => {
+      const { data } = await apiClient.get<LeaguePreview>(`/leagues/by-code/${code}`);
+      return data;
+    },
+    enabled: !!code && code.length >= 4,
+    retry: false,
   });
 }
 
@@ -81,5 +103,17 @@ export function useSearchLeagues(query: string) {
       return data;
     },
     enabled: query.length >= 2,
+  });
+}
+
+export function usePublicLeagues() {
+  return useQuery({
+    queryKey: ['leagues', 'public'],
+    queryFn: async () => {
+      const { data } = await apiClient.get<ApiList<League>>('/leagues/public/search', {
+        params: { limit: 20 },
+      });
+      return data;
+    },
   });
 }

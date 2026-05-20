@@ -56,6 +56,12 @@ async function main() {
     `ALTER TABLE matches ADD COLUMN created_at TEXT NOT NULL DEFAULT (datetime('now'))`
   );
 
+  // ── matches: add prediction_lock_utc ────────────────────────────────────────
+  await run(
+    'matches: add prediction_lock_utc column',
+    `ALTER TABLE matches ADD COLUMN prediction_lock_utc TEXT NOT NULL DEFAULT ''`
+  );
+
   // ── users: ensure google_id and avatar_url columns exist ────────────────────
   await run(
     'users: add google_id column',

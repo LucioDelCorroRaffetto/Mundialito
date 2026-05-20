@@ -1,19 +1,65 @@
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Users, Trophy, Lock, Globe } from 'lucide-react';
+import { Users, Trophy, Lock, Globe, Copy, Check, Loader2 } from 'lucide-react';
+import { useState } from 'react';
 import { Button } from '@/shared/components/ui/button';
-import { MY_LEAGUES, PUBLIC_LEAGUES, LEAGUE_STANDINGS } from '@/shared/data/mock';
+import { useLeagueByCode, useJoinLeague } from '@/shared/hooks/use-leagues';
 import { useAuthStore } from '@/shared/stores/auth-store';
 
 export function LeagueInvitePage() {
   const { code } = useParams<{ code: string }>();
   const navigate = useNavigate();
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const [copied, setCopied] = useState(false);
+  const [joinError, setJoinError] = useState('');
 
-  const allLeagues = [...MY_LEAGUES, ...PUBLIC_LEAGUES];
-  const league = allLeagues.find((l) => l.code === code);
+  const { data: league, isLoading, isError } = useLeagueByCode(code);
+  const joinMutation = useJoinLeague();
 
-  if (!league) {
+  const inviteUrl = `https://mundialito-pi.vercel.app/j/${code}`;
+
+  const handleCopyLink = async () => {
+    try {
+      await navigator.clipboard.writeText(inviteUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // fallback: do nothing
+    }
+  };
+
+  const handleJoin = async () => {
+    if (!isAuthenticated) {
+      navigate(`/register?returnTo=/j/${code}`);
+      return;
+    }
+    if (!code) return;
+    setJoinError('');
+    try {
+      const joined = await joinMutation.mutateAsync(code);
+      navigate(`/leagues/${joined.id}`);
+    } catch (err: unknown) {
+      const apiError = err as { response?: { data?: { error?: { message?: string } } } };
+      const msg = apiError?.response?.data?.error?.message;
+      if (msg === 'Already a member of this league') {
+        // Already a member — navigate there using league data we have
+        if (league) navigate(`/leagues/${league.id}`);
+      } else {
+        setJoinError('No se pudo unir a la liga. Intentá de nuevo.');
+      }
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen gap-4 px-6 text-center">
+        <Loader2 size={32} className="text-accent animate-spin" />
+        <p className="text-sm-s text-muted">Cargando liga...</p>
+      </div>
+    );
+  }
+
+  if (isError || !league) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen gap-4 px-6 text-center">
         <Trophy size={48} className="text-muted" />
@@ -23,17 +69,6 @@ export function LeagueInvitePage() {
       </div>
     );
   }
-
-  // Top 3 del standing
-  const standings = LEAGUE_STANDINGS.slice(0, 3);
-
-  const handleJoin = () => {
-    if (!isAuthenticated) {
-      navigate(`/register?returnTo=/j/${code}`);
-    } else {
-      navigate(`/leagues/${league.id}`);
-    }
-  };
 
   return (
     <div className="flex flex-col min-h-screen animate-fade-in bg-bg">
@@ -55,12 +90,15 @@ export function LeagueInvitePage() {
           className="flex flex-col gap-1"
         >
           <p className="text-2xl-s font-display font-bold text-text">{league.name}</p>
+          {league.adminName && (
+            <p className="text-sm-s text-muted">Organizada por {league.adminName}</p>
+          )}
         </motion.div>
 
         <div className="flex items-center gap-4 mt-2">
           <div className="flex items-center gap-1.5 text-sm-s text-muted">
             <Users size={14} />
-            <span>{league.memberCount} miembros</span>
+            <span>{league.memberCount} {league.memberCount === 1 ? 'miembro' : 'miembros'}</span>
           </div>
           <div className="flex items-center gap-1.5 text-sm-s text-muted">
             {league.isPublic ? <Globe size={14} /> : <Lock size={14} />}
@@ -69,33 +107,37 @@ export function LeagueInvitePage() {
         </div>
       </div>
 
-      {/* Preview tabla (anónima) */}
+      {/* Invite code + copy link */}
       <div className="mx-4 p-4 rounded-xl bg-card border border-border mb-4">
-        <p className="text-sm-s font-semibold text-text mb-3">Top 3 actual</p>
-        <div className="flex flex-col gap-2">
-          {standings.map((row, i) => (
-            <div key={row.userId} className="flex items-center gap-3">
-              <span className="w-6 text-center text-sm-s font-bold text-muted">{i + 1}</span>
-              <div className="w-8 h-8 rounded-full bg-elevated flex items-center justify-center">
-                <span className="text-sm-s font-bold text-text">{row.avatar}</span>
-              </div>
-              <span className="flex-1 text-sm-s font-semibold text-text">
-                {i === 0 ? row.displayName : `Jugador ${i + 1}`}
-              </span>
-              <span className="text-sm-s font-bold text-accent">{row.points} pts</span>
-            </div>
-          ))}
+        <p className="text-xs-s text-muted mb-1">Código de invitación</p>
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-2xl-s font-display font-bold text-accent tracking-widest">{league.code}</p>
+          <button
+            onClick={handleCopyLink}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-elevated border border-border text-sm-s font-semibold text-text hover:opacity-80 transition-opacity"
+          >
+            {copied ? <Check size={14} className="text-green-500" /> : <Copy size={14} />}
+            <span>{copied ? '¡Copiado!' : 'Copiar link'}</span>
+          </button>
         </div>
+        {league.stakesMeme && (
+          <p className="text-sm-s text-muted mt-2 italic">"{league.stakesMeme}"</p>
+        )}
       </div>
 
       {/* CTA */}
       <div className="px-4 flex flex-col gap-3 mt-auto pb-8">
-        <Button size="lg" fullWidth onClick={handleJoin}>
+        {joinError && (
+          <p className="text-sm-s text-red-500 text-center">{joinError}</p>
+        )}
+        <Button size="lg" fullWidth onClick={handleJoin} loading={joinMutation.isPending}>
           ¡Me sumo a la liga! 🏆
         </Button>
-        <p className="text-xs-s text-muted text-center">
-          Vas a necesitar una cuenta para pronosticar
-        </p>
+        {!isAuthenticated && (
+          <p className="text-xs-s text-muted text-center">
+            Vas a necesitar una cuenta para pronosticar
+          </p>
+        )}
       </div>
     </div>
   );
