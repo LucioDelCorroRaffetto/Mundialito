@@ -1,4 +1,3 @@
-import { sql } from 'drizzle-orm';
 import { db } from '../db/client.js';
 import { fetchLiveFixtures } from '../providers/api-football.js';
 import { canMakeRequest, incrementQuota, getTodayCount } from '../quota/tracker.js';
@@ -10,15 +9,17 @@ const LIVE_STATUSES = new Set(['1H', 'HT', '2H', 'ET', 'BT', 'INT']);
 export async function pollLiveMatches(): Promise<void> {
   // Check if there are any matches in the DB that should be live right now
   const now = new Date().toISOString();
+  const threeHoursAgo = new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString();
 
-  const pendingResult = await db.execute(sql`
-    SELECT COUNT(*) as cnt FROM matches
-    WHERE status IN ('scheduled', 'live')
-    AND kickoff_utc <= ${now}
-    AND kickoff_utc >= ${new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString()}
-  `);
+  const pendingResult = await db.$client.execute({
+    sql: `SELECT COUNT(*) as cnt FROM matches
+          WHERE status IN ('scheduled', 'live')
+          AND kickoff_utc <= ?
+          AND kickoff_utc >= ?`,
+    args: [now, threeHoursAgo],
+  });
 
-  const pendingCount = (pendingResult.rows[0] as { cnt: number })?.cnt ?? 0;
+  const pendingCount = (pendingResult.rows[0] as unknown as { cnt: number })?.cnt ?? 0;
 
   if (pendingCount === 0) {
     // No active or recently-started matches — skip API call
@@ -54,24 +55,24 @@ export async function pollLiveMatches(): Promise<void> {
     const homeScore = fixture.goals.home ?? 0;
     const awayScore = fixture.goals.away ?? 0;
     const status = fixture.fixture.status.short;
-    const elapsed = fixture.fixture.elapsed;
+    const elapsed = fixture.fixture.status.elapsed;
     const apiFixtureId = fixture.fixture.id;
 
     // Map API-Football fixture ID to our match via api_fixture_id column
-    // (we'll add this column or match by team names as fallback)
-    const matchResult = await db.execute(sql`
-      SELECT id, status, home_score, away_score FROM matches
-      WHERE api_fixture_id = ${apiFixtureId}
-         OR (
-           status IN ('scheduled', 'live')
-           AND kickoff_utc <= ${now}
-         )
-      LIMIT 1
-    `);
+    const matchResult = await db.$client.execute({
+      sql: `SELECT id, status, home_score, away_score FROM matches
+            WHERE api_fixture_id = ?
+               OR (
+                 status IN ('scheduled', 'live')
+                 AND kickoff_utc <= ?
+               )
+            LIMIT 1`,
+      args: [apiFixtureId, now],
+    });
 
     if (matchResult.rows.length === 0) continue;
 
-    const match = matchResult.rows[0] as {
+    const match = matchResult.rows[0] as unknown as {
       id: number;
       status: string;
       home_score: number | null;
@@ -84,12 +85,11 @@ export async function pollLiveMatches(): Promise<void> {
       await finalizeMatch(match.id, homeScore, awayScore);
     } else if (LIVE_STATUSES.has(status)) {
       // Update live score without finalizing
-      await db.execute(sql`
-        UPDATE matches
-        SET status = 'live', home_score = ${homeScore}, away_score = ${awayScore}
-        WHERE id = ${match.id}
-      `);
-      console.log(`[poll-live] Updated match ${match.id} live score: ${homeScore}:${awayScore} (${elapsed}')`);
+      await db.$client.execute({
+        sql: `UPDATE matches SET status = 'live', home_score = ?, away_score = ? WHERE id = ?`,
+        args: [homeScore, awayScore, match.id],
+      });
+      console.log(`[poll-live] Updated match ${match.id} live score: ${homeScore}:${awayScore} (${elapsed ?? '?'}')`);
     }
   }
 }

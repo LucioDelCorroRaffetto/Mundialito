@@ -1,4 +1,3 @@
-import { eq, sql } from 'drizzle-orm';
 import { db } from '../db/client.js';
 
 // Inline score calculation to avoid cross-package path issues.
@@ -33,15 +32,16 @@ export async function finalizeMatch(
   console.log(`[finalize-match] Finalizing match ${matchId} — ${homeScore}:${awayScore}`);
 
   // 1. Update match status and scores
-  await db.execute(
-    sql`UPDATE matches SET status = 'finished', home_score = ${homeScore}, away_score = ${awayScore} WHERE id = ${matchId}`,
-  );
+  await db.$client.execute({
+    sql: `UPDATE matches SET status = 'finished', home_score = ?, away_score = ? WHERE id = ?`,
+    args: [homeScore, awayScore, matchId],
+  });
 
   // 2. Select all predictions for this match (across all leagues)
-  // db.execute() on the libSQL adapter returns a ResultSet; rows are row objects keyed by column name.
-  const result = await db.execute(
-    sql`SELECT id, home_score, away_score FROM predictions WHERE match_id = ${matchId}`,
-  );
+  const result = await db.$client.execute({
+    sql: `SELECT id, home_score, away_score FROM predictions WHERE match_id = ?`,
+    args: [matchId],
+  });
   const preds = result.rows as unknown as Array<{
     id: number;
     home_score: number;
@@ -61,9 +61,10 @@ export async function finalizeMatch(
       { homeScore, awayScore },
     );
 
-    await db.execute(
-      sql`UPDATE predictions SET points = ${points} WHERE id = ${pred.id}`,
-    );
+    await db.$client.execute({
+      sql: `UPDATE predictions SET points = ? WHERE id = ?`,
+      args: [points, pred.id],
+    });
     updated++;
   }
 

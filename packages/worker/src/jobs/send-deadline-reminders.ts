@@ -1,7 +1,6 @@
 // Sends push notifications to all subscribers ~30 min before each match's predictionLockUtc.
 // Runs every 5 minutes; queries matches where predictionLockUtc is between NOW and NOW+35min.
 
-import { sql } from 'drizzle-orm';
 import { db } from '../db/client.js';
 import { sendPushNotification } from '../lib/push-sender.js';
 
@@ -25,19 +24,22 @@ export async function sendDeadlineReminders(): Promise<void> {
   console.log(`[deadline-reminders] Checking matches locking between ${now} and ${windowEnd}...`);
 
   // 1. Query matches where predictionLockUtc is between NOW and NOW+35min AND status='scheduled'
-  const matchResult = await db.execute(sql`
-    SELECT
-      m.id,
-      ht.name AS home_team,
-      at.name AS away_team,
-      m.prediction_lock_utc
-    FROM matches m
-    JOIN teams ht ON ht.id = m.home_team_id
-    JOIN teams at ON at.id = m.away_team_id
-    WHERE m.prediction_lock_utc > ${now}
-      AND m.prediction_lock_utc <= ${windowEnd}
-      AND m.status = 'scheduled'
-  `);
+  const matchResult = await db.$client.execute({
+    sql: `
+      SELECT
+        m.id,
+        ht.name AS home_team,
+        at.name AS away_team,
+        m.prediction_lock_utc
+      FROM matches m
+      JOIN teams ht ON ht.id = m.home_team_id
+      JOIN teams at ON at.id = m.away_team_id
+      WHERE m.prediction_lock_utc > ?
+        AND m.prediction_lock_utc <= ?
+        AND m.status = 'scheduled'
+    `,
+    args: [now, windowEnd],
+  });
 
   const upcomingMatches = matchResult.rows as unknown as UpcomingMatch[];
 
@@ -49,9 +51,9 @@ export async function sendDeadlineReminders(): Promise<void> {
   console.log(`[deadline-reminders] ${upcomingMatches.length} match(es) closing soon`);
 
   // 2. Get all push subscriptions from DB
-  const subsResult = await db.execute(sql`
-    SELECT endpoint, p256dh, auth FROM push_subscriptions
-  `);
+  const subsResult = await db.$client.execute(
+    'SELECT endpoint, p256dh, auth FROM push_subscriptions'
+  );
 
   const subscriptions = subsResult.rows as unknown as PushSubscriptionRow[];
 
