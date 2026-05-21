@@ -7,13 +7,25 @@ import { AppError } from '../../../lib/errors.js';
 
 export const updateSquadSchema = z.object({
   playerIds: z.array(z.number().int().positive()).min(11).max(15),
-  starterIds: z.array(z.number().int().positive()).length(11),
-  captainId: z.number().int().positive(),
+  // starterIds and captainId are optional for backward-compat with old clients.
+  // If omitted the handler picks sensible defaults.
+  starterIds: z.array(z.number().int().positive()).length(11).optional(),
+  captainId: z.number().int().positive().optional(),
 });
 
 export async function updateSquadHandler(req: Request, res: Response) {
   const userId = req.user!.id;
-  const { playerIds, starterIds, captainId } = req.body as z.infer<typeof updateSquadSchema>;
+  const { playerIds } = req.body as z.infer<typeof updateSquadSchema>;
+  let { starterIds, captainId } = req.body as z.infer<typeof updateSquadSchema>;
+
+  // Default starterIds: first 11 of playerIds if not supplied.
+  if (!starterIds || starterIds.length === 0) {
+    starterIds = playerIds.slice(0, 11);
+  }
+  // Default captainId: first starter if not supplied.
+  if (!captainId) {
+    captainId = starterIds[0];
+  }
 
   // No duplicate player IDs.
   if (new Set(playerIds).size !== playerIds.length) {
