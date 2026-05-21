@@ -44,7 +44,7 @@ export function TeamFlag({ code, emoji, size = 24, className }: TeamFlagProps) {
       height={Math.round(size * 0.67)} // flags are roughly 3:2
       className={`inline-block object-cover rounded-sm shadow-sm ${className ?? ''}`}
       onError={() => setErrored(true)}
-      loading="lazy"
+      loading="eager"
     />
   );
 }

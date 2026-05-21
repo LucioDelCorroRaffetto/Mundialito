@@ -8,16 +8,17 @@ import { useMyLeagues } from '@/shared/hooks/use-leagues';
 import { useTeamMap } from '@/shared/hooks/use-teams';
 import { useMyPredictions } from '@/shared/hooks/use-predictions';
 import { usePwaInstall } from '@/shared/hooks/use-pwa-install';
-import type { Team } from '@/shared/types/api';
+import type { Match, Team } from '@/shared/types/api';
 import { Button } from '@/shared/components/ui/button';
 import { cn } from '@/shared/lib/cn';
 import { TeamFlag } from '@/shared/components/ui/team-flag';
 
+const WORLD_CUP_START = '2026-06-11T19:00:00Z';
+
 function useCountdown(targetUtc: string) {
-  const [diff, setDiff] = useState(0);
+  const [diff, setDiff] = useState(() => new Date(targetUtc).getTime() - Date.now());
   useEffect(() => {
     const update = () => setDiff(new Date(targetUtc).getTime() - Date.now());
-    update();
     const id = setInterval(update, 1000);
     return () => clearInterval(id);
   }, [targetUtc]);
@@ -26,33 +27,84 @@ function useCountdown(targetUtc: string) {
   const hours = Math.floor((total % 86400000) / 3600000);
   const mins = Math.floor((total % 3600000) / 60000);
   const secs = Math.floor((total % 60000) / 1000);
-  return { days, hours, mins, secs, started: diff <= 0 };
+  return { days, hours, mins, secs, ended: diff <= 0 };
 }
 
-function CountdownHero() {
-  const { days, hours, mins, secs, started } = useCountdown('2026-06-11T19:00:00Z');
+function CountdownTiles({ targetUtc }: { targetUtc: string }) {
+  const { days, hours, mins, secs } = useCountdown(targetUtc);
+  return (
+    <div className="flex items-center justify-center gap-3">
+      {[{ value: days, label: 'd' }, { value: hours, label: 'h' }, { value: mins, label: 'm' }, { value: secs, label: 's' }].map(({ value, label }) => (
+        <div key={label} className="flex flex-col items-center gap-1">
+          <span className="text-2xl font-display font-bold text-accent tabular-nums w-12 text-center">
+            {String(value).padStart(2, '0')}
+          </span>
+          <span className="text-xs text-muted">{label}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function CountdownHero({
+  nextMatch,
+  teamMap,
+}: {
+  nextMatch: Match | null;
+  teamMap: Map<number, Team> | undefined;
+}) {
+  const tournamentStarted = Date.now() > new Date(WORLD_CUP_START).getTime();
+
+  // Before tournament: countdown to first match
+  if (!tournamentStarted) {
+    return (
+      <div className="bg-card border border-border rounded-xl p-4 mb-4">
+        <p className="text-sm font-semibold text-text mb-3">Primer partido del Mundial 2026 🌎</p>
+        <CountdownTiles targetUtc={WORLD_CUP_START} />
+      </div>
+    );
+  }
+
+  // Tournament started but no next match found
+  if (!nextMatch) {
+    return (
+      <div className="bg-card border border-border rounded-xl p-4 mb-4">
+        <p className="text-base font-bold text-accent text-center">¡El Mundial ya comenzó! 🏆</p>
+      </div>
+    );
+  }
+
+  const homeTeam = teamMap?.get(nextMatch.homeTeamId);
+  const awayTeam = teamMap?.get(nextMatch.awayTeamId);
+  const kickoffMs = new Date(nextMatch.kickoffUtc).getTime();
+  const isLive = Date.now() > kickoffMs;
+
   return (
     <div className="bg-card border border-border rounded-xl p-4 mb-4">
-      <p className="text-sm font-semibold text-text mb-3">Primer partido del Mundial 2026 🌎</p>
-      {started ? (
-        <p className="text-base font-bold text-accent text-center">¡El Mundial ya comenzó! 🏆</p>
+      {isLive ? (
+        <div className="flex items-center gap-2 mb-2 justify-center">
+          <span className="w-2 h-2 rounded-full bg-red-400 animate-pulse" />
+          <p className="text-xs font-bold text-red-400 uppercase tracking-wider">En juego</p>
+        </div>
       ) : (
-        <div className="flex items-center justify-center gap-3">
-          {[
-            { value: days, label: 'd' },
-            { value: hours, label: 'h' },
-            { value: mins, label: 'm' },
-            { value: secs, label: 's' },
-          ].map(({ value, label }) => (
-            <div key={label} className="flex flex-col items-center gap-1">
-              <span className="text-2xl font-display font-bold text-accent tabular-nums w-12 text-center">
-                {String(value).padStart(2, '0')}
-              </span>
-              <span className="text-xs text-muted">{label}</span>
-            </div>
-          ))}
+        <p className="text-sm font-semibold text-text mb-2 text-center">Próximo partido ⚽</p>
+      )}
+
+      {homeTeam && awayTeam && (
+        <div className="flex items-center justify-center gap-3 mb-3">
+          <div className="flex items-center gap-1.5">
+            <TeamFlag code={homeTeam.code} emoji={homeTeam.flag} size={24} />
+            <span className="text-sm font-bold text-text">{homeTeam.code}</span>
+          </div>
+          <span className="text-xs font-bold text-muted">vs</span>
+          <div className="flex items-center gap-1.5">
+            <span className="text-sm font-bold text-text">{awayTeam.code}</span>
+            <TeamFlag code={awayTeam.code} emoji={awayTeam.flag} size={24} />
+          </div>
         </div>
       )}
+
+      {!isLive && <CountdownTiles targetUtc={nextMatch.kickoffUtc} />}
     </div>
   );
 }
@@ -77,15 +129,17 @@ const PLACEHOLDER_TEAM: Team = {
 };
 
 export function HomePage() {
-  const { data: matchesResponse } = useMatches({ status: 'scheduled', limit: 5 });
+  const { data: matchesResponse } = useMatches({ status: 'scheduled', limit: 6 });
   const { data: teamMap } = useTeamMap();
   const { data: leaguesResponse } = useMyLeagues();
   const { data: myPredictionsData } = useMyPredictions();
   const { isInstallable, isInstalled, install } = usePwaInstall();
 
   const apiMatches = matchesResponse?.data ?? [];
+  // First match is used for the countdown; rest shown in the upcoming list
+  const nextMatch = apiMatches[0] ?? null;
   const upcoming = apiMatches.length > 0
-    ? apiMatches.slice(0, 5).map((m) => ({
+    ? apiMatches.slice(1, 6).map((m) => ({
         id: m.id,
         kickoffUtc: m.kickoffUtc,
         city: m.city,
@@ -134,7 +188,7 @@ export function HomePage() {
         {/* ── LEFT COLUMN ── */}
         <div className="flex flex-col gap-5">
           {/* Countdown */}
-          <CountdownHero />
+          <CountdownHero nextMatch={nextMatch} teamMap={teamMap} />
 
           {/* My Leagues header */}
           <div className="flex items-center justify-between">

@@ -49,6 +49,20 @@ export function useRegister() {
   });
 }
 
+export function useUpdateUsername() {
+  const storeLogin = useAuthStore((s) => s.login);
+  const token = useAuthStore((s) => s.token);
+  return useMutation({
+    mutationFn: async (username: string) => {
+      const { data } = await apiClient.patch<User>('/users/me', { username });
+      return data;
+    },
+    onSuccess: (data) => {
+      if (token) storeLogin(data, token);
+    },
+  });
+}
+
 export function useMe() {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   return useQuery({

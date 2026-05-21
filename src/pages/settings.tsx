@@ -1,9 +1,12 @@
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Moon, Sun, Zap, Type, Bell, BellOff } from 'lucide-react';
+import { ArrowLeft, Moon, Sun, Zap, Type, Bell, BellOff, Pencil, Check, X } from 'lucide-react';
 import { useThemeStore } from '@/theme/theme-store';
 import { useAuthStore } from '@/shared/stores/auth-store';
 import { accentList, type ThemeMode } from '@/theme/palettes';
 import { usePushNotifications } from '@/shared/hooks/use-push';
+import { useUpdateUsername } from '@/shared/hooks/use-auth';
+import { toast } from 'sonner';
 
 type FontScale = 1.0 | 1.15 | 1.3;
 import { cn } from '@/shared/lib/cn';
@@ -24,7 +27,11 @@ export function SettingsPage() {
   const navigate = useNavigate();
   const { mode, accent, fontScale, setMode, setAccent, setFontScale } = useThemeStore();
   const { logout } = useAuthStore();
-  const { isSubscribed, isLoading: pushLoading, subscribe } = usePushNotifications();
+  const user = useAuthStore((s) => s.user);
+  const { isSubscribed, isLoading: pushLoading, subscribe, unsubscribe } = usePushNotifications();
+  const updateUsername = useUpdateUsername();
+  const [editingUsername, setEditingUsername] = useState(false);
+  const [usernameInput, setUsernameInput] = useState('');
 
   return (
     <div className="flex flex-col min-h-full animate-fade-in">
@@ -36,8 +43,60 @@ export function SettingsPage() {
       </div>
 
       <div className="flex flex-col gap-6 px-4 pb-6">
+
+        {/* Username */}
         <section className="flex flex-col gap-3">
-          <p className="text-sm-s font-semibold text-text">Modo de color</p>
+          <p className="text-sm font-semibold text-text">Nombre de usuario</p>
+          {editingUsername ? (
+            <div className="flex items-center gap-2">
+              <input
+                value={usernameInput}
+                onChange={(e) => setUsernameInput(e.target.value)}
+                placeholder="ej: lucho_2026"
+                maxLength={30}
+                className="flex-1 px-3 py-2 rounded-lg border border-border bg-elevated text-text text-sm focus:outline-none focus:border-accent"
+                autoFocus
+              />
+              <button
+                onClick={async () => {
+                  try {
+                    await updateUsername.mutateAsync(usernameInput.trim());
+                    toast.success('¡Nombre actualizado!');
+                    setEditingUsername(false);
+                  } catch (e: unknown) {
+                    const err = e as { response?: { data?: { error?: { message?: string } } } };
+                    toast.error(err?.response?.data?.error?.message ?? 'No se pudo actualizar');
+                  }
+                }}
+                disabled={updateUsername.isPending || usernameInput.trim().length < 3}
+                className="p-2 rounded-lg bg-accent text-accent-on disabled:opacity-50"
+              >
+                <Check size={16} />
+              </button>
+              <button
+                onClick={() => setEditingUsername(false)}
+                className="p-2 rounded-lg bg-elevated border border-border text-muted"
+              >
+                <X size={16} />
+              </button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-3 p-3 rounded-lg bg-card border border-border">
+              <span className="flex-1 text-sm text-text font-semibold">@{user?.username ?? '—'}</span>
+              <button
+                onClick={() => { setUsernameInput(user?.username ?? ''); setEditingUsername(true); }}
+                className="flex items-center gap-1.5 text-xs text-accent font-semibold"
+              >
+                <Pencil size={13} />
+                Cambiar
+              </button>
+            </div>
+          )}
+          <p className="text-xs text-muted -mt-1">Solo letras, números y guión bajo. Mínimo 3 caracteres.</p>
+        </section>
+
+        <section className="flex flex-col gap-3">
+          <p className="text-sm font-semibold text-text">Modo de color</p>
           <div className="flex gap-2">
             {MODE_OPTIONS.map(({ value, label, Icon }) => (
               <button
@@ -98,35 +157,47 @@ export function SettingsPage() {
         </section>
 
         <section className="flex flex-col gap-3">
-          <p className="text-sm-s font-semibold text-text">Notificaciones</p>
+          <p className="text-sm font-semibold text-text">Notificaciones</p>
           <button
-            onClick={subscribe}
-            disabled={isSubscribed || pushLoading || !('serviceWorker' in navigator)}
+            onClick={isSubscribed ? unsubscribe : subscribe}
+            disabled={pushLoading || !('serviceWorker' in navigator) || !('PushManager' in window)}
             className={cn(
               'flex items-center gap-3 p-4 rounded-lg border transition-colors text-left',
               isSubscribed
-                ? 'bg-accent-soft border-accent-border cursor-default'
+                ? 'bg-accent-soft border-accent'
                 : 'bg-card border-border hover:border-accent-border'
             )}
           >
             <div className="w-9 h-9 rounded-md bg-elevated flex items-center justify-center flex-shrink-0">
-              {isSubscribed ? (
+              {pushLoading ? (
+                <span className="w-4 h-4 border-2 border-accent border-t-transparent rounded-full animate-spin" />
+              ) : isSubscribed ? (
                 <Bell size={18} className="text-accent" />
               ) : (
                 <BellOff size={18} className="text-muted" />
               )}
             </div>
             <div className="flex-1">
-              <p className={cn('text-base-s font-semibold', isSubscribed ? 'text-accent' : 'text-text')}>
+              <p className={cn('text-sm font-semibold', isSubscribed ? 'text-accent' : 'text-text')}>
                 {isSubscribed ? '¡Notificaciones activas!' : 'Activar notificaciones'}
               </p>
-              <p className="text-xs-s text-muted mt-0.5">
-                {isSubscribed
-                  ? 'Recibirás recordatorios antes de cada partido'
-                  : pushLoading
+              <p className="text-xs text-muted mt-0.5">
+                {pushLoading
                   ? 'Configurando...'
+                  : isSubscribed
+                  ? 'Tocá para desactivar'
                   : 'Te avisamos 30 min antes del cierre de pronósticos'}
               </p>
+            </div>
+            {/* Toggle visual */}
+            <div className={cn(
+              'w-11 h-6 rounded-full transition-colors flex-shrink-0',
+              isSubscribed ? 'bg-accent' : 'bg-elevated border border-border'
+            )}>
+              <div className={cn(
+                'w-5 h-5 rounded-full bg-white shadow-sm mt-0.5 transition-transform',
+                isSubscribed ? 'translate-x-5.5' : 'translate-x-0.5'
+              )} />
             </div>
           </button>
         </section>

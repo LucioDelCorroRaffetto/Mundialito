@@ -7,6 +7,8 @@ import { ArrowLeft, Globe, Lock } from 'lucide-react';
 import { Button } from '@/shared/components/ui/button';
 import { Input } from '@/shared/components/ui/input';
 import { cn } from '@/shared/lib/cn';
+import { useCreateLeague } from '@/shared/hooks/use-leagues';
+import { toast } from 'sonner';
 
 const schema = z.object({
   name: z.string().min(3, 'Mínimo 3 caracteres').max(60, 'Máximo 60 caracteres'),
@@ -17,16 +19,20 @@ type FormValues = z.infer<typeof schema>;
 export function LeagueCreatePage() {
   const navigate = useNavigate();
   const [isPublic, setIsPublic] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const createLeague = useCreateLeague();
 
   const { register, handleSubmit, formState: { errors } } = useForm<FormValues>({
     resolver: zodResolver(schema),
   });
 
-  const onSubmit = async (_data: FormValues) => {
-    setLoading(true);
-    await new Promise((r) => setTimeout(r, 700));
-    navigate('/leagues/1', { replace: true });
+  const onSubmit = async (data: FormValues) => {
+    try {
+      const league = await createLeague.mutateAsync({ name: data.name, isPublic });
+      toast.success('¡Liga creada!');
+      navigate(`/leagues/${league.id}`, { replace: true });
+    } catch {
+      toast.error('No se pudo crear la liga');
+    }
   };
 
   return (
@@ -35,7 +41,7 @@ export function LeagueCreatePage() {
         <button onClick={() => navigate(-1)} className="p-2 rounded-md bg-elevated border border-border" aria-label="Volver">
           <ArrowLeft size={18} className="text-text" />
         </button>
-        <h1 className="text-xl-s font-display font-bold text-text">Crear liga</h1>
+        <h1 className="text-xl font-display font-bold text-text">Crear liga</h1>
       </div>
 
       <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-6 px-4">
@@ -47,7 +53,7 @@ export function LeagueCreatePage() {
         />
 
         <div className="flex flex-col gap-2">
-          <p className="text-sm-s font-semibold text-text">Visibilidad</p>
+          <p className="text-sm font-semibold text-text">Visibilidad</p>
           <div className="flex gap-3">
             {[
               { value: false, label: 'Privada', Icon: Lock, desc: 'Solo con código o invitación' },
@@ -63,15 +69,15 @@ export function LeagueCreatePage() {
                 )}
               >
                 <Icon size={20} />
-                <span className="text-sm-s font-semibold">{label}</span>
-                <span className="text-xs-s text-center leading-tight">{desc}</span>
+                <span className="text-sm font-semibold">{label}</span>
+                <span className="text-xs text-center leading-tight">{desc}</span>
               </button>
             ))}
           </div>
         </div>
 
         <div className="p-4 rounded-lg bg-elevated border border-border">
-          <p className="text-sm-s font-semibold text-text mb-1">¿Cómo funciona?</p>
+          <p className="text-sm font-semibold text-text mb-1">¿Cómo funciona?</p>
           <ul className="flex flex-col gap-1">
             {[
               'Invitá amigos con el código de liga',
@@ -81,13 +87,15 @@ export function LeagueCreatePage() {
             ].map((item) => (
               <li key={item} className="flex items-start gap-2">
                 <span className="text-accent mt-0.5">•</span>
-                <span className="text-sm-s text-muted">{item}</span>
+                <span className="text-sm text-muted">{item}</span>
               </li>
             ))}
           </ul>
         </div>
 
-        <Button type="submit" size="lg" fullWidth loading={loading}>Crear liga</Button>
+        <Button type="submit" size="lg" fullWidth loading={createLeague.isPending}>
+          Crear liga
+        </Button>
       </form>
     </div>
   );
