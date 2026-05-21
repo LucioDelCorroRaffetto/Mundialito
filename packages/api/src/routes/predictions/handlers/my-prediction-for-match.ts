@@ -7,8 +7,7 @@ import { NotFoundError } from '../../../lib/errors.js';
 export async function myPredictionForMatchHandler(req: Request, res: Response) {
   const userId = req.user!.id;
   const matchId = Number(req.params.matchId);
-  const leagueId = Number(req.query.leagueId);
-  if (!Number.isInteger(matchId) || !Number.isInteger(leagueId)) {
+  if (!Number.isInteger(matchId) || matchId <= 0) {
     throw new NotFoundError('Prediction');
   }
 
@@ -19,7 +18,6 @@ export async function myPredictionForMatchHandler(req: Request, res: Response) {
       and(
         eq(predictions.userId, userId),
         eq(predictions.matchId, matchId),
-        eq(predictions.leagueId, leagueId)
       )
     )
     .get();

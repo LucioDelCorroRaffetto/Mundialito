@@ -2,7 +2,7 @@ import { Request, Response } from 'express';
 import { db } from '../../../db/index.js';
 import { predictions, leagueMembers, users, matches } from '../../../db/schema/index.js';
 import { NotFoundError, AppError } from '../../../lib/errors.js';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import { calculatePoints } from '../../../lib/scoring.js';
 
 export async function standingsHandler(req: Request, res: Response) {
@@ -14,14 +14,20 @@ export async function standingsHandler(req: Request, res: Response) {
     .where(and(eq(leagueMembers.leagueId, id), eq(leagueMembers.userId, userId))).get();
   if (!membership) throw new AppError('FORBIDDEN', 'Not a member of this league', 403);
 
-  // Traer miembros
+  // Get all members of this league
   const members = await db
     .select({ userId: leagueMembers.userId, username: users.username, avatarUrl: users.avatarUrl })
     .from(leagueMembers)
     .innerJoin(users, eq(leagueMembers.userId, users.id))
     .where(eq(leagueMembers.leagueId, id));
 
-  // Traer predictions de la liga + match (para calcular puntos en vivo si no están persistidos)
+  const memberIds = members.map((m) => m.userId);
+
+  if (memberIds.length === 0) {
+    return res.json({ data: [], meta: { total: 0 } });
+  }
+
+  // Global predictions: get all predictions from league members (not filtered by leagueId on predictions)
   const preds = await db
     .select({
       userId: predictions.userId,
@@ -34,9 +40,9 @@ export async function standingsHandler(req: Request, res: Response) {
     })
     .from(predictions)
     .innerJoin(matches, eq(predictions.matchId, matches.id))
-    .where(eq(predictions.leagueId, id));
+    .where(inArray(predictions.userId, memberIds));
 
-  // Sumar puntos por user
+  // Sum points per user
   const pointsByUser = new Map<number, { total: number; matches: number }>();
   for (const p of preds) {
     const current = pointsByUser.get(p.userId) ?? { total: 0, matches: 0 };
@@ -54,7 +60,7 @@ export async function standingsHandler(req: Request, res: Response) {
     pointsByUser.set(p.userId, current);
   }
 
-  // Construir standings ordenados
+  // Build sorted standings
   const standings = members
     .map((m) => ({
       userId: m.userId,
@@ -65,7 +71,7 @@ export async function standingsHandler(req: Request, res: Response) {
     }))
     .sort((a, b) => b.points - a.points);
 
-  // Asignar posición (con empates compartiendo posición)
+  // Assign positions (ties share the same rank)
   let position = 0;
   let lastPoints = -1;
   const ranked = standings.map((row, idx) => {

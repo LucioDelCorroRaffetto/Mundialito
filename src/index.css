@@ -75,3 +75,12 @@ input, textarea, select, button {
 /* iOS safe area */
 .safe-bottom { padding-bottom: max(env(safe-area-inset-bottom), 12px); }
 .safe-top { padding-top: max(env(safe-area-inset-top), 12px); }
+
+/* Hide scrollbar while keeping scroll functionality */
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}

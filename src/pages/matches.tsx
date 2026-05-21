@@ -5,7 +5,6 @@ import { ChevronRight, Clock, CheckCircle2 } from 'lucide-react';
 import { useMatches } from '@/shared/hooks/use-matches';
 import { useTeams, useTeamMap } from '@/shared/hooks/use-teams';
 import { useMyPredictions } from '@/shared/hooks/use-predictions';
-import { useMyLeagues } from '@/shared/hooks/use-leagues';
 import { ROUND_LABELS } from '@/shared/data/mock';
 import type { Match, Team } from '@/shared/types/api';
 import { TeamFlag } from '@/shared/components/ui/team-flag';
@@ -67,12 +66,10 @@ export function MatchesPage() {
   const { data: teamMap } = useTeamMap();
   const { data: teamsData } = useTeams();
   const { data: myPredictionsData } = useMyPredictions();
-  const { data: myLeaguesData } = useMyLeagues();
   const matches = matchesResponse?.data ?? [];
   const teams = teamsData ?? [];
 
   const predictedIds = new Set((myPredictionsData?.data ?? []).map((p) => p.matchId));
-  const firstLeagueId = myLeaguesData?.data[0]?.id ?? null;
 
   if (isLoading) {
     return <div className="p-4 text-muted">Cargando partidos...</div>;
@@ -133,7 +130,7 @@ export function MatchesPage() {
       ) : (
         <>
           {/* Group filter chips */}
-          <div className="flex gap-1.5 px-4 pb-3 overflow-x-auto">
+          <div className="flex gap-1.5 px-4 pb-3 overflow-x-auto no-scrollbar">
             <button
               onClick={() => setGroupFilter(null)}
               className={cn(
@@ -162,7 +159,7 @@ export function MatchesPage() {
           </div>
 
           {/* Status filter tabs */}
-          <div className="flex gap-1 px-4 pb-4">
+          <div className="flex gap-1 px-4 pb-4 overflow-x-auto no-scrollbar">
             {STATUS_TABS.map((tab) => (
               <button
                 key={tab}
@@ -198,11 +195,7 @@ export function MatchesPage() {
                   return (
                     <Link
                       key={match.id}
-                      to={
-                        firstLeagueId
-                          ? `/matches/${match.id}?leagueId=${firstLeagueId}`
-                          : `/matches/${match.id}`
-                      }
+                      to={`/matches/${match.id}`}
                       className="flex items-center gap-3 p-3 rounded-lg bg-card border border-border hover:border-accent-border transition-colors"
                     >
                       <div className="flex-shrink-0">

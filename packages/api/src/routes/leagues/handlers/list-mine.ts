@@ -37,28 +37,24 @@ export async function listMineHandler(req: Request, res: Response) {
     memberCounts.map((r) => [r.leagueId, r.count])
   );
 
-  // My total points per league (sum of non-null prediction points)
-  const myPoints = await db
+  // Global predictions: total points are the same across all leagues
+  // (one prediction per match counts for every league the user is in)
+  const [globalPoints] = await db
     .select({
-      leagueId: predictions.leagueId,
       totalPoints: sql<number>`coalesce(sum(${predictions.points}), 0)`.as('total_points'),
       matchesPlayed: sql<number>`count(${predictions.points})`.as('matches_played'),
     })
     .from(predictions)
-    .where(
-      sql`${predictions.userId} = ${userId} AND ${predictions.leagueId} IN (${sql.join(leagueIds.map((id) => sql`${id}`), sql`, `)})`
-    )
-    .groupBy(predictions.leagueId);
+    .where(eq(predictions.userId, userId));
 
-  const myPointsMap = new Map<number, { totalPoints: number; matchesPlayed: number }>(
-    myPoints.map((r) => [r.leagueId, { totalPoints: r.totalPoints, matchesPlayed: r.matchesPlayed }])
-  );
+  const myTotal = globalPoints?.totalPoints ?? 0;
+  const myMatchesPlayed = globalPoints?.matchesPlayed ?? 0;
 
   const data = rows.map((r) => ({
     ...r.league,
     memberCount: memberCountMap.get(r.league.id) ?? 1,
-    myPoints: myPointsMap.get(r.league.id)?.totalPoints ?? 0,
-    myMatchesPlayed: myPointsMap.get(r.league.id)?.matchesPlayed ?? 0,
+    myPoints: myTotal,
+    myMatchesPlayed,
   }));
 
   return res.json({ data, meta: { total: data.length } });

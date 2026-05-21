@@ -18,6 +18,11 @@ import { useMyLeagues } from '@/shared/hooks/use-leagues';
 import { usePlayers } from '@/shared/hooks/use-players';
 import type { Team } from '@/shared/types/api';
 
+/** Short display label for a team — hides internal 'TBD' code */
+function teamDisplayCode(code: string): string {
+  return code === 'TBD' ? 'Por definir' : code;
+}
+
 function PointsPreview({ home, away, scorerCount }: { home: number; away: number; scorerCount: number }) {
   const { isDraw, ifExact, ifWinnerDiff } = getMaxPossiblePoints(home, away);
   const scorerPts = scorerCount * 2;
@@ -160,11 +165,6 @@ function ScoreInput({
   );
 }
 
-/** Short display label for a team — hides internal 'TBD' code */
-function teamDisplayCode(code: string): string {
-  return code === 'TBD' ? 'Por definir' : code;
-}
-
 function formatDate(utc: string) {
   const d = new Date(utc);
   return d.toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
@@ -257,8 +257,6 @@ export function MatchDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const leagueIdParam = searchParams.get('leagueId');
-  const leagueIdFromParams = leagueIdParam ? Number(leagueIdParam) : null;
 
   const matchId = id ? Number(id) : undefined;
 
@@ -267,12 +265,13 @@ export function MatchDetailPage() {
   const { data: myLeagues } = useMyLeagues();
   const { data: players } = usePlayers();
 
-  const [selectedLeagueId, setSelectedLeagueId] = useState<number | null>(leagueIdFromParams);
-  const leagueId = selectedLeagueId;
+  // leagueId is only used for viewing league predictions — not for saving
+  const leagueIdParam = searchParams.get('leagueId');
+  const [selectedLeagueId, setSelectedLeagueId] = useState<number | null>(
+    leagueIdParam ? Number(leagueIdParam) : null,
+  );
 
-  // Validate leagueId against user's actual leagues.
-  // If the URL param points to a league the user doesn't belong to,
-  // reset to their first league (or null if they have none).
+  // Validate selectedLeagueId against user's actual leagues
   useEffect(() => {
     const leagues = myLeagues?.data ?? [];
     if (leagues.length === 0) {
@@ -281,15 +280,12 @@ export function MatchDetailPage() {
     }
     const isValid = leagues.some((l) => l.id === selectedLeagueId);
     if (!isValid) {
-      // Auto-select their first league instead of using an invalid one
       setSelectedLeagueId(leagues[0].id);
     }
-  // Run when myLeagues loads — intentionally not depending on selectedLeagueId
-  // so we don't overwrite user's manual selection
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [myLeagues]);
 
-  const { data: existingPrediction } = useMyPredictionForMatch(matchId, leagueId ?? undefined);
+  const { data: existingPrediction } = useMyPredictionForMatch(matchId);
 
   const [homeScore, setHomeScore] = useState(0);
   const [awayScore, setAwayScore] = useState(0);
@@ -302,7 +298,7 @@ export function MatchDetailPage() {
   const upsertMutation = useUpsertPrediction();
   const { vibrate } = useHaptic();
 
-  // Initialize scores and saved state when existing prediction loads
+  // Initialize scores when existing prediction loads
   useEffect(() => {
     if (existingPrediction) {
       setHomeScore(existingPrediction.homeScore ?? 0);
@@ -313,7 +309,6 @@ export function MatchDetailPage() {
 
   const isLoading = matchLoading || teamsLoading;
 
-  // Once loading is done, if match not found navigate away
   useEffect(() => {
     if (!isLoading && matchId !== undefined && !match) {
       navigate('/matches', { replace: true });
@@ -333,11 +328,12 @@ export function MatchDetailPage() {
   const homeTeam = teamMap?.get(match.homeTeamId);
   const awayTeam = teamMap?.get(match.awayTeamId);
 
-  // Fallback team objects when teamMap is not yet available
   const homeTeamDisplay = homeTeam ?? { id: match.homeTeamId, name: String(match.homeTeamId), code: '?', flag: '🏳️', group: null, confederation: null };
   const awayTeamDisplay = awayTeam ?? { id: match.awayTeamId, name: String(match.awayTeamId), code: '?', flag: '🏳️', group: null, confederation: null };
 
   const playersList = players ?? [];
+  const myLeagueList = myLeagues?.data ?? [];
+  const hasLeague = myLeagueList.length > 0;
 
   const handleShare = async () => {
     setSharing(true);
@@ -375,40 +371,25 @@ export function MatchDetailPage() {
   };
 
   const handleSave = async () => {
-    if (!leagueId) {
-      setSaveError('Seleccioná una liga para guardar tu pronóstico.');
-      return;
-    }
     setSaveError(null);
     try {
-      await upsertMutation.mutateAsync({
-        matchId: match.id,
-        leagueId,
-        homeScore,
-        awayScore,
-      });
+      await upsertMutation.mutateAsync({ matchId: match.id, homeScore, awayScore });
       setSaved(true);
       vibrate(20);
     } catch (e: unknown) {
       const err = e as { response?: { data?: { error?: { message?: string } } } };
       const apiMsg = err?.response?.data?.error?.message ?? '';
-      // Translate known English API messages to Spanish
       const translated =
-        apiMsg.toLowerCase().includes('not a member')
-          ? 'No sos miembro de esa liga'
-          : apiMsg.toLowerCase().includes('locked') || apiMsg.toLowerCase().includes('started')
+        apiMsg.toLowerCase().includes('locked') || apiMsg.toLowerCase().includes('started')
           ? 'El pronóstico está cerrado para este partido'
           : apiMsg || 'Error al guardar pronóstico';
       setSaveError(translated);
     }
   };
 
-  const myLeagueList = myLeagues?.data ?? [];
-  const hasLeague = myLeagueList.length > 0;
-  const showLeaguePicker = hasLeague;
-
   return (
     <div className="flex flex-col min-h-full animate-fade-in">
+      {/* Header */}
       <div className="flex items-center gap-3 px-4 pt-5 pb-3">
         <button onClick={() => navigate(-1)} className="p-2 rounded-md bg-elevated border border-border" aria-label="Volver">
           <ArrowLeft size={18} className="text-text" />
@@ -421,6 +402,7 @@ export function MatchDetailPage() {
         </div>
       </div>
 
+      {/* Score card */}
       <div className="mx-4 p-5 rounded-xl bg-card border border-border shadow-card">
         {match.status !== 'scheduled' && match.homeScore !== null ? (
           // Live / finished: show actual score
@@ -451,29 +433,17 @@ export function MatchDetailPage() {
               <span className="text-xs-s text-muted mt-1">Resultado final</span>
             )}
           </div>
-        ) : hasLeague ? (
-          // Scheduled + in a league: show score input
+        ) : (
+          // Scheduled: always show score input (no league required to predict)
           <div className="flex items-center justify-around gap-4">
             <ScoreInput value={homeScore} onChange={updateHomeScore} team={homeTeamDisplay} />
             <span className="text-2xl-s font-display font-bold text-muted">vs</span>
             <ScoreInput value={awayScore} onChange={updateAwayScore} team={awayTeamDisplay} />
           </div>
-        ) : (
-          // Scheduled + no league: show teams without input
-          <div className="flex items-center justify-around gap-4">
-            <div className="flex flex-col items-center gap-2">
-              <TeamFlag code={homeTeamDisplay.code} emoji={homeTeamDisplay.flag} size={48} />
-              <span className="text-base-s font-bold text-text">{teamDisplayCode(homeTeamDisplay.code)}</span>
-            </div>
-            <span className="text-2xl-s font-display font-bold text-muted">vs</span>
-            <div className="flex flex-col items-center gap-2">
-              <TeamFlag code={awayTeamDisplay.code} emoji={awayTeamDisplay.flag} size={48} />
-              <span className="text-base-s font-bold text-text">{teamDisplayCode(awayTeamDisplay.code)}</span>
-            </div>
-          </div>
         )}
       </div>
 
+      {/* Match info */}
       <div className="mx-4 mt-3 p-4 rounded-lg bg-elevated border border-border flex flex-col gap-2">
         <div className="flex items-center gap-2">
           <Clock size={14} className="text-muted flex-shrink-0" />
@@ -485,65 +455,8 @@ export function MatchDetailPage() {
         </div>
       </div>
 
-      {/* ── No-league notice (Option B) ── */}
-      {!hasLeague && match.status === 'scheduled' && (
-        <div className="mx-4 mt-3 p-4 rounded-xl bg-elevated border border-border flex flex-col gap-3">
-          <div className="flex items-start gap-3">
-            <Users size={18} className="text-accent flex-shrink-0 mt-0.5" />
-            <div>
-              <p className="text-sm-s font-semibold text-text">
-                Necesitás una liga para pronosticar
-              </p>
-              <p className="text-xs-s text-muted mt-0.5">
-                Los pronósticos se hacen dentro de una liga. Creá la tuya o unite con un código.
-              </p>
-            </div>
-          </div>
-          <div className="flex gap-2">
-            <Link
-              to="/leagues/create"
-              className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg bg-accent text-accent-on text-xs-s font-semibold"
-            >
-              <Plus size={14} />
-              Crear liga
-            </Link>
-            <Link
-              to="/leagues/join"
-              className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg bg-elevated border border-border text-text text-xs-s font-semibold hover:border-accent-border transition-colors"
-            >
-              <Users size={14} />
-              Unirse
-            </Link>
-          </div>
-        </div>
-      )}
-
-      {/* ── League picker (when user has leagues) ── */}
-      {showLeaguePicker && (
-        <div className="mx-4 mt-3">
-          <p className="text-xs-s text-muted mb-2">Liga para el pronóstico</p>
-          <div className="flex gap-2 overflow-x-auto pb-1">
-            {myLeagueList.map((league) => (
-              <button
-                key={league.id}
-                type="button"
-                onClick={() => { setSelectedLeagueId(league.id); setSaved(false); setSaveError(null); }}
-                className={cn(
-                  'flex-shrink-0 px-3 py-1.5 rounded-full text-xs-s font-semibold border transition-colors',
-                  selectedLeagueId === league.id
-                    ? 'bg-accent text-accent-on border-accent'
-                    : 'bg-elevated border-border text-text hover:border-accent-border'
-                )}
-              >
-                {league.name}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* ── Scorer picker (only when user has a league and scored > 0) ── */}
-      {hasLeague && match.status === 'scheduled' && (homeScore + awayScore) > 0 && (
+      {/* Scorer picker — only when goals > 0 */}
+      {match.status === 'scheduled' && (homeScore + awayScore) > 0 && (
         <div className="mx-4 mt-3 p-4 rounded-lg bg-card border border-border">
           <p className="text-sm-s font-semibold text-text mb-3">⚽ Goleadores (opcional · +2 pts c/u)</p>
           <div className="flex flex-col gap-3">
@@ -569,13 +482,13 @@ export function MatchDetailPage() {
         </div>
       )}
 
-      {/* ── Points preview (only with league) ── */}
-      {hasLeague && match.status === 'scheduled' && (
+      {/* Points preview */}
+      {match.status === 'scheduled' && (
         <PointsPreview home={homeScore} away={awayScore} scorerCount={homeScorers.length + awayScorers.length} />
       )}
 
-      {/* ── Save / saved state ── */}
-      {hasLeague && match.status === 'scheduled' ? (
+      {/* Save / saved state */}
+      {match.status === 'scheduled' ? (
         <div className="px-4 mt-4">
           {saved ? (
             <>
@@ -600,13 +513,38 @@ export function MatchDetailPage() {
             </>
           ) : (
             <>
-              <Button fullWidth size="lg" onClick={handleSave} loading={upsertMutation.isPending} disabled={!leagueId}>
+              <Button fullWidth size="lg" onClick={handleSave} loading={upsertMutation.isPending}>
                 {existingPrediction ? 'Actualizar pronóstico' : 'Guardar pronóstico'}
               </Button>
               {saveError && (
                 <p className="text-xs-s text-red-400 mt-2 text-center">{saveError}</p>
               )}
             </>
+          )}
+
+          {/* Join league nudge — shown after saving if user has no league */}
+          {!hasLeague && (
+            <div className="mt-3 p-3 rounded-lg bg-elevated border border-border flex items-center gap-3">
+              <Users size={16} className="text-muted flex-shrink-0" />
+              <p className="text-xs-s text-muted flex-1">
+                Unite a una liga para competir con amigos
+              </p>
+              <div className="flex gap-2">
+                <Link
+                  to="/leagues/create"
+                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-accent text-accent-on text-xs-s font-semibold"
+                >
+                  <Plus size={12} />
+                  Crear
+                </Link>
+                <Link
+                  to="/leagues/join"
+                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-elevated border border-border text-text text-xs-s font-semibold"
+                >
+                  Unirse
+                </Link>
+              </div>
+            </div>
           )}
         </div>
       ) : existingPrediction && (
@@ -624,6 +562,31 @@ export function MatchDetailPage() {
         </div>
       )}
 
+      {/* League picker — only to view league-mates' predictions */}
+      {hasLeague && (
+        <div className="mx-4 mt-4">
+          <p className="text-xs-s text-muted mb-2">Ver pronósticos de tu liga</p>
+          <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
+            {myLeagueList.map((league) => (
+              <button
+                key={league.id}
+                type="button"
+                onClick={() => setSelectedLeagueId(selectedLeagueId === league.id ? null : league.id)}
+                className={cn(
+                  'flex-shrink-0 px-3 py-1.5 rounded-full text-xs-s font-semibold border transition-colors',
+                  selectedLeagueId === league.id
+                    ? 'bg-accent text-accent-on border-accent'
+                    : 'bg-elevated border-border text-text hover:border-accent-border'
+                )}
+              >
+                {league.name}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Scoring reference */}
       <div className="mx-4 mt-4 p-4 rounded-lg bg-elevated border border-border">
         <p className="text-sm-s font-semibold text-text mb-2">Sistema de puntuación</p>
         <div className="flex flex-col gap-1.5">
@@ -642,10 +605,10 @@ export function MatchDetailPage() {
         </div>
       </div>
 
-      {leagueId && (
+      {selectedLeagueId && (
         <LeaguePredictionsSection
           matchId={match.id}
-          leagueId={leagueId}
+          leagueId={selectedLeagueId}
         />
       )}
 

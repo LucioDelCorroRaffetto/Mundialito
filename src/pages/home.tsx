@@ -171,7 +171,6 @@ export function HomePage() {
     (m) => m.status !== 'finished' && !predictedIds.has(m.id)
   ).length;
 
-  const firstLeagueId = apiLeagues[0]?.id ?? null;
   const hasLeagues = apiLeagues.length > 0;
 
   return (
@@ -306,7 +305,7 @@ export function HomePage() {
 
           {/* Upcoming matches — mobile only (shown in right column on desktop) */}
           <div className="md:hidden">
-            <UpcomingMatchesSection upcoming={upcoming} firstLeagueId={firstLeagueId} />
+            <UpcomingMatchesSection upcoming={upcoming} />
           </div>
 
           {/* Tournament shortcut — mobile only */}
@@ -318,7 +317,7 @@ export function HomePage() {
         {/* ── RIGHT COLUMN (desktop only) ── */}
         <div className="hidden md:flex flex-col gap-5">
           <TournamentShortcut />
-          <UpcomingMatchesSection upcoming={upcoming} firstLeagueId={firstLeagueId} />
+          <UpcomingMatchesSection upcoming={upcoming} />
         </div>
       </div>
     </div>
@@ -351,10 +350,8 @@ interface UpcomingMatch {
 
 function UpcomingMatchesSection({
   upcoming,
-  firstLeagueId,
 }: {
   upcoming: UpcomingMatch[];
-  firstLeagueId: number | null;
 }) {
   return (
     <div>
@@ -366,7 +363,7 @@ function UpcomingMatchesSection({
         {upcoming.map((match) => (
           <Link
             key={match.id}
-            to={firstLeagueId ? `/matches/${match.id}?leagueId=${firstLeagueId}` : `/matches/${match.id}`}
+            to={`/matches/${match.id}`}
             className="flex items-center gap-3 p-3 rounded-lg bg-card border border-border hover:border-accent-border transition-colors"
           >
             <div className="text-center min-w-0 flex-1">

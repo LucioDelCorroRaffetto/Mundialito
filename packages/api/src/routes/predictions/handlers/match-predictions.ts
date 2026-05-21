@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import { db } from '../../../db/index.js';
 import { predictions, leagueMembers, users, matches } from '../../../db/schema/index.js';
 import { NotFoundError, AppError } from '../../../lib/errors.js';
@@ -24,13 +24,26 @@ export async function matchPredictionsHandler(req: Request, res: Response) {
     throw new AppError('FORBIDDEN', 'Not a member of this league', 403);
   }
 
-  // Fetch match to determine status
+  // Fetch match to determine reveal status
   const match = await db.select().from(matches).where(eq(matches.id, matchId)).get();
   if (!match) throw new NotFoundError('Match');
 
   const isRevealed = match.status === 'live' || match.status === 'finished';
 
-  // Fetch all predictions for this match in the league, joined with user info
+  // Get all user IDs in this league
+  const memberRows = await db
+    .select({ userId: leagueMembers.userId })
+    .from(leagueMembers)
+    .where(eq(leagueMembers.leagueId, leagueId));
+
+  const memberIds = memberRows.map((r) => r.userId);
+
+  if (memberIds.length === 0) {
+    return res.json({ data: [], meta: { total: 0, matchStatus: match.status, revealed: isRevealed } });
+  }
+
+  // Fetch predictions for this match from all league members
+  // Global predictions: one per user per match, counted for all leagues
   const rows = await db
     .select({
       predictionId: predictions.id,
@@ -45,14 +58,14 @@ export async function matchPredictionsHandler(req: Request, res: Response) {
     })
     .from(predictions)
     .innerJoin(users, eq(predictions.userId, users.id))
-    .where(and(eq(predictions.matchId, matchId), eq(predictions.leagueId, leagueId)));
+    .where(and(eq(predictions.matchId, matchId), inArray(predictions.userId, memberIds)));
 
   const data = rows.map((row) => ({
     predictionId: row.predictionId,
     userId: row.userId,
     username: row.username,
     avatarUrl: row.avatarUrl,
-    // Hide scores if match hasn't started yet — reveal once live or finished
+    // Hide scores until match starts — reveal once live or finished
     homeScore: isRevealed ? row.homeScore : null,
     awayScore: isRevealed ? row.awayScore : null,
     points: isRevealed ? row.points : null,

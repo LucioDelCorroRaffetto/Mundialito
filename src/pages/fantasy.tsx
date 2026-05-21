@@ -143,7 +143,7 @@ export function FantasyPage() {
       <div className="px-4 pt-6 pb-2">
         <h1 className="text-2xl-s font-display font-bold text-text">Fantasy</h1>
         <p className="text-sm-s text-muted mt-1">
-          Elegí hasta {MAX_SQUAD} jugadores para tu equipo
+          Elegí entre 11 y {MAX_SQUAD} jugadores para tu equipo
         </p>
       </div>
 
@@ -169,7 +169,7 @@ export function FantasyPage() {
       ) : (
         <div className="mx-4 flex flex-col gap-1.5">
           <p className="text-xs-s font-semibold text-muted uppercase tracking-wide">Liga</p>
-          <div className="flex gap-2 overflow-x-auto pb-0.5">
+          <div className="flex gap-2 overflow-x-auto pb-0.5 no-scrollbar">
             {myLeagues.map((l) => (
               <button
                 key={l.id}
@@ -199,7 +199,7 @@ export function FantasyPage() {
       )}
 
       {/* Position filter */}
-      <div className="flex gap-2 px-4 overflow-x-auto pb-1">
+      <div className="flex gap-2 px-4 overflow-x-auto pb-1 no-scrollbar">
         {POSITIONS.map((pos) => (
           <button
             key={pos}

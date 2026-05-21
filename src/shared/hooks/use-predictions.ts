@@ -19,31 +19,29 @@ export interface LeagueMatchPredictionsResponse {
   meta: { total: number; matchStatus: string; revealed: boolean };
 }
 
-export function useMyPredictions(leagueId?: number) {
+/** All my predictions (global — one per match) */
+export function useMyPredictions() {
   return useQuery({
-    queryKey: ['predictions', 'mine', leagueId],
+    queryKey: ['predictions', 'mine'],
     queryFn: async () => {
-      const { data } = await apiClient.get<ApiList<Prediction>>('/predictions/mine', {
-        params: leagueId ? { leagueId } : undefined,
-      });
+      const { data } = await apiClient.get<ApiList<Prediction>>('/predictions/mine');
       return data;
     },
   });
 }
 
-export function useMyPredictionForMatch(matchId: number | undefined, leagueId: number | undefined) {
+/** My prediction for a specific match (global — no leagueId needed) */
+export function useMyPredictionForMatch(matchId: number | undefined) {
   return useQuery({
-    queryKey: ['prediction', matchId, leagueId],
+    queryKey: ['prediction', matchId],
     queryFn: async () => {
-      const { data } = await apiClient.get<Prediction>(`/predictions/match/${matchId}/mine`, {
-        params: { leagueId },
-      });
+      const { data } = await apiClient.get<Prediction>(`/predictions/match/${matchId}/mine`);
       return data;
     },
-    enabled: matchId !== undefined && leagueId !== undefined,
-    retry: (failureCount, error: any) => {
-      // No retry en 404 (no hay predicción todavía)
-      if (error?.response?.status === 404) return false;
+    enabled: matchId !== undefined,
+    retry: (failureCount, error: unknown) => {
+      // No retry on 404 — prediction doesn't exist yet
+      if ((error as { response?: { status?: number } })?.response?.status === 404) return false;
       return failureCount < 1;
     },
   });
@@ -51,7 +49,6 @@ export function useMyPredictionForMatch(matchId: number | undefined, leagueId: n
 
 export interface UpsertPredictionInput {
   matchId: number;
-  leagueId: number;
   homeScore: number;
   awayScore: number;
 }
@@ -64,12 +61,13 @@ export function useUpsertPrediction() {
       return data;
     },
     onSuccess: (data) => {
-      qc.invalidateQueries({ queryKey: ['predictions', 'mine', data.leagueId] });
-      qc.invalidateQueries({ queryKey: ['prediction', data.matchId, data.leagueId] });
+      qc.invalidateQueries({ queryKey: ['predictions', 'mine'] });
+      qc.invalidateQueries({ queryKey: ['prediction', data.matchId] });
     },
   });
 }
 
+/** Predictions for a match from all members of a given league */
 export function useLeagueMatchPredictions(matchId: number | undefined, leagueId: number | null | undefined) {
   return useQuery({
     queryKey: ['predictions', 'league-match', matchId, leagueId],
