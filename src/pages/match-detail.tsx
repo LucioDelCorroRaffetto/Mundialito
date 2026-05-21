@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Clock, MapPin, CheckCircle2, Share2, Users, Plus } from 'lucide-react';
+import { ArrowLeft, Clock, MapPin, CheckCircle2, Share2, Users, Plus, Minus } from 'lucide-react';
 import { ROUND_LABELS } from '@/shared/data/mock';
 import { getMaxPossiblePoints } from '@/shared/lib/scoring';
 import { Button } from '@/shared/components/ui/button';
@@ -154,22 +154,25 @@ function ScoreInput({
   team: { code: string; flag: string; name: string };
 }) {
   return (
-    <div className="flex flex-col items-center gap-2">
+    <div className="flex flex-col items-center gap-3 flex-1">
       <TeamFlag code={team.code} emoji={team.flag} size={48} />
-      <span className="text-base-s font-bold text-text">{teamDisplayCode(team.code)}</span>
+      <span className="text-sm font-bold text-text tracking-wide">{teamDisplayCode(team.code)}</span>
       <div className="flex items-center gap-2">
         <button
           onClick={() => onChange(Math.max(0, value - 1))}
-          className="w-9 h-9 rounded-full bg-elevated border border-border text-text text-lg font-bold hover:border-accent-border transition-colors"
+          disabled={value === 0}
+          className="w-9 h-9 rounded-xl bg-elevated border border-border flex items-center justify-center text-muted disabled:opacity-30 active:scale-95 transition-all hover:border-border/80"
         >
-          −
+          <Minus size={16} strokeWidth={2.5} />
         </button>
-        <span className="w-10 text-center text-3xl-s font-display font-bold text-accent">{value}</span>
+        <div className="w-14 h-14 rounded-2xl bg-accent/10 border-2 border-accent/30 flex items-center justify-center">
+          <span className="text-4xl font-display font-bold text-accent tabular-nums leading-none">{value}</span>
+        </div>
         <button
           onClick={() => onChange(value + 1)}
-          className="w-9 h-9 rounded-full bg-elevated border border-border text-text text-lg font-bold hover:border-accent-border transition-colors"
+          className="w-9 h-9 rounded-xl bg-accent flex items-center justify-center text-accent-on shadow-sm active:scale-95 transition-all"
         >
-          +
+          <Plus size={16} strokeWidth={2.5} />
         </button>
       </div>
     </div>
@@ -446,9 +449,9 @@ export function MatchDetailPage() {
           </div>
         ) : (
           // Scheduled: always show score input (no league required to predict)
-          <div className="flex items-center justify-around gap-4">
+          <div className="flex items-center justify-between gap-2">
             <ScoreInput value={homeScore} onChange={updateHomeScore} team={homeTeamDisplay} />
-            <span className="text-2xl-s font-display font-bold text-muted">vs</span>
+            <span className="text-xl font-display font-bold text-muted/50 flex-shrink-0 mb-6">vs</span>
             <ScoreInput value={awayScore} onChange={updateAwayScore} team={awayTeamDisplay} />
           </div>
         )}
