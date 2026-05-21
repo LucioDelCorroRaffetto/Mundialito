@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ChevronDown, Check } from 'lucide-react';
+import { ChevronDown, Check, Clock } from 'lucide-react';
 import { cn } from '@/shared/lib/cn';
 import { useTeams } from '@/shared/hooks/use-teams';
 import { usePlayers } from '@/shared/hooks/use-players';
@@ -130,6 +130,17 @@ export function FantasyPage() {
         <p className="text-sm-s text-muted mt-1">
           Elegí hasta {MAX_SQUAD} jugadores para tu equipo
         </p>
+      </div>
+
+      {/* Squads not ready banner */}
+      <div className="mx-4 flex items-start gap-3 p-4 rounded-xl bg-amber-500/10 border border-amber-500/30">
+        <Clock size={18} className="text-amber-500 flex-shrink-0 mt-0.5" />
+        <div>
+          <p className="text-sm-s font-semibold text-amber-500">Plantillas aún no confirmadas</p>
+          <p className="text-xs-s text-muted mt-0.5">
+            Los equipos fantasy estarán disponibles a partir del <span className="font-semibold text-text">2 de junio</span>, cuando FIFA publique los planteles oficiales de los 48 países.
+          </p>
+        </div>
       </div>
 
       {/* Position filter */}
