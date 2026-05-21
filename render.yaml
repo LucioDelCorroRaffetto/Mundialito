@@ -4,6 +4,7 @@ services:
     name: mundialito-api
     runtime: docker
     dockerfilePath: ./packages/api/Dockerfile
+    dockerContext: ./packages/api
     plan: free
     healthCheckPath: /health
     envVars:
