@@ -5,7 +5,8 @@ import { useThemeStore } from '@/theme/theme-store';
 import { useAuthStore } from '@/shared/stores/auth-store';
 import { accentList, type ThemeMode } from '@/theme/palettes';
 import { usePushNotifications } from '@/shared/hooks/use-push';
-import { useUpdateUsername } from '@/shared/hooks/use-auth';
+import { useUpdateUsername, useUpdateAvatar } from '@/shared/hooks/use-auth';
+import { AvatarPicker } from '@/shared/components/ui/image-picker';
 import { toast } from 'sonner';
 
 type FontScale = 1.0 | 1.15 | 1.3;
@@ -30,8 +31,18 @@ export function SettingsPage() {
   const user = useAuthStore((s) => s.user);
   const { isSubscribed, isLoading: pushLoading, subscribe, unsubscribe } = usePushNotifications();
   const updateUsername = useUpdateUsername();
+  const updateAvatar = useUpdateAvatar();
   const [editingUsername, setEditingUsername] = useState(false);
   const [usernameInput, setUsernameInput] = useState('');
+
+  const handleAvatarChange = async (newUrl: string | null) => {
+    try {
+      await updateAvatar.mutateAsync(newUrl);
+      toast.success(newUrl ? 'Foto actualizada' : 'Foto eliminada');
+    } catch {
+      toast.error('No se pudo guardar la foto');
+    }
+  };
 
   return (
     <div className="flex flex-col min-h-full animate-fade-in">
@@ -43,6 +54,27 @@ export function SettingsPage() {
       </div>
 
       <div className="flex flex-col gap-6 px-4 pb-6">
+
+        {/* Avatar */}
+        <section className="flex flex-col gap-3">
+          <p className="text-sm font-semibold text-text">Foto de perfil</p>
+          <div className="flex items-center gap-4">
+            <AvatarPicker
+              value={user?.avatarUrl ?? null}
+              onChange={handleAvatarChange}
+              size={80}
+              fallback={(user?.username?.[0] ?? '?').toUpperCase()}
+              disabled={updateAvatar.isPending}
+            />
+            <div className="flex-1">
+              <p className="text-sm text-text font-semibold">@{user?.username ?? '—'}</p>
+              <p className="text-xs text-muted mt-0.5">
+                Tocá la imagen para cambiarla.<br />
+                Se recorta automáticamente a 300 px.
+              </p>
+            </div>
+          </div>
+        </section>
 
         {/* Username */}
         <section className="flex flex-col gap-3">

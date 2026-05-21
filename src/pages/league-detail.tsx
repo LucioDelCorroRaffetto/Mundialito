@@ -6,7 +6,8 @@ import { toast } from 'sonner';
 import { cn } from '@/shared/lib/cn';
 import { ShareSheet } from '@/shared/components/share-sheet';
 import { SkeletonList } from '@/shared/components/skeleton';
-import { useLeague, useLeagueStandings, useLeaveLeague, type StandingRow } from '@/shared/hooks/use-leagues';
+import { LeagueBannerPicker } from '@/shared/components/ui/image-picker';
+import { useLeague, useLeagueStandings, useLeaveLeague, useUpdateLeague, type StandingRow } from '@/shared/hooks/use-leagues';
 import { useAuthStore } from '@/shared/stores/auth-store';
 
 const TABS = ['Tabla', 'Info'] as const;
@@ -61,6 +62,8 @@ export function LeagueDetailPage() {
   const { data: league, isLoading: leagueLoading, isError: leagueError } = useLeague(leagueId);
   const { data: standingsData, isLoading: standingsLoading } = useLeagueStandings(leagueId);
   const leaveMutation = useLeaveLeague();
+  const updateLeague = useUpdateLeague();
+  const isAdmin = league?.adminId === currentUser?.id;
   const standings = standingsData?.data ?? [];
 
   if (leagueError) {
@@ -93,6 +96,13 @@ export function LeagueDetailPage() {
 
   return (
     <div className="flex flex-col min-h-full animate-fade-in">
+      {/* Banner image (if set) */}
+      {league.imageUrl && (
+        <div className="w-full h-32 overflow-hidden flex-shrink-0">
+          <img src={league.imageUrl} alt="banner" className="w-full h-full object-cover" />
+        </div>
+      )}
+
       <div className="flex items-center gap-3 px-4 pt-5 pb-4">
         <button onClick={() => navigate(-1)} className="p-2 rounded-md bg-elevated border border-border" aria-label="Volver">
           <ArrowLeft size={18} className="text-text" />
@@ -159,6 +169,26 @@ export function LeagueDetailPage() {
 
       {tab === 'Info' && (
         <div className="mt-3 px-4 flex flex-col gap-4 pb-4">
+
+          {/* Image (admin can change it) */}
+          {isAdmin && (
+            <div className="flex flex-col gap-2">
+              <p className="text-sm-s font-semibold text-text">Imagen de la liga</p>
+              <LeagueBannerPicker
+                value={league.imageUrl ?? null}
+                onChange={async (newUrl) => {
+                  try {
+                    await updateLeague.mutateAsync({ id: leagueId, imageUrl: newUrl });
+                    toast.success(newUrl ? 'Imagen actualizada' : 'Imagen eliminada');
+                  } catch {
+                    toast.error('No se pudo guardar la imagen');
+                  }
+                }}
+                disabled={updateLeague.isPending}
+              />
+            </div>
+          )}
+
           <div className="p-4 rounded-lg bg-card border border-border flex flex-col gap-3">
             {[
               ['Nombre', league.name],

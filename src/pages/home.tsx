@@ -163,6 +163,7 @@ export function HomePage() {
     isPublic: l.isPublic,
     memberCount: l.memberCount ?? 0,
     myPoints: l.myPoints ?? 0,
+    imageUrl: l.imageUrl ?? null,
   }));
 
   const predictedIds = new Set((myPredictionsData?.data ?? []).map((p) => p.matchId));
@@ -246,8 +247,12 @@ export function HomePage() {
                     to={`/leagues/${league.id}`}
                     className="flex items-center gap-4 p-4 rounded-lg bg-card border border-border shadow-card hover:border-accent-border transition-colors"
                   >
-                    <div className="flex-shrink-0 w-10 h-10 rounded-md bg-accent-soft flex items-center justify-center">
-                      <Trophy size={20} className="text-accent" />
+                    <div className="flex-shrink-0 w-10 h-10 rounded-md bg-accent-soft flex items-center justify-center overflow-hidden">
+                      {league.imageUrl ? (
+                        <img src={league.imageUrl} alt={league.name} className="w-full h-full object-cover" />
+                      ) : (
+                        <Trophy size={20} className="text-accent" />
+                      )}
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">

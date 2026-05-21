@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { ArrowLeft, Globe, Lock } from 'lucide-react';
 import { Button } from '@/shared/components/ui/button';
 import { Input } from '@/shared/components/ui/input';
+import { LeagueBannerPicker } from '@/shared/components/ui/image-picker';
 import { cn } from '@/shared/lib/cn';
 import { useCreateLeague } from '@/shared/hooks/use-leagues';
 import { toast } from 'sonner';
@@ -19,6 +20,7 @@ type FormValues = z.infer<typeof schema>;
 export function LeagueCreatePage() {
   const navigate = useNavigate();
   const [isPublic, setIsPublic] = useState(false);
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
   const createLeague = useCreateLeague();
 
   const { register, handleSubmit, formState: { errors } } = useForm<FormValues>({
@@ -27,7 +29,7 @@ export function LeagueCreatePage() {
 
   const onSubmit = async (data: FormValues) => {
     try {
-      const league = await createLeague.mutateAsync({ name: data.name, isPublic });
+      const league = await createLeague.mutateAsync({ name: data.name, isPublic, imageUrl });
       toast.success('¡Liga creada!');
       navigate(`/leagues/${league.id}`, { replace: true });
     } catch {
@@ -45,6 +47,13 @@ export function LeagueCreatePage() {
       </div>
 
       <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-6 px-4">
+
+        {/* League banner image */}
+        <div className="flex flex-col gap-2">
+          <p className="text-sm font-semibold text-text">Imagen de la liga <span className="text-muted font-normal">(opcional)</span></p>
+          <LeagueBannerPicker value={imageUrl} onChange={setImageUrl} />
+        </div>
+
         <Input
           label="Nombre de la liga"
           placeholder="Ej: Asado de los pibes"

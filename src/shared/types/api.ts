@@ -51,6 +51,7 @@ export interface League {
   isPublic: boolean;
   adminId: number;
   stakesMeme: string | null;
+  imageUrl: string | null;
   createdAt: string;
   // Enriched fields returned by /leagues/mine
   memberCount?: number;

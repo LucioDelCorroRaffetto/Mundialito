@@ -83,11 +83,37 @@ export function useJoinLeague() {
 export function useCreateLeague() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (input: { name: string; isPublic: boolean; stakesMeme?: string | null }) => {
+    mutationFn: async (input: {
+      name: string;
+      isPublic: boolean;
+      stakesMeme?: string | null;
+      imageUrl?: string | null;
+    }) => {
       const { data } = await apiClient.post<League>('/leagues', input);
       return data;
     },
     onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['leagues', 'mine'] });
+    },
+  });
+}
+
+export function useUpdateLeague() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: {
+      id: number;
+      name?: string;
+      isPublic?: boolean;
+      stakesMeme?: string | null;
+      imageUrl?: string | null;
+    }) => {
+      const { id, ...body } = input;
+      const { data } = await apiClient.patch<League>(`/leagues/${id}`, body);
+      return data;
+    },
+    onSuccess: (_data, vars) => {
+      qc.invalidateQueries({ queryKey: ['league', vars.id] });
       qc.invalidateQueries({ queryKey: ['leagues', 'mine'] });
     },
   });

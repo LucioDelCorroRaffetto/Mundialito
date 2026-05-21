@@ -9,6 +9,7 @@ export const leagues = sqliteTable('leagues', {
   isPublic: integer('is_public', { mode: 'boolean' }).notNull().default(false),
   adminId: integer('admin_id').notNull().references(() => users.id),
   stakesMeme: text('stakes_meme'),            // 'El último paga las birras'
+  imageUrl: text('image_url'),               // optional league banner/logo (base64 or URL)
   createdAt: text('created_at').notNull().default(sql`(datetime('now'))`),
 });
 
