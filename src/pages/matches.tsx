@@ -159,16 +159,16 @@ export function MatchesPage() {
           </div>
 
           {/* Status filter tabs */}
-          <div className="flex gap-1 px-4 pb-4 overflow-x-auto no-scrollbar">
+          <div className="flex gap-1.5 px-4 pb-4 overflow-x-auto no-scrollbar">
             {STATUS_TABS.map((tab) => (
               <button
                 key={tab}
                 onClick={() => setStatusFilter(tab)}
                 className={cn(
-                  'flex-1 py-1.5 rounded-md text-xs-s font-semibold transition-colors',
+                  'flex-shrink-0 px-3 py-1.5 rounded-full text-xs-s font-semibold whitespace-nowrap transition-colors border',
                   statusFilter === tab
-                    ? 'bg-elevated border border-accent text-accent'
-                    : 'bg-card border border-border text-muted hover:text-text',
+                    ? 'bg-accent text-accent-on border-accent'
+                    : 'bg-card border-border text-muted hover:text-text',
                 )}
               >
                 {tab}

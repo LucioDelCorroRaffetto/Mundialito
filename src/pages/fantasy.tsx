@@ -529,12 +529,12 @@ export function FantasyPage() {
         <motion.div
           initial={{ y: 80 }}
           animate={{ y: 0 }}
-          className="fixed bottom-20 left-4 right-4"
+          className="fixed bottom-20 left-0 right-0 flex justify-center px-4 pointer-events-none"
         >
           <button
             onClick={handleSave}
             disabled={updateSquad.isPending}
-            className="w-full py-4 rounded-xl bg-accent text-accent-on font-bold text-base-s shadow-lg disabled:opacity-60"
+            className="pointer-events-auto w-full max-w-md py-4 rounded-xl bg-accent text-accent-on font-bold text-base-s shadow-lg disabled:opacity-60"
           >
             {updateSquad.isPending
               ? 'Guardando...'
