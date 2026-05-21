@@ -7,6 +7,7 @@ import { getMaxPossiblePoints } from '@/shared/lib/scoring';
 import { Button } from '@/shared/components/ui/button';
 import { cn } from '@/shared/lib/cn';
 import { sharePredictionCard } from '@/shared/lib/generate-prediction-card';
+import { TeamFlag } from '@/shared/components/ui/team-flag';
 import { useAuthStore } from '@/shared/stores/auth-store';
 import { useUpsertPrediction, useLeagueMatchPredictions, useMyPredictionForMatch } from '@/shared/hooks/use-predictions';
 import type { LeagueMemberPrediction } from '@/shared/hooks/use-predictions';
@@ -69,7 +70,7 @@ function ScorerPicker({
   return (
     <div>
       <div className="flex items-center gap-2 mb-2">
-        <span className="text-lg">{team.flag}</span>
+        <TeamFlag code={team.code} emoji={team.flag} size={24} />
         <span className="text-sm-s font-semibold text-text">{team.code}</span>
         <span className="text-xs-s text-muted ml-auto">
           {selected.length} / {maxGoals}
@@ -114,7 +115,7 @@ function ScoreInput({
 }) {
   return (
     <div className="flex flex-col items-center gap-2">
-      <span className="text-3xl-s">{team.flag}</span>
+      <TeamFlag code={team.code} emoji={team.flag} size={48} />
       <span className="text-base-s font-bold text-text">{team.code}</span>
       <div className="flex items-center gap-2">
         <button
@@ -374,7 +375,7 @@ export function MatchDetailPage() {
             )}
             <div className="flex items-center justify-around w-full gap-4">
               <div className="flex flex-col items-center gap-2">
-                <span className="text-3xl-s">{homeTeamDisplay.flag}</span>
+                <TeamFlag code={homeTeamDisplay.code} emoji={homeTeamDisplay.flag} size={48} />
                 <span className="text-base-s font-bold text-text">{homeTeamDisplay.code}</span>
               </div>
               <span className={cn(
@@ -384,7 +385,7 @@ export function MatchDetailPage() {
                 {match.homeScore} – {match.awayScore}
               </span>
               <div className="flex flex-col items-center gap-2">
-                <span className="text-3xl-s">{awayTeamDisplay.flag}</span>
+                <TeamFlag code={awayTeamDisplay.code} emoji={awayTeamDisplay.flag} size={48} />
                 <span className="text-base-s font-bold text-text">{awayTeamDisplay.code}</span>
               </div>
             </div>

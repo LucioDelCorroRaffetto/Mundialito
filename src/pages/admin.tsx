@@ -8,6 +8,7 @@ import { Button } from '@/shared/components/ui/button';
 import { Input } from '@/shared/components/ui/input';
 import { cn } from '@/shared/lib/cn';
 import type { Match, Team } from '@/shared/types/api';
+import { TeamFlag } from '@/shared/components/ui/team-flag';
 
 const PLACEHOLDER_TEAM: Team = {
   id: 0,
@@ -87,7 +88,7 @@ function MatchAdminRow({ match, teamMap }: { match: Match; teamMap: Map<number, 
       <div className="flex items-center justify-between gap-2">
         <div className="flex-1 min-w-0">
           <p className="text-sm font-bold text-text">
-            {homeTeam.flag} {homeTeam.name} <span className="text-muted font-normal">vs</span> {awayTeam.name} {awayTeam.flag}
+            <TeamFlag code={homeTeam.code} emoji={homeTeam.flag} size={16} /> {homeTeam.name} <span className="text-muted font-normal">vs</span> {awayTeam.name} <TeamFlag code={awayTeam.code} emoji={awayTeam.flag} size={16} />
           </p>
           <p className="text-xs text-muted mt-0.5">
             #{match.matchNumber} · {match.group ? `Grupo ${match.group}` : match.round.toUpperCase()} · {formatKickoff(match.kickoffUtc)}

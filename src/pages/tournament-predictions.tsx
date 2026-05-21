@@ -13,6 +13,7 @@ import {
 import { SkeletonList } from '@/shared/components/skeleton';
 import { toast } from 'sonner';
 import type { Player, Team } from '@/shared/types/api';
+import { TeamFlag } from '@/shared/components/ui/team-flag';
 
 interface LocalPicks {
   championTeamId: number | null;
@@ -55,7 +56,7 @@ function PickCard({
         </div>
         {team ? (
           <div className="flex items-center gap-2">
-            <span className="text-2xl-s">{team.flag}</span>
+            <TeamFlag code={team.code} emoji={team.flag} size={32} />
             <span className="text-sm-s font-semibold text-text">{team.name}</span>
             <button
               onClick={() => setOpenSection(isOpen ? null : sectionId)}
@@ -89,7 +90,7 @@ function PickCard({
                   : 'border-border bg-elevated'
               )}
             >
-              <span className="text-xl-s">{t.flag}</span>
+              <TeamFlag code={t.code} emoji={t.flag} size={32} />
               <span className="text-muted font-semibold">{t.code}</span>
             </button>
           ))}
@@ -175,7 +176,7 @@ function TopScorerCard({
         </div>
         {selectedPlayer ? (
           <div className="flex items-center gap-2">
-            {selectedTeam && <span className="text-xl-s">{selectedTeam.flag}</span>}
+            {selectedTeam && <TeamFlag code={selectedTeam.code} emoji={selectedTeam.flag} size={24} />}
             <div className="flex flex-col items-end">
               <span className="text-sm-s font-semibold text-text leading-tight">
                 {selectedPlayer.name}
@@ -241,7 +242,7 @@ function TopScorerCard({
               {grouped.map(({ team, players: teamPlayers }) => (
                 <div key={team.id}>
                   <div className="flex items-center gap-1.5 mb-1.5">
-                    <span className="text-base-s">{team.flag}</span>
+                    <TeamFlag code={team.code} emoji={team.flag} size={20} />
                     <span className="text-xs-s font-bold text-muted uppercase tracking-wide">
                       {team.name}
                     </span>

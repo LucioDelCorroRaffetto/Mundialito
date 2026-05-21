@@ -8,6 +8,7 @@ import { useMyPredictions } from '@/shared/hooks/use-predictions';
 import { useMyLeagues } from '@/shared/hooks/use-leagues';
 import { ROUND_LABELS } from '@/shared/data/mock';
 import type { Match, Team } from '@/shared/types/api';
+import { TeamFlag } from '@/shared/components/ui/team-flag';
 import { cn } from '@/shared/lib/cn';
 
 function formatDate(utc: string) {
@@ -141,7 +142,7 @@ export function MatchesPage() {
                       )}
                     </div>
                     <div className="flex items-center gap-2 mt-1">
-                      <span className="text-sm-s font-semibold text-text">{homeTeam.flag} {homeTeam.code}</span>
+                      <span className="flex items-center gap-1.5 text-sm-s font-semibold text-text"><TeamFlag code={homeTeam.code} emoji={homeTeam.flag} size={20} /> {homeTeam.code}</span>
                       {(match.status === 'live' || match.status === 'finished') && match.homeScore !== null ? (
                         <span className={cn(
                           'text-base-s font-display font-bold tabular-nums px-2',
@@ -152,7 +153,7 @@ export function MatchesPage() {
                       ) : (
                         <span className="text-xs-s font-bold text-muted">vs</span>
                       )}
-                      <span className="text-sm-s font-semibold text-text">{awayTeam.code} {awayTeam.flag}</span>
+                      <span className="flex items-center gap-1.5 text-sm-s font-semibold text-text">{awayTeam.code} <TeamFlag code={awayTeam.code} emoji={awayTeam.flag} size={20} /></span>
                     </div>
                     {prediction && (
                       <p className="text-xs-s text-accent font-semibold mt-0.5">

@@ -8,6 +8,7 @@ import { usePlayers } from '@/shared/hooks/use-players';
 import { useMyFantasyTeam, useUpdateFantasySquad } from '@/shared/hooks/use-fantasy';
 import { SkeletonList } from '@/shared/components/skeleton';
 import { toast } from 'sonner';
+import { TeamFlag } from '@/shared/components/ui/team-flag';
 import type { Player } from '@/shared/types/api';
 
 const POSITIONS = ['Todo', 'GK', 'DEF', 'MID', 'FWD'] as const;
@@ -209,7 +210,7 @@ export function FantasyPage() {
                   }
                   className="w-full flex items-center gap-3 p-4"
                 >
-                  <span className="text-2xl-s">{team.flag}</span>
+                  <TeamFlag code={team.code} emoji={team.flag} size={32} />
                   <span className="flex-1 text-left text-sm-s font-semibold text-text">
                     {team.name}
                   </span>

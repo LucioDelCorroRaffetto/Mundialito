@@ -24,9 +24,9 @@ export function AppShell() {
 
       {/* Main content area */}
       <div className="flex-1 flex flex-col min-w-0">
-        <main className="flex-1 pb-24 lg:pb-8 safe-top">
+        <main className="flex-1 pb-24 md:pb-8 safe-top">
           {/* Constrain content width on large screens */}
-          <div className="w-full max-w-3xl mx-auto lg:px-6 xl:px-8">
+          <div className="w-full max-w-3xl mx-auto md:px-6 xl:px-8">
             <Outlet />
           </div>
         </main>

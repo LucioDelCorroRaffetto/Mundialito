@@ -21,7 +21,7 @@ export function Sidebar() {
     ? [...baseNavItems, { to: '/admin', label: 'Admin', Icon: ShieldCheck }]
     : baseNavItems;
   return (
-    <aside className="hidden lg:flex flex-col w-56 xl:w-64 shrink-0 h-screen sticky top-0 border-r border-border bg-card">
+    <aside className="hidden md:flex flex-col w-56 xl:w-64 shrink-0 h-screen sticky top-0 border-r border-border bg-card">
       {/* Logo */}
       <div className="flex items-center gap-3 px-6 py-5 border-b border-border">
         <Logo size={32} />

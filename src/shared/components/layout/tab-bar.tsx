@@ -12,7 +12,7 @@ const tabs = [
 
 export function TabBar() {
   return (
-    <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-card/95 backdrop-blur-md border-t border-border safe-bottom">
+    <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-card/95 backdrop-blur-md border-t border-border safe-bottom">
       <ul className="flex items-stretch justify-around max-w-xl mx-auto">
         {tabs.map(({ to, label, Icon }) => (
           <li key={to} className="flex-1">
