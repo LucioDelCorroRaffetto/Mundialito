@@ -12,6 +12,32 @@ import { toast } from 'sonner';
 import { TeamFlag } from '@/shared/components/ui/team-flag';
 import type { Player } from '@/shared/types/api';
 
+const POSITION_COLORS: Record<string, string> = {
+  GK: 'bg-yellow-500/20 text-yellow-500',
+  DEF: 'bg-blue-500/20 text-blue-400',
+  MID: 'bg-green-500/20 text-green-500',
+  FWD: 'bg-red-500/20 text-red-400',
+};
+
+function PlayerAvatar({ photoUrl, name, position }: { photoUrl: string | null; name: string; position: string }) {
+  if (photoUrl) {
+    return (
+      <img
+        src={photoUrl}
+        alt={name}
+        className="w-8 h-8 rounded-full object-cover object-top flex-shrink-0 bg-elevated"
+        loading="lazy"
+      />
+    );
+  }
+  // Fallback: colored circle with initial
+  return (
+    <div className={cn('w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 text-xs font-bold', POSITION_COLORS[position] ?? 'bg-elevated text-muted')}>
+      {name.charAt(0).toUpperCase()}
+    </div>
+  );
+}
+
 const POSITIONS = ['Todo', 'GK', 'DEF', 'MID', 'FWD'] as const;
 type PositionFilter = typeof POSITIONS[number];
 type Position = 'GK' | 'DEF' | 'MID' | 'FWD';
@@ -334,15 +360,14 @@ export function FantasyPage() {
                                   )}
                                 </span>
 
-                                {/* Country flag */}
-                                <TeamFlag
-                                  code={team.code}
-                                  emoji={team.flag}
-                                  size={20}
-                                  className="flex-shrink-0"
+                                {/* Player photo */}
+                                <PlayerAvatar
+                                  photoUrl={player.photoUrl}
+                                  name={player.name}
+                                  position={player.position}
                                 />
 
-                                {/* Player info */}
+                                {/* Player name */}
                                 <span className="flex-1 text-sm-s font-medium text-text">
                                   {player.name}
                                 </span>
@@ -358,10 +383,7 @@ export function FantasyPage() {
                                 <span
                                   className={cn(
                                     'text-xs-s font-bold px-2 py-0.5 rounded-full',
-                                    player.position === 'GK' && 'bg-yellow-500/20 text-yellow-600',
-                                    player.position === 'DEF' && 'bg-blue-500/20 text-blue-500',
-                                    player.position === 'MID' && 'bg-green-500/20 text-green-600',
-                                    player.position === 'FWD' && 'bg-red-500/20 text-red-500'
+                                    POSITION_COLORS[player.position]
                                   )}
                                 >
                                   {player.position}

@@ -66,7 +66,7 @@ function ScorerPicker({
   maxGoals: number;
   selected: number[];
   onChange: (ids: number[]) => void;
-  players: { id: number; name: string; position: string; teamId: number }[];
+  players: { id: number; name: string; position: string; teamId: number; photoUrl: string | null }[];
 }) {
   const teamPlayers = players.filter((p) => p.teamId === team.id);
 
@@ -111,7 +111,7 @@ function ScorerPicker({
                         onClick={() => togglePlayer(p.id)}
                         disabled={isDisabled}
                         className={cn(
-                          'px-2.5 py-1 rounded-md text-xs-s font-medium border transition-colors',
+                          'flex items-center gap-1.5 pl-1 pr-2.5 py-1 rounded-md text-xs-s font-medium border transition-colors',
                           isSelected
                             ? 'bg-accent text-accent-on border-accent'
                             : isDisabled
@@ -119,6 +119,17 @@ function ScorerPicker({
                             : 'bg-elevated border-border text-text hover:border-accent-border'
                         )}
                       >
+                        {p.photoUrl ? (
+                          <img
+                            src={p.photoUrl}
+                            alt={p.name}
+                            className="w-5 h-5 rounded-full object-cover object-top flex-shrink-0"
+                          />
+                        ) : (
+                          <span className="w-5 h-5 rounded-full bg-current/20 flex items-center justify-center text-[9px] font-bold flex-shrink-0">
+                            {p.name.charAt(0)}
+                          </span>
+                        )}
                         {p.name}
                       </button>
                     );

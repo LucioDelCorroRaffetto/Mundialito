@@ -7,6 +7,7 @@ export const players = sqliteTable('players', {
   name: text('name').notNull(),
   position: text('position').notNull(), // 'GK' | 'DEF' | 'MID' | 'FWD'
   shirtNumber: integer('shirt_number'),
+  photoUrl: text('photo_url'),           // URL or base64 — optional player photo
 });
 
 export type Player = typeof players.$inferSelect;

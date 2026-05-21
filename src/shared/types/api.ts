@@ -66,6 +66,7 @@ export interface Player {
   teamId: number;
   nationality: string | null;
   shirtNumber: number | null;
+  photoUrl: string | null;
 }
 
 export interface ApiList<T> {
