@@ -79,17 +79,30 @@ const FIFA_TO_ISO2: Record<string, string> = {
   NZL: 'nz',
 };
 
+/**
+ * flagcdn.com only serves a fixed set of PNG widths.
+ * Requesting any other width (w24, w32, w48, w64...) returns 404.
+ */
+const FLAGCDN_WIDTHS = [20, 40, 80, 160, 320, 640, 1280] as const;
+
+/** Snaps an arbitrary pixel size to the smallest valid flagcdn width >= it. */
+function snapWidth(target: number): number {
+  for (const w of FLAGCDN_WIDTHS) {
+    if (w >= target) return w;
+  }
+  return FLAGCDN_WIDTHS[FLAGCDN_WIDTHS.length - 1];
+}
+
 /** Returns the flagcdn.com PNG URL for a FIFA country code. */
 export function getFlagUrl(fifaCode: string, size: 16 | 20 | 24 | 32 | 40 | 48 | 64 = 32): string | null {
   const iso2 = FIFA_TO_ISO2[fifaCode?.toUpperCase()];
   if (!iso2) return null;
-  return `https://flagcdn.com/w${size}/${iso2}.png`;
+  return `https://flagcdn.com/w${snapWidth(size)}/${iso2}.png`;
 }
 
 /** Returns a 2x (retina) flagcdn.com URL. */
 export function getFlagUrl2x(fifaCode: string, size: 16 | 20 | 24 | 32 | 40 | 48 | 64 = 32): string | null {
   const iso2 = FIFA_TO_ISO2[fifaCode?.toUpperCase()];
   if (!iso2) return null;
-  const size2x = (size * 2) as 32 | 40 | 48 | 64 | 80 | 96 | 128;
-  return `https://flagcdn.com/w${size2x}/${iso2}.png`;
+  return `https://flagcdn.com/w${snapWidth(size * 2)}/${iso2}.png`;
 }
