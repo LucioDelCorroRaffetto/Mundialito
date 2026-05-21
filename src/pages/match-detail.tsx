@@ -15,17 +15,14 @@ import { useHaptic } from '@/shared/hooks/use-haptic';
 import { useMatch } from '@/shared/hooks/use-matches';
 import { useTeamMap } from '@/shared/hooks/use-teams';
 import { useMyLeagues } from '@/shared/hooks/use-leagues';
-import { usePlayers } from '@/shared/hooks/use-players';
-import type { Team } from '@/shared/types/api';
 
 /** Short display label for a team — hides internal 'TBD' code */
 function teamDisplayCode(code: string): string {
   return code === 'TBD' ? 'Por definir' : code;
 }
 
-function PointsPreview({ home, away, scorerCount }: { home: number; away: number; scorerCount: number }) {
+function PointsPreview({ home, away }: { home: number; away: number }) {
   const { isDraw, ifExact, ifWinnerDiff } = getMaxPossiblePoints(home, away);
-  const scorerPts = scorerCount * 2;
   return (
     <div className="mx-4 mt-3 p-4 rounded-lg bg-elevated border border-border">
       <p className="text-sm-s font-semibold text-text mb-2">
@@ -40,106 +37,7 @@ function PointsPreview({ home, away, scorerCount }: { home: number; away: number
           <span className="text-sm-s text-muted">{isDraw ? 'Empate acertado' : 'Resultado correcto'}</span>
           <span className="text-sm-s font-bold text-accent">+{ifWinnerDiff} pt{ifWinnerDiff !== 1 ? 's' : ''}</span>
         </div>
-        {scorerCount > 0 && (
-          <div className="flex items-center justify-between">
-            <span className="text-sm-s text-muted">Goleadores ({scorerCount})</span>
-            <span className="text-sm-s font-bold text-accent">+{scorerPts} pts</span>
-          </div>
-        )}
       </div>
-    </div>
-  );
-}
-
-const SCORER_POSITION_ORDER = ['FWD', 'MID', 'DEF', 'GK'] as const;
-const SCORER_POSITION_LABELS: Record<string, string> = {
-  FWD: 'Delanteros',
-  MID: 'Mediocampistas',
-  DEF: 'Defensores',
-  GK: 'Porteros',
-};
-
-function ScorerPicker({
-  team, maxGoals, selected, onChange, players,
-}: {
-  team: Team;
-  maxGoals: number;
-  selected: number[];
-  onChange: (ids: number[]) => void;
-  players: { id: number; name: string; position: string; teamId: number; photoUrl: string | null }[];
-}) {
-  const teamPlayers = players.filter((p) => p.teamId === team.id);
-
-  const togglePlayer = (id: number) => {
-    if (selected.includes(id)) {
-      onChange(selected.filter((s) => s !== id));
-    } else if (selected.length < maxGoals) {
-      onChange([...selected, id]);
-    }
-  };
-
-  return (
-    <div>
-      <div className="flex items-center gap-2 mb-3">
-        <TeamFlag code={team.code} emoji={team.flag} size={24} />
-        <span className="text-sm-s font-semibold text-text">{team.name}</span>
-        <span className="text-xs-s text-muted ml-auto">
-          {selected.length} / {maxGoals} goles
-        </span>
-      </div>
-
-      {teamPlayers.length === 0 ? (
-        <p className="text-xs-s text-muted italic">Sin jugadores cargados para este equipo.</p>
-      ) : (
-        <div className="flex flex-col gap-3">
-          {SCORER_POSITION_ORDER.map((pos) => {
-            const posPlayers = teamPlayers.filter((p) => p.position === pos);
-            if (posPlayers.length === 0) return null;
-            return (
-              <div key={pos}>
-                <p className="text-xs-s text-muted font-semibold mb-1.5 uppercase tracking-wide">
-                  {SCORER_POSITION_LABELS[pos]}
-                </p>
-                <div className="flex flex-wrap gap-1.5">
-                  {posPlayers.map((p) => {
-                    const isSelected = selected.includes(p.id);
-                    const isDisabled = !isSelected && selected.length >= maxGoals;
-                    return (
-                      <button
-                        key={p.id}
-                        type="button"
-                        onClick={() => togglePlayer(p.id)}
-                        disabled={isDisabled}
-                        className={cn(
-                          'flex items-center gap-1.5 pl-1 pr-2.5 py-1 rounded-md text-xs-s font-medium border transition-colors',
-                          isSelected
-                            ? 'bg-accent text-accent-on border-accent'
-                            : isDisabled
-                            ? 'bg-elevated border-border text-muted opacity-50 cursor-not-allowed'
-                            : 'bg-elevated border-border text-text hover:border-accent-border'
-                        )}
-                      >
-                        {p.photoUrl ? (
-                          <img
-                            src={p.photoUrl}
-                            alt={p.name}
-                            className="w-5 h-5 rounded-full object-cover object-top flex-shrink-0"
-                          />
-                        ) : (
-                          <span className="w-5 h-5 rounded-full bg-current/20 flex items-center justify-center text-[9px] font-bold flex-shrink-0">
-                            {p.name.charAt(0)}
-                          </span>
-                        )}
-                        {p.name}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
     </div>
   );
 }
@@ -277,7 +175,6 @@ export function MatchDetailPage() {
   const { data: match, isLoading: matchLoading } = useMatch(matchId);
   const { data: teamMap, isLoading: teamsLoading } = useTeamMap();
   const { data: myLeagues } = useMyLeagues();
-  const { data: players } = usePlayers();
 
   // leagueId is only used for viewing league predictions — not for saving
   const leagueIdParam = searchParams.get('leagueId');
@@ -303,8 +200,6 @@ export function MatchDetailPage() {
 
   const [homeScore, setHomeScore] = useState(0);
   const [awayScore, setAwayScore] = useState(0);
-  const [homeScorers, setHomeScorers] = useState<number[]>([]);
-  const [awayScorers, setAwayScorers] = useState<number[]>([]);
   const [saved, setSaved] = useState(false);
   const [sharing, setSharing] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -345,7 +240,6 @@ export function MatchDetailPage() {
   const homeTeamDisplay = homeTeam ?? { id: match.homeTeamId, name: String(match.homeTeamId), code: '?', flag: '🏳️', group: null, confederation: null };
   const awayTeamDisplay = awayTeam ?? { id: match.awayTeamId, name: String(match.awayTeamId), code: '?', flag: '🏳️', group: null, confederation: null };
 
-  const playersList = players ?? [];
   const myLeagueList = myLeagues?.data ?? [];
   const hasLeague = myLeagueList.length > 0;
 
@@ -374,13 +268,11 @@ export function MatchDetailPage() {
 
   const updateHomeScore = (v: number) => {
     setHomeScore(v);
-    if (homeScorers.length > v) setHomeScorers(homeScorers.slice(0, v));
     setSaved(false);
   };
 
   const updateAwayScore = (v: number) => {
     setAwayScore(v);
-    if (awayScorers.length > v) setAwayScorers(awayScorers.slice(0, v));
     setSaved(false);
   };
 
@@ -469,36 +361,9 @@ export function MatchDetailPage() {
         </div>
       </div>
 
-      {/* Scorer picker — only when goals > 0 */}
-      {match.status === 'scheduled' && (homeScore + awayScore) > 0 && (
-        <div className="mx-4 mt-3 p-4 rounded-lg bg-card border border-border">
-          <p className="text-sm-s font-semibold text-text mb-3">⚽ Goleadores (opcional · +2 pts c/u)</p>
-          <div className="flex flex-col gap-3">
-            {homeScore > 0 && homeTeam && (
-              <ScorerPicker
-                team={homeTeam}
-                maxGoals={homeScore}
-                selected={homeScorers}
-                onChange={(ids) => { setHomeScorers(ids); setSaved(false); }}
-                players={playersList}
-              />
-            )}
-            {awayScore > 0 && awayTeam && (
-              <ScorerPicker
-                team={awayTeam}
-                maxGoals={awayScore}
-                selected={awayScorers}
-                onChange={(ids) => { setAwayScorers(ids); setSaved(false); }}
-                players={playersList}
-              />
-            )}
-          </div>
-        </div>
-      )}
-
       {/* Points preview */}
       {match.status === 'scheduled' && (
-        <PointsPreview home={homeScore} away={awayScore} scorerCount={homeScorers.length + awayScorers.length} />
+        <PointsPreview home={homeScore} away={awayScore} />
       )}
 
       {/* Save / saved state */}
@@ -609,7 +474,6 @@ export function MatchDetailPage() {
             ['Ganador + diferencia', '3 pts'],
             ['Ganador correcto', '1 pt'],
             ['Empate acertado', '1 pt'],
-            ['Goleador acertado', '+2 pts c/u'],
           ].map(([label, pts]) => (
             <div key={label} className="flex items-center justify-between">
               <span className="text-sm-s text-muted">{label}</span>
