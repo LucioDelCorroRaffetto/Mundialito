@@ -41,6 +41,11 @@ const PLACEHOLDER_TEAM: Team = {
   confederation: null,
 };
 
+/** Short display label for a team code — hides internal 'TBD' placeholder */
+function teamDisplayCode(code: string): string {
+  return code === 'TBD' ? '?' : code;
+}
+
 function getTeam(teamMap: Map<number, Team> | undefined, id: number): Team {
   return teamMap?.get(id) ?? PLACEHOLDER_TEAM;
 }
@@ -227,7 +232,7 @@ export function MatchesPage() {
                         <div className="flex items-center gap-2 mt-1">
                           <span className="flex items-center gap-1.5 text-sm-s font-semibold text-text">
                             <TeamFlag code={homeTeam.code} emoji={homeTeam.flag} size={20} />
-                            {homeTeam.code}
+                            {teamDisplayCode(homeTeam.code)}
                           </span>
                           {(match.status === 'live' || match.status === 'finished') &&
                           match.homeScore !== null ? (
@@ -243,7 +248,7 @@ export function MatchesPage() {
                             <span className="text-xs-s font-bold text-muted">vs</span>
                           )}
                           <span className="flex items-center gap-1.5 text-sm-s font-semibold text-text">
-                            {awayTeam.code}{' '}
+                            {teamDisplayCode(awayTeam.code)}{' '}
                             <TeamFlag code={awayTeam.code} emoji={awayTeam.flag} size={20} />
                           </span>
                         </div>

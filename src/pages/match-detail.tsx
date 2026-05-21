@@ -140,7 +140,7 @@ function ScoreInput({
   return (
     <div className="flex flex-col items-center gap-2">
       <TeamFlag code={team.code} emoji={team.flag} size={48} />
-      <span className="text-base-s font-bold text-text">{team.code}</span>
+      <span className="text-base-s font-bold text-text">{teamDisplayCode(team.code)}</span>
       <div className="flex items-center gap-2">
         <button
           onClick={() => onChange(Math.max(0, value - 1))}
@@ -158,6 +158,11 @@ function ScoreInput({
       </div>
     </div>
   );
+}
+
+/** Short display label for a team — hides internal 'TBD' code */
+function teamDisplayCode(code: string): string {
+  return code === 'TBD' ? 'Por definir' : code;
 }
 
 function formatDate(utc: string) {
@@ -429,7 +434,7 @@ export function MatchDetailPage() {
             <div className="flex items-center justify-around w-full gap-4">
               <div className="flex flex-col items-center gap-2">
                 <TeamFlag code={homeTeamDisplay.code} emoji={homeTeamDisplay.flag} size={48} />
-                <span className="text-base-s font-bold text-text">{homeTeamDisplay.code}</span>
+                <span className="text-base-s font-bold text-text">{teamDisplayCode(homeTeamDisplay.code)}</span>
               </div>
               <span className={cn(
                 'text-4xl font-display font-bold tabular-nums',
@@ -439,7 +444,7 @@ export function MatchDetailPage() {
               </span>
               <div className="flex flex-col items-center gap-2">
                 <TeamFlag code={awayTeamDisplay.code} emoji={awayTeamDisplay.flag} size={48} />
-                <span className="text-base-s font-bold text-text">{awayTeamDisplay.code}</span>
+                <span className="text-base-s font-bold text-text">{teamDisplayCode(awayTeamDisplay.code)}</span>
               </div>
             </div>
             {match.status === 'finished' && (
@@ -458,12 +463,12 @@ export function MatchDetailPage() {
           <div className="flex items-center justify-around gap-4">
             <div className="flex flex-col items-center gap-2">
               <TeamFlag code={homeTeamDisplay.code} emoji={homeTeamDisplay.flag} size={48} />
-              <span className="text-base-s font-bold text-text">{homeTeamDisplay.code}</span>
+              <span className="text-base-s font-bold text-text">{teamDisplayCode(homeTeamDisplay.code)}</span>
             </div>
             <span className="text-2xl-s font-display font-bold text-muted">vs</span>
             <div className="flex flex-col items-center gap-2">
               <TeamFlag code={awayTeamDisplay.code} emoji={awayTeamDisplay.flag} size={48} />
-              <span className="text-base-s font-bold text-text">{awayTeamDisplay.code}</span>
+              <span className="text-base-s font-bold text-text">{teamDisplayCode(awayTeamDisplay.code)}</span>
             </div>
           </div>
         )}
