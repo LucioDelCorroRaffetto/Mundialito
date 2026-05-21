@@ -1,6 +1,7 @@
 import { createBrowserRouter, Navigate } from 'react-router-dom';
 import { AppShell } from '@/shared/components/layout/app-shell';
 import { RequireAuth } from '@/shared/components/require-auth';
+import { RequireAdmin } from '@/shared/components/require-admin';
 import { ErrorBoundary } from '@/shared/components/error-boundary';
 import { SplashPage } from '@/pages/splash';
 import { LoginPage } from '@/pages/login';
@@ -42,7 +43,7 @@ export const router = createBrowserRouter([
       { path: '/achievements', element: <ErrorBoundary><AchievementsPage /></ErrorBoundary> },
       { path: '/leaderboard', element: <ErrorBoundary><LeaderboardPage /></ErrorBoundary> },
       { path: '/tournament', element: <ErrorBoundary><TournamentPredictionsPage /></ErrorBoundary> },
-      { path: '/admin', element: <ErrorBoundary><AdminPage /></ErrorBoundary> },
+      { path: '/admin', element: <ErrorBoundary><RequireAdmin><AdminPage /></RequireAdmin></ErrorBoundary> },
     ],
   },
   { path: '*', element: <Navigate to="/" replace /> },
