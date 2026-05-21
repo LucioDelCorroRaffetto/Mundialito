@@ -77,3 +77,41 @@ export interface ApiList<T> {
 export interface ApiError {
   error: { code: string; message: string };
 }
+
+// ─── Fantasy ─────────────────────────────────────────────────────────────────
+
+/** Stats de un jugador en un partido (formulario admin). */
+export interface PlayerMatchStats {
+  playerId: number;
+  played: boolean;
+  goals: number;
+  assists: number;
+  yellowCards: number;
+  redCard: boolean;
+}
+
+/** Jugador devuelto por GET /admin/matches/:matchId/player-stats */
+export interface MatchStatPlayer {
+  id: number;
+  name: string;
+  position: 'GK' | 'DEF' | 'MID' | 'FWD';
+  teamId: number;
+  shirtNumber: number | null;
+}
+
+/** Respuesta de GET /admin/matches/:matchId/player-stats (dentro del envelope { data }). */
+export interface MatchPlayerStatsResponse {
+  players: MatchStatPlayer[];
+  stats: PlayerMatchStats[];
+}
+
+/** Una fila de la tabla de posiciones fantasy. */
+export interface FantasyStandingEntry {
+  rank: number;
+  teamId: number;
+  teamName: string;
+  userId: number;
+  username: string;
+  avatarUrl: string | null;
+  totalPoints: number;
+}

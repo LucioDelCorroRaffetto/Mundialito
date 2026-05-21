@@ -5,6 +5,7 @@ import { db } from '../../../db/index.js';
 import { matches, predictions } from '../../../db/schema/index.js';
 import { NotFoundError } from '../../../lib/errors.js';
 import { calculatePoints } from '../../../lib/scoring.js';
+import { recomputeAllFantasyPoints } from '../../../services/fantasy-scoring-service.js';
 import { broadcastMatchUpdate } from '../../../ws/broadcast.js';
 
 export const updateMatchSchema = z.object({
@@ -68,6 +69,9 @@ export async function updateMatchHandler(req: Request, res: Response) {
         .set({ points: pts, updatedAt: sql`(datetime('now'))` })
         .where(eq(predictions.id, pred.id));
     }
+
+    // Recompute fantasy points now that this match is finished.
+    await recomputeAllFantasyPoints();
   }
 
   // Broadcast match update to all connected WS clients

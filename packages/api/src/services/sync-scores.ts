@@ -7,6 +7,7 @@ import { eq, sql } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import { matches, predictions } from '../db/schema/index.js';
 import { calculatePoints } from '../lib/scoring.js';
+import { recomputeAllFantasyPoints } from './fantasy-scoring-service.js';
 import { broadcastMatchUpdate } from '../ws/broadcast.js';
 
 // football-data.org status values
@@ -88,6 +89,7 @@ function findMatchByKickoff(
 export async function syncScores(options: SyncScoresOptions = {}): Promise<SyncScoresResult> {
   const errors: string[] = [];
   let synced = 0;
+  let anyMatchFinished = false;
 
   // --- Build URL ---
   const apiKey = process.env.FOOTBALL_DATA_API_KEY;
@@ -170,6 +172,8 @@ export async function syncScores(options: SyncScoresOptions = {}): Promise<SyncS
         newHomeScore !== null &&
         newAwayScore !== null
       ) {
+        anyMatchFinished = true;
+
         const matchPredictions = await db
           .select()
           .from(predictions)
@@ -191,6 +195,15 @@ export async function syncScores(options: SyncScoresOptions = {}): Promise<SyncS
       broadcastMatchUpdate(updatedMatch);
     } catch (err) {
       errors.push(`Match fd#${fdMatch.id} (${fdMatch.utcDate}): ${String(err)}`);
+    }
+  }
+
+  // Recompute fantasy points once if any match became finished this sync.
+  if (anyMatchFinished) {
+    try {
+      await recomputeAllFantasyPoints();
+    } catch (err) {
+      errors.push(`Fantasy recompute failed: ${String(err)}`);
     }
   }
 

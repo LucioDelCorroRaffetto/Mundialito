@@ -7,13 +7,34 @@ import { AppError } from '../../../lib/errors.js';
 
 export const updateSquadSchema = z.object({
   playerIds: z.array(z.number().int().positive()).min(11).max(15),
+  starterIds: z.array(z.number().int().positive()).length(11),
+  captainId: z.number().int().positive(),
 });
 
 export async function updateSquadHandler(req: Request, res: Response) {
   const userId = req.user!.id;
-  const { playerIds } = req.body as z.infer<typeof updateSquadSchema>;
+  const { playerIds, starterIds, captainId } = req.body as z.infer<typeof updateSquadSchema>;
 
-  // Validate players exist
+  // No duplicate player IDs.
+  if (new Set(playerIds).size !== playerIds.length) {
+    throw new AppError('VALIDATION_ERROR', 'playerIds contains duplicates', 400);
+  }
+  if (new Set(starterIds).size !== starterIds.length) {
+    throw new AppError('VALIDATION_ERROR', 'starterIds contains duplicates', 400);
+  }
+
+  // Starters must be a subset of playerIds.
+  const playerIdSet = new Set(playerIds);
+  if (!starterIds.every((id) => playerIdSet.has(id))) {
+    throw new AppError('VALIDATION_ERROR', 'starterIds must be a subset of playerIds', 400);
+  }
+
+  // Captain must be one of the starters.
+  if (!starterIds.includes(captainId)) {
+    throw new AppError('VALIDATION_ERROR', 'captainId must be one of the starters', 400);
+  }
+
+  // Validate players exist.
   const existingPlayers = await db
     .select({ id: players.id })
     .from(players)
@@ -23,7 +44,7 @@ export async function updateSquadHandler(req: Request, res: Response) {
     throw new AppError('VALIDATION_ERROR', 'One or more player IDs are invalid', 400);
   }
 
-  // Upsert global fantasy team — one per user
+  // Upsert global fantasy team — one per user.
   await db
     .insert(fantasyTeams)
     .values({ userId, name: 'Mi equipo' })
@@ -39,23 +60,23 @@ export async function updateSquadHandler(req: Request, res: Response) {
     throw new AppError('INTERNAL_ERROR', 'Could not find or create fantasy team', 500);
   }
 
-  // Replace squad in a transaction
+  const starterIdSet = new Set(starterIds);
+
+  // Replace squad in a transaction.
   const updatedSquad = await db.transaction(async (tx) => {
     await tx
       .delete(fantasySquadPlayers)
       .where(eq(fantasySquadPlayers.fantasyTeamId, team.id));
 
-    if (playerIds.length > 0) {
-      await tx.insert(fantasySquadPlayers).values(
-        playerIds.map((playerId) => ({
-          fantasyTeamId: team.id,
-          playerId,
-          isStarter: false,
-          isCaptain: false,
-          isViceCaptain: false,
-        })),
-      );
-    }
+    await tx.insert(fantasySquadPlayers).values(
+      playerIds.map((playerId) => ({
+        fantasyTeamId: team.id,
+        playerId,
+        isStarter: starterIdSet.has(playerId),
+        isCaptain: playerId === captainId,
+        isViceCaptain: false,
+      })),
+    );
 
     return tx
       .select({

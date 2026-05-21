@@ -1,14 +1,21 @@
 import { useState } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { ShieldCheck, CheckCircle2, AlertCircle, RefreshCw } from 'lucide-react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { ShieldCheck, CheckCircle2, AlertCircle, RefreshCw, ChevronDown, Users } from 'lucide-react';
 import { useMatches } from '@/shared/hooks/use-matches';
 import { useTeamMap } from '@/shared/hooks/use-teams';
 import { apiClient } from '@/shared/lib/api-client';
 import { Button } from '@/shared/components/ui/button';
 import { Input } from '@/shared/components/ui/input';
 import { cn } from '@/shared/lib/cn';
-import type { Match, Team } from '@/shared/types/api';
+import type { Match, Team, MatchPlayerStatsResponse, PlayerMatchStats } from '@/shared/types/api';
 import { TeamFlag } from '@/shared/components/ui/team-flag';
+
+const POSITION_COLORS: Record<string, string> = {
+  GK: 'bg-yellow-500/20 text-yellow-500',
+  DEF: 'bg-blue-500/20 text-blue-400',
+  MID: 'bg-green-500/20 text-green-500',
+  FWD: 'bg-red-500/20 text-red-400',
+};
 
 const PLACEHOLDER_TEAM: Team = {
   id: 0,
@@ -39,6 +46,237 @@ interface UpdateMatchPayload {
   status?: 'scheduled' | 'live' | 'finished';
 }
 
+// ─── Player stats form ───────────────────────────────────────────────────────
+
+const EMPTY_STAT = (playerId: number): PlayerMatchStats => ({
+  playerId,
+  played: false,
+  goals: 0,
+  assists: 0,
+  yellowCards: 0,
+  redCard: false,
+});
+
+function PlayerStatsForm({ matchId, teamMap }: { matchId: number; teamMap: Map<number, Team> | undefined }) {
+  const queryClient = useQueryClient();
+  const [draft, setDraft] = useState<Record<number, PlayerMatchStats>>({});
+  const [saved, setSaved] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  const { data, isLoading, error } = useQuery({
+    queryKey: ['admin', 'player-stats', matchId],
+    queryFn: async () => {
+      const { data } = await apiClient.get<{ data: MatchPlayerStatsResponse }>(
+        `/admin/matches/${matchId}/player-stats`
+      );
+      // seed the draft from server stats
+      const next: Record<number, PlayerMatchStats> = {};
+      for (const p of data.data.players) next[p.id] = EMPTY_STAT(p.id);
+      for (const s of data.data.stats) next[s.playerId] = { ...s };
+      setDraft(next);
+      return data.data;
+    },
+  });
+
+  const mutation = useMutation({
+    mutationFn: async (stats: PlayerMatchStats[]) => {
+      const { data } = await apiClient.put<{ data: { updated: number } }>(
+        `/admin/matches/${matchId}/player-stats`,
+        { stats }
+      );
+      return data.data;
+    },
+    onSuccess: () => {
+      setSaved(true);
+      setErrorMsg(null);
+      setTimeout(() => setSaved(false), 2500);
+      queryClient.invalidateQueries({ queryKey: ['fantasy'] });
+    },
+    onError: (err: unknown) => {
+      setErrorMsg(
+        (err as { response?: { data?: { error?: { message?: string } } } })?.response?.data?.error?.message ??
+          'Error al guardar stats'
+      );
+    },
+  });
+
+  function patch(playerId: number, change: Partial<PlayerMatchStats>) {
+    setDraft((prev) => {
+      const current = prev[playerId] ?? EMPTY_STAT(playerId);
+      return { ...prev, [playerId]: { ...current, ...change } };
+    });
+  }
+
+  function handleSave() {
+    setErrorMsg(null);
+    setSaved(false);
+    mutation.mutate(Object.values(draft));
+  }
+
+  if (isLoading) {
+    return <p className="px-4 py-3 text-xs text-muted">Cargando jugadores...</p>;
+  }
+  if (error) {
+    return (
+      <p className="px-4 py-3 text-xs text-red-400">
+        Error al cargar jugadores: {String((error as Error).message)}
+      </p>
+    );
+  }
+  if (!data || data.players.length === 0) {
+    return <p className="px-4 py-3 text-xs text-muted">No hay jugadores cargados para este partido.</p>;
+  }
+
+  // Group players by team for readability
+  const teamIds = Array.from(new Set(data.players.map((p) => p.teamId)));
+
+  return (
+    <div className="flex flex-col gap-3 px-4 py-3 bg-elevated/40">
+      {teamIds.map((teamId) => {
+        const team = teamMap?.get(teamId);
+        const teamPlayers = data.players.filter((p) => p.teamId === teamId);
+        return (
+          <div key={teamId} className="flex flex-col gap-1.5">
+            <p className="text-xs font-bold text-text flex items-center gap-1.5">
+              {team && <TeamFlag code={team.code} emoji={team.flag} size={16} />}
+              {team?.name ?? `Equipo ${teamId}`}
+            </p>
+            {teamPlayers.map((player) => {
+              const stat = draft[player.id] ?? EMPTY_STAT(player.id);
+              return (
+                <div
+                  key={player.id}
+                  className="flex flex-wrap items-center gap-2 p-2 rounded-md bg-card border border-border"
+                >
+                  <label className="flex items-center gap-1.5 cursor-pointer select-none flex-shrink-0">
+                    <input
+                      type="checkbox"
+                      checked={stat.played}
+                      onChange={(e) => patch(player.id, { played: e.target.checked })}
+                      className="w-4 h-4 accent-accent"
+                    />
+                    <span className="text-xs text-muted">Jugó</span>
+                  </label>
+                  <span className="flex-1 min-w-[100px] text-sm font-medium text-text truncate">
+                    {player.shirtNumber != null && (
+                      <span className="text-muted">#{player.shirtNumber} </span>
+                    )}
+                    {player.name}
+                  </span>
+                  <span
+                    className={cn(
+                      'text-[10px] font-bold px-1.5 py-0.5 rounded-full',
+                      POSITION_COLORS[player.position]
+                    )}
+                  >
+                    {player.position}
+                  </span>
+                  <NumberStat
+                    label="G"
+                    title="Goles"
+                    value={stat.goals}
+                    disabled={!stat.played}
+                    onChange={(v) => patch(player.id, { goals: v })}
+                  />
+                  <NumberStat
+                    label="A"
+                    title="Asistencias"
+                    value={stat.assists}
+                    disabled={!stat.played}
+                    onChange={(v) => patch(player.id, { assists: v })}
+                  />
+                  <NumberStat
+                    label="TA"
+                    title="Tarjetas amarillas"
+                    value={stat.yellowCards}
+                    disabled={!stat.played}
+                    max={2}
+                    onChange={(v) => patch(player.id, { yellowCards: v })}
+                  />
+                  <label
+                    className={cn(
+                      'flex items-center gap-1 cursor-pointer select-none flex-shrink-0',
+                      !stat.played && 'opacity-40 cursor-not-allowed'
+                    )}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={stat.redCard}
+                      disabled={!stat.played}
+                      onChange={(e) => patch(player.id, { redCard: e.target.checked })}
+                      className="w-4 h-4 accent-red-500"
+                    />
+                    <span className="text-xs text-muted">Roja</span>
+                  </label>
+                </div>
+              );
+            })}
+          </div>
+        );
+      })}
+
+      {errorMsg && (
+        <div className="flex items-center gap-2 text-sm text-red-400">
+          <AlertCircle size={14} />
+          {errorMsg}
+        </div>
+      )}
+
+      <Button
+        type="button"
+        size="sm"
+        loading={mutation.isPending}
+        variant={saved ? 'secondary' : 'primary'}
+        onClick={handleSave}
+        className={saved ? 'text-green-400' : undefined}
+      >
+        {saved ? (
+          <>
+            <CheckCircle2 size={14} />
+            Stats guardadas
+          </>
+        ) : (
+          'Guardar stats de jugadores'
+        )}
+      </Button>
+    </div>
+  );
+}
+
+function NumberStat({
+  label,
+  title,
+  value,
+  onChange,
+  disabled,
+  max = 20,
+}: {
+  label: string;
+  title: string;
+  value: number;
+  onChange: (v: number) => void;
+  disabled?: boolean;
+  max?: number;
+}) {
+  return (
+    <div className="flex items-center gap-1 flex-shrink-0" title={title}>
+      <span className="text-[10px] font-bold text-muted">{label}</span>
+      <input
+        type="number"
+        min={0}
+        max={max}
+        value={value}
+        disabled={disabled}
+        onChange={(e) => {
+          const n = parseInt(e.target.value, 10);
+          onChange(isNaN(n) ? 0 : Math.max(0, Math.min(max, n)));
+        }}
+        className="w-12 h-8 px-1 text-center rounded-md bg-elevated border border-border text-text text-sm focus:outline-none focus:border-accent disabled:opacity-40 transition-colors"
+      />
+    </div>
+  );
+}
+
 function MatchAdminRow({ match, teamMap }: { match: Match; teamMap: Map<number, Team> | undefined }) {
   const queryClient = useQueryClient();
   const homeTeam = getTeam(teamMap, match.homeTeamId);
@@ -49,6 +287,7 @@ function MatchAdminRow({ match, teamMap }: { match: Match; teamMap: Map<number, 
   const [status, setStatus] = useState<'scheduled' | 'live' | 'finished'>(match.status);
   const [saved, setSaved] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [statsOpen, setStatsOpen] = useState(false);
 
   const mutation = useMutation({
     mutationFn: async (payload: UpdateMatchPayload) => {
@@ -178,6 +417,25 @@ function MatchAdminRow({ match, teamMap }: { match: Match; teamMap: Map<number, 
           )}
         </Button>
       </form>
+
+      {/* Player stats — collapsible */}
+      <div className="-mx-4 -mb-4 border-t border-border">
+        <button
+          type="button"
+          onClick={() => setStatsOpen((o) => !o)}
+          className="w-full flex items-center gap-2 px-4 py-3 text-left"
+        >
+          <Users size={15} className="text-accent flex-shrink-0" />
+          <span className="flex-1 text-sm font-semibold text-text">
+            Stats de jugadores (fantasy)
+          </span>
+          <ChevronDown
+            size={16}
+            className={cn('text-muted transition-transform', statsOpen && 'rotate-180')}
+          />
+        </button>
+        {statsOpen && <PlayerStatsForm matchId={match.id} teamMap={teamMap} />}
+      </div>
     </div>
   );
 }

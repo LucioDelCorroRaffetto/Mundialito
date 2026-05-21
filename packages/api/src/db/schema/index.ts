@@ -8,5 +8,6 @@ export * from './prediction-scorers.js';
 export * from './tournament-predictions.js';
 export * from './fantasy-teams.js';
 export * from './fantasy-squad-players.js';
+export * from './player-match-stats.js';
 export * from './push-subscriptions.js';
 export * from './achievements.js';
