@@ -1,18 +1,17 @@
 import { Request, Response } from 'express';
 import { z } from 'zod';
-import { eq, and, inArray } from 'drizzle-orm';
+import { eq, inArray } from 'drizzle-orm';
 import { db } from '../../../db/index.js';
 import { fantasyTeams, fantasySquadPlayers, players } from '../../../db/schema/index.js';
 import { AppError } from '../../../lib/errors.js';
 
 export const updateSquadSchema = z.object({
-  leagueId: z.number().int().positive(),
   playerIds: z.array(z.number().int().positive()).min(11).max(15),
 });
 
 export async function updateSquadHandler(req: Request, res: Response) {
   const userId = req.user!.id;
-  const { leagueId, playerIds } = req.body as z.infer<typeof updateSquadSchema>;
+  const { playerIds } = req.body as z.infer<typeof updateSquadSchema>;
 
   // Validate players exist
   const existingPlayers = await db
@@ -24,16 +23,16 @@ export async function updateSquadHandler(req: Request, res: Response) {
     throw new AppError('VALIDATION_ERROR', 'One or more player IDs are invalid', 400);
   }
 
-  // Get or create fantasy team
+  // Upsert global fantasy team — one per user
   await db
     .insert(fantasyTeams)
-    .values({ userId, leagueId, name: 'Mi equipo' })
+    .values({ userId, name: 'Mi equipo' })
     .onConflictDoNothing();
 
   const team = await db
     .select()
     .from(fantasyTeams)
-    .where(and(eq(fantasyTeams.userId, userId), eq(fantasyTeams.leagueId, leagueId)))
+    .where(eq(fantasyTeams.userId, userId))
     .get();
 
   if (!team) {
@@ -42,12 +41,10 @@ export async function updateSquadHandler(req: Request, res: Response) {
 
   // Replace squad in a transaction
   const updatedSquad = await db.transaction(async (tx) => {
-    // Delete all existing squad players
     await tx
       .delete(fantasySquadPlayers)
       .where(eq(fantasySquadPlayers.fantasyTeamId, team.id));
 
-    // Insert new squad players
     if (playerIds.length > 0) {
       await tx.insert(fantasySquadPlayers).values(
         playerIds.map((playerId) => ({
@@ -60,7 +57,6 @@ export async function updateSquadHandler(req: Request, res: Response) {
       );
     }
 
-    // Return the updated squad with player details
     return tx
       .select({
         id: players.id,
@@ -68,6 +64,7 @@ export async function updateSquadHandler(req: Request, res: Response) {
         name: players.name,
         position: players.position,
         shirtNumber: players.shirtNumber,
+        photoUrl: players.photoUrl,
         isStarter: fantasySquadPlayers.isStarter,
         isCaptain: fantasySquadPlayers.isCaptain,
         isViceCaptain: fantasySquadPlayers.isViceCaptain,

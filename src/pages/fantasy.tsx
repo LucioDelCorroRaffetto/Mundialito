@@ -1,5 +1,4 @@
 import { useState, useEffect, useMemo } from 'react';
-import { useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { ChevronDown, Check, Clock, Trophy } from 'lucide-react';
 import { cn } from '@/shared/lib/cn';
@@ -53,29 +52,17 @@ const POSITION_LABELS: Record<Position, string> = {
 };
 
 export function FantasyPage() {
-  const [params, setParams] = useSearchParams();
-  const leagueIdFromUrl = params.get('leagueId') ? Number(params.get('leagueId')) : undefined;
-  const [localLeagueId, setLocalLeagueId] = useState<number | undefined>(leagueIdFromUrl);
-  const leagueId = localLeagueId;
-
   const [selectedPosition, setSelectedPosition] = useState<PositionFilter>('Todo');
   const [selectedPlayerIds, setSelectedPlayerIds] = useState<number[]>([]);
   const [expandedTeam, setExpandedTeam] = useState<number | null>(null);
 
   const { data: teamsData, isLoading: teamsLoading } = useTeams();
   const { data: playersData, isLoading: playersLoading } = usePlayers();
-  const { data: fantasyData, isLoading: fantasyLoading } = useMyFantasyTeam(leagueId);
+  const { data: fantasyData, isLoading: fantasyLoading } = useMyFantasyTeam();
   const { data: leaguesResponse } = useMyLeagues();
   const updateSquad = useUpdateFantasySquad();
 
   const myLeagues = leaguesResponse?.data ?? [];
-
-  const handleLeagueChange = (id: number) => {
-    setLocalLeagueId(id);
-    setParams({ leagueId: String(id) });
-    // Reset squad selection so we reload for the new league
-    setSelectedPlayerIds([]);
-  };
 
   const teams = teamsData ?? [];
   const players = playersData ?? [];
@@ -137,16 +124,12 @@ export function FantasyPage() {
   };
 
   const handleSave = async () => {
-    if (!leagueId) {
-      toast.error('Seleccioná una liga arriba para guardar tu equipo');
-      return;
-    }
     if (selectedPlayerIds.length < 11) {
       toast.error(`Necesitás al menos 11 jugadores (tenés ${selectedPlayerIds.length})`);
       return;
     }
     try {
-      await updateSquad.mutateAsync({ leagueId, playerIds: selectedPlayerIds });
+      await updateSquad.mutateAsync({ playerIds: selectedPlayerIds });
       toast.success('¡Equipo guardado!');
     } catch (e: unknown) {
       const err = e as { response?: { data?: { error?: { message?: string } } } };
@@ -154,7 +137,7 @@ export function FantasyPage() {
     }
   };
 
-  const isLoading = teamsLoading || playersLoading || (leagueId !== undefined && fantasyLoading);
+  const isLoading = teamsLoading || playersLoading || fantasyLoading;
 
   if (isLoading) {
     return (
@@ -184,43 +167,32 @@ export function FantasyPage() {
         </div>
       </div>
 
-      {/* League selector */}
+      {/* League info — global team counts for all leagues */}
       {myLeagues.length === 0 ? (
         <div className="mx-4 flex items-center gap-3 p-4 rounded-xl bg-card border border-border">
           <Trophy size={18} className="text-muted flex-shrink-0" />
           <p className="text-sm-s text-muted">
-            Necesitás estar en una liga para guardar tu equipo fantasy.
+            Tu equipo es global — no hace falta estar en una liga para guardarlo.
           </p>
         </div>
       ) : (
-        <div className="mx-4 flex flex-col gap-1.5">
-          <p className="text-xs-s font-semibold text-muted uppercase tracking-wide">Liga</p>
-          <div className="flex gap-2 overflow-x-auto pb-0.5 no-scrollbar">
+        <div className="mx-4 flex items-center gap-3 p-3 rounded-xl bg-card border border-border">
+          <Trophy size={16} className="text-accent flex-shrink-0" />
+          <p className="text-xs-s text-muted flex-1">
+            Tu equipo cuenta para <span className="font-semibold text-text">todas tus ligas</span> automáticamente
+          </p>
+          <div className="flex gap-1 overflow-x-auto no-scrollbar">
             {myLeagues.map((l) => (
-              <button
-                key={l.id}
-                onClick={() => handleLeagueChange(l.id)}
-                className={cn(
-                  'flex-shrink-0 flex items-center gap-2 px-3 py-2 rounded-lg border text-sm-s font-semibold transition-colors',
-                  leagueId === l.id
-                    ? 'bg-accent text-accent-on border-accent'
-                    : 'bg-card border-border text-text hover:border-accent-border'
-                )}
-              >
+              <span key={l.id} className="flex-shrink-0 flex items-center gap-1.5 px-2 py-1 rounded-lg bg-elevated border border-border text-xs-s text-text font-medium">
                 {l.imageUrl ? (
-                  <img src={l.imageUrl} alt={l.name} className="w-5 h-5 rounded object-cover flex-shrink-0" />
+                  <img src={l.imageUrl} alt={l.name} className="w-3.5 h-3.5 rounded object-cover flex-shrink-0" />
                 ) : (
-                  <Trophy size={14} className={leagueId === l.id ? 'text-accent-on' : 'text-muted'} />
+                  <Trophy size={10} className="text-muted flex-shrink-0" />
                 )}
                 {l.name}
-              </button>
+              </span>
             ))}
           </div>
-          {!leagueId && (
-            <p className="text-xs-s text-orange-400 mt-0.5">
-              Seleccioná una liga para poder guardar tu equipo
-            </p>
-          )}
         </div>
       )}
 

@@ -30,20 +30,22 @@ export function useMyPredictions() {
   });
 }
 
-/** My prediction for a specific match (global — no leagueId needed) */
+/** My prediction for a specific match (global — no leagueId needed).
+ *  Returns null (not an error) when no prediction exists yet. */
 export function useMyPredictionForMatch(matchId: number | undefined) {
   return useQuery({
     queryKey: ['prediction', matchId],
-    queryFn: async () => {
-      const { data } = await apiClient.get<Prediction>(`/predictions/match/${matchId}/mine`);
-      return data;
+    queryFn: async (): Promise<Prediction | null> => {
+      try {
+        const { data } = await apiClient.get<Prediction>(`/predictions/match/${matchId}/mine`);
+        return data;
+      } catch (e: unknown) {
+        // 404 = no prediction yet — treat as null, not an error
+        if ((e as { response?: { status?: number } })?.response?.status === 404) return null;
+        throw e;
+      }
     },
     enabled: matchId !== undefined,
-    retry: (failureCount, error: unknown) => {
-      // No retry on 404 — prediction doesn't exist yet
-      if ((error as { response?: { status?: number } })?.response?.status === 404) return false;
-      return failureCount < 1;
-    },
   });
 }
 

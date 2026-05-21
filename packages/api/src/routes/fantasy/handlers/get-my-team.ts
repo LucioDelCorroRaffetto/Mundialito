@@ -1,20 +1,15 @@
 import { Request, Response } from 'express';
-import { eq, and } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { db } from '../../../db/index.js';
 import { fantasyTeams, fantasySquadPlayers, players } from '../../../db/schema/index.js';
-import { AppError } from '../../../lib/errors.js';
 
 export async function getMyTeamHandler(req: Request, res: Response) {
   const userId = req.user!.id;
-  const leagueId = Number(req.query.leagueId);
-  if (!Number.isInteger(leagueId) || leagueId <= 0) {
-    throw new AppError('VALIDATION_ERROR', 'leagueId query param is required and must be a positive integer', 400);
-  }
 
   const team = await db
     .select()
     .from(fantasyTeams)
-    .where(and(eq(fantasyTeams.userId, userId), eq(fantasyTeams.leagueId, leagueId)))
+    .where(eq(fantasyTeams.userId, userId))
     .get();
 
   if (!team) {
@@ -28,6 +23,7 @@ export async function getMyTeamHandler(req: Request, res: Response) {
       name: players.name,
       position: players.position,
       shirtNumber: players.shirtNumber,
+      photoUrl: players.photoUrl,
       isStarter: fantasySquadPlayers.isStarter,
       isCaptain: fantasySquadPlayers.isCaptain,
       isViceCaptain: fantasySquadPlayers.isViceCaptain,

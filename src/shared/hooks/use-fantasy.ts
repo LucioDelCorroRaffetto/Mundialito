@@ -5,7 +5,7 @@ import type { Player } from '@/shared/types/api';
 export interface FantasyTeam {
   id: number;
   userId: number;
-  leagueId: number;
+  leagueId: number | null;
   name: string;
   totalPoints: number;
   updatedAt: string;
@@ -22,28 +22,13 @@ export interface FantasyTeamWithSquad {
   squad: FantasySquadPlayer[];
 }
 
-export function useMyFantasyTeam(leagueId: number | undefined) {
+/** Global fantasy team — one per user, no leagueId required */
+export function useMyFantasyTeam() {
   return useQuery({
-    queryKey: ['fantasy', 'team', leagueId],
+    queryKey: ['fantasy', 'team'],
     queryFn: async () => {
-      const { data } = await apiClient.get<FantasyTeamWithSquad>('/fantasy/my-team', {
-        params: { leagueId },
-      });
+      const { data } = await apiClient.get<FantasyTeamWithSquad>('/fantasy/my-team');
       return data;
-    },
-    enabled: leagueId !== undefined,
-  });
-}
-
-export function useEnsureFantasyTeam() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: async (input: { leagueId: number; name?: string }) => {
-      const { data } = await apiClient.post<FantasyTeam>('/fantasy/my-team', input);
-      return data;
-    },
-    onSuccess: (_, variables) => {
-      qc.invalidateQueries({ queryKey: ['fantasy', 'team', variables.leagueId] });
     },
   });
 }
@@ -51,12 +36,12 @@ export function useEnsureFantasyTeam() {
 export function useUpdateFantasySquad() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (input: { leagueId: number; playerIds: number[] }) => {
+    mutationFn: async (input: { playerIds: number[] }) => {
       const { data } = await apiClient.put<FantasyTeamWithSquad>('/fantasy/squad', input);
       return data;
     },
-    onSuccess: (_, variables) => {
-      qc.invalidateQueries({ queryKey: ['fantasy', 'team', variables.leagueId] });
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['fantasy', 'team'] });
     },
   });
 }
