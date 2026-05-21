@@ -2,7 +2,7 @@ import { motion } from 'framer-motion';
 import { BarChart2 } from 'lucide-react';
 import { cn } from '@/shared/lib/cn';
 import { SkeletonList } from '@/shared/components/skeleton';
-import { useGlobalLeaderboard, type LeaderboardEntry } from '@/shared/hooks/use-leaderboard';
+import { useGlobalLeaderboard, type LeaderboardEntry, type TopBadge } from '@/shared/hooks/use-leaderboard';
 import { useAuthStore } from '@/shared/stores/auth-store';
 
 const MEDAL_COLORS = [
@@ -10,6 +10,27 @@ const MEDAL_COLORS = [
   { bg: 'bg-slate-400/20',  border: 'border-slate-400/40',  text: 'text-slate-300',  label: '🥈' },
   { bg: 'bg-amber-700/20',  border: 'border-amber-700/40',  text: 'text-amber-600',  label: '🥉' },
 ];
+
+const TIER_COLORS: Record<string, string> = {
+  platinum: 'bg-cyan-400/20 text-cyan-300 border-cyan-400/40',
+  gold:     'bg-yellow-400/20 text-yellow-300 border-yellow-400/40',
+  silver:   'bg-slate-400/20 text-slate-300 border-slate-400/40',
+  bronze:   'bg-amber-700/20 text-amber-500 border-amber-700/40',
+};
+
+function BadgeChip({ badge }: { badge: TopBadge }) {
+  return (
+    <span
+      className={cn(
+        'inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-semibold border',
+        TIER_COLORS[badge.tier] ?? 'bg-elevated text-muted border-border'
+      )}
+      title={badge.name}
+    >
+      <span>{badge.icon}</span>
+    </span>
+  );
+}
 
 function PodiumCard({ entry, place }: { entry: LeaderboardEntry; place: 0 | 1 | 2 }) {
   const medal = MEDAL_COLORS[place];
@@ -36,9 +57,12 @@ function PodiumCard({ entry, place }: { entry: LeaderboardEntry; place: 0 | 1 | 
           <span className={cn('text-base font-bold', medal.text)}>{initials}</span>
         )}
       </div>
-      <p className={cn('text-xs font-semibold text-center max-w-[80px] truncate', medal.text)}>
-        {entry.username}
-      </p>
+      <div className="flex flex-col items-center gap-0.5">
+        <p className={cn('text-xs font-semibold text-center max-w-[80px] truncate', medal.text)}>
+          {entry.username}
+        </p>
+        {entry.topBadge && <BadgeChip badge={entry.topBadge} />}
+      </div>
       <p className="text-xs text-muted">{entry.totalPoints} pts</p>
       <div
         className={cn(
@@ -75,9 +99,12 @@ function LeaderboardRow({ entry, isMe }: { entry: LeaderboardEntry; isMe: boolea
         )}
       </div>
       <div className="flex-1 min-w-0">
-        <p className={cn('text-sm font-semibold truncate', isMe ? 'text-accent' : 'text-text')}>
-          {entry.username} {isMe && '(vos)'}
-        </p>
+        <div className="flex items-center gap-1.5">
+          <p className={cn('text-sm font-semibold truncate', isMe ? 'text-accent' : 'text-text')}>
+            {entry.username} {isMe && '(vos)'}
+          </p>
+          {entry.topBadge && <BadgeChip badge={entry.topBadge} />}
+        </div>
         <p className="text-xs text-muted">{entry.leagueCount} liga{entry.leagueCount !== 1 ? 's' : ''}</p>
       </div>
       <span className={cn('text-base font-bold', isMe ? 'text-accent' : 'text-text')}>

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { ShieldCheck, CheckCircle2, AlertCircle } from 'lucide-react';
+import { ShieldCheck, CheckCircle2, AlertCircle, RefreshCw } from 'lucide-react';
 import { useMatches } from '@/shared/hooks/use-matches';
 import { useTeamMap } from '@/shared/hooks/use-teams';
 import { apiClient } from '@/shared/lib/api-client';
@@ -182,6 +182,61 @@ function MatchAdminRow({ match, teamMap }: { match: Match; teamMap: Map<number, 
   );
 }
 
+interface SyncResult {
+  synced: number;
+  errors: number;
+  matchesChecked: number;
+}
+
+function SyncScoresButton() {
+  const queryClient = useQueryClient();
+  const [result, setResult] = useState<SyncResult | null>(null);
+
+  const syncMutation = useMutation({
+    mutationFn: async () => {
+      const { data } = await apiClient.post<{ data: SyncResult }>('/admin/sync-scores');
+      return data.data;
+    },
+    onSuccess: (data) => {
+      setResult(data);
+      queryClient.invalidateQueries({ queryKey: ['matches'] });
+    },
+  });
+
+  return (
+    <div className="mx-4 mb-4 p-4 rounded-xl bg-card border border-border flex flex-col gap-3">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <p className="text-sm font-semibold text-text">Sincronizar marcadores</p>
+          <p className="text-xs text-muted mt-0.5">Actualiza scores desde football-data.org y recalcula puntos</p>
+        </div>
+        <Button
+          size="sm"
+          variant="secondary"
+          loading={syncMutation.isPending}
+          onClick={() => { setResult(null); syncMutation.mutate(); }}
+          className="flex-shrink-0 flex items-center gap-1.5"
+        >
+          <RefreshCw size={14} className={syncMutation.isPending ? 'animate-spin' : ''} />
+          Sincronizar
+        </Button>
+      </div>
+      {result && (
+        <div className="flex items-center gap-2 text-xs text-green-400">
+          <CheckCircle2 size={13} />
+          <span>{result.synced} actualizado{result.synced !== 1 ? 's' : ''} · {result.matchesChecked} revisado{result.matchesChecked !== 1 ? 's' : ''}{result.errors > 0 ? ` · ${result.errors} error${result.errors !== 1 ? 'es' : ''}` : ''}</span>
+        </div>
+      )}
+      {syncMutation.isError && (
+        <div className="flex items-center gap-2 text-xs text-red-400">
+          <AlertCircle size={13} />
+          {(syncMutation.error as { response?: { data?: { error?: { message?: string } } } })?.response?.data?.error?.message ?? 'Error al sincronizar'}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function AdminPage() {
   const { data: matchesResponse, isLoading, error } = useMatches({ limit: 200 });
   const { data: teamMap } = useTeamMap();
@@ -214,6 +269,9 @@ export function AdminPage() {
         </div>
         <p className="text-sm text-muted">Actualiza marcadores y estado. Al marcar como "finished" se calculan los puntos.</p>
       </div>
+
+      {/* Sync scores */}
+      <SyncScoresButton />
 
       {/* Filters */}
       <div className="px-4 pb-4 flex flex-col gap-3">

@@ -359,7 +359,7 @@ export function TournamentPredictionsPage() {
           >
             <ArrowLeft size={18} className="text-text" />
           </button>
-          <h1 className="text-base-s font-bold text-text">Pronósticos de torneo</h1>
+          <h1 className="text-base-s font-bold text-text">Predicciones de Copa</h1>
         </div>
         <div className="flex flex-col items-center justify-center flex-1 px-4 gap-3 mt-16">
           <p className="text-base-s font-semibold text-text text-center">
@@ -387,7 +387,7 @@ export function TournamentPredictionsPage() {
           >
             <ArrowLeft size={18} className="text-text" />
           </button>
-          <h1 className="text-base-s font-bold text-text">Pronósticos de torneo</h1>
+          <h1 className="text-base-s font-bold text-text">Predicciones de Copa</h1>
         </div>
         <div className="px-4 mt-2">
           <SkeletonList count={5} />
@@ -409,7 +409,10 @@ export function TournamentPredictionsPage() {
         >
           <ArrowLeft size={18} className="text-text" />
         </button>
-        <h1 className="text-base-s font-bold text-text">Pronósticos de torneo</h1>
+        <div>
+          <h1 className="text-base-s font-bold text-text">Predicciones de Copa</h1>
+          <p className="text-xs-s text-muted">Elegí campeón, goleador y más · se evalúan al final del torneo</p>
+        </div>
       </div>
 
       {/* Urgency badge */}

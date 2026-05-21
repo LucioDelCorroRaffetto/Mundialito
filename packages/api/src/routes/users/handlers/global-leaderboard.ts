@@ -1,7 +1,15 @@
 import { Request, Response } from 'express';
 import { db } from '../../../db/index.js';
-import { predictions, users, leagueMembers } from '../../../db/schema/index.js';
-import { eq, sql, desc } from 'drizzle-orm';
+import { predictions, users, leagueMembers, userAchievements, achievements } from '../../../db/schema/index.js';
+import { eq, sql, desc, inArray } from 'drizzle-orm';
+
+// Tier priority for picking the "top" badge (higher = better)
+const TIER_PRIORITY: Record<string, number> = {
+  platinum: 4,
+  gold: 3,
+  silver: 2,
+  bronze: 1,
+};
 
 export async function globalLeaderboardHandler(req: Request, res: Response) {
   const limit = Math.min(Number(req.query.limit) || 50, 200);
@@ -35,6 +43,34 @@ export async function globalLeaderboardHandler(req: Request, res: Response) {
 
   const leagueCountByUser = new Map(leagueCounts.map((r) => [r.userId, r.leagueCount]));
 
+  // Fetch all achievements earned by the users on this page
+  const userIds = rows.map((r) => r.userId);
+  let badgesByUser = new Map<number, { slug: string; name: string; icon: string; tier: string }>();
+
+  if (userIds.length > 0) {
+    const earnedRows = await db
+      .select({
+        userId: userAchievements.userId,
+        slug: achievements.slug,
+        name: achievements.name,
+        icon: achievements.icon,
+        tier: achievements.tier,
+      })
+      .from(userAchievements)
+      .innerJoin(achievements, eq(userAchievements.achievementSlug, achievements.slug))
+      .where(inArray(userAchievements.userId, userIds));
+
+    // Pick the top badge per user (highest tier priority; ties broken by slug alpha order)
+    for (const row of earnedRows) {
+      const current = badgesByUser.get(row.userId);
+      const rowPriority = TIER_PRIORITY[row.tier] ?? 0;
+      const currentPriority = current ? (TIER_PRIORITY[current.tier] ?? 0) : -1;
+      if (rowPriority > currentPriority) {
+        badgesByUser.set(row.userId, { slug: row.slug, name: row.name, icon: row.icon, tier: row.tier });
+      }
+    }
+  }
+
   // Assign ranks (shared rank for ties)
   let rank = 0;
   let lastPoints = -1;
@@ -52,6 +88,7 @@ export async function globalLeaderboardHandler(req: Request, res: Response) {
       totalPoints: pts,
       leagueCount: leagueCountByUser.get(row.userId) ?? 0,
       predictionCount: Number(row.predictionCount),
+      topBadge: badgesByUser.get(row.userId) ?? null,
     };
   });
 

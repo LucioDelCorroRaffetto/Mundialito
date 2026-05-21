@@ -8,6 +8,7 @@ export const achievements = sqliteTable('achievements', {
   description: text('description').notNull(),
   icon: text('icon').notNull(),              // emoji
   pointsBonus: integer('points_bonus').notNull().default(0),
+  tier: text('tier').notNull().default('bronze'), // 'bronze' | 'silver' | 'gold' | 'platinum'
 });
 
 export const userAchievements = sqliteTable('user_achievements', {

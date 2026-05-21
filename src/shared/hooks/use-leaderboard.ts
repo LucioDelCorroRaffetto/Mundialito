@@ -1,6 +1,13 @@
 import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '@/shared/lib/api-client';
 
+export interface TopBadge {
+  slug: string;
+  name: string;
+  icon: string;
+  tier: string;
+}
+
 export interface LeaderboardEntry {
   rank: number;
   userId: number;
@@ -9,6 +16,7 @@ export interface LeaderboardEntry {
   totalPoints: number;
   leagueCount: number;
   predictionCount: number;
+  topBadge: TopBadge | null;
 }
 
 export interface GlobalLeaderboardResponse {

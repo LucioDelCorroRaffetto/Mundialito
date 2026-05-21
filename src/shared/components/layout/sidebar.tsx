@@ -1,18 +1,18 @@
 import { NavLink } from 'react-router-dom';
-import { Home, Trophy, Users, User, Calendar, Settings, ShieldCheck, BarChart2, Globe } from 'lucide-react';
+import { Home, Trophy, Users, User, Calendar, Settings, ShieldCheck, BarChart2, Star } from 'lucide-react';
 import { cn } from '@/shared/lib/cn';
 import { Logo } from '@/shared/components/logo';
 import { useAuthStore } from '@/shared/stores/auth-store';
 
 const baseNavItems = [
-  { to: '/home',        label: 'Inicio',     Icon: Home },
-  { to: '/leagues',     label: 'Ligas',      Icon: Users },
-  { to: '/matches',     label: 'Partidos',   Icon: Calendar },
-  { to: '/leaderboard', label: 'Global',     Icon: BarChart2 },
-  { to: '/tournament',  label: 'Torneo',     Icon: Globe },
-  { to: '/fantasy',     label: 'Fantasy',    Icon: Trophy },
-  { to: '/profile',     label: 'Perfil',     Icon: User },
-  { to: '/settings',    label: 'Config',     Icon: Settings },
+  { to: '/home',        label: 'Inicio',          Icon: Home },
+  { to: '/leagues',     label: 'Ligas',           Icon: Users },
+  { to: '/matches',     label: 'Partidos',        Icon: Calendar },
+  { to: '/leaderboard', label: 'Global',          Icon: BarChart2 },
+  { to: '/tournament',  label: 'Copa',            Icon: Star },
+  { to: '/fantasy',     label: 'Fantasy',         Icon: Trophy },
+  { to: '/profile',     label: 'Perfil',          Icon: User },
+  { to: '/settings',    label: 'Config',          Icon: Settings },
 ];
 
 export function Sidebar() {

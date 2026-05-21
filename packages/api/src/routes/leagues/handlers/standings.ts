@@ -1,9 +1,17 @@
 import { Request, Response } from 'express';
 import { db } from '../../../db/index.js';
-import { predictions, leagueMembers, users, matches } from '../../../db/schema/index.js';
+import { predictions, leagueMembers, users, matches, userAchievements, achievements } from '../../../db/schema/index.js';
 import { NotFoundError, AppError } from '../../../lib/errors.js';
 import { and, eq, inArray } from 'drizzle-orm';
 import { calculatePoints } from '../../../lib/scoring.js';
+
+// Tier priority for picking the "top" badge (higher = better)
+const TIER_PRIORITY: Record<string, number> = {
+  platinum: 4,
+  gold: 3,
+  silver: 2,
+  bronze: 1,
+};
 
 export async function standingsHandler(req: Request, res: Response) {
   const userId = req.user!.id;
@@ -60,6 +68,29 @@ export async function standingsHandler(req: Request, res: Response) {
     pointsByUser.set(p.userId, current);
   }
 
+  // Fetch top badge per member
+  const earnedRows = await db
+    .select({
+      userId: userAchievements.userId,
+      slug: achievements.slug,
+      name: achievements.name,
+      icon: achievements.icon,
+      tier: achievements.tier,
+    })
+    .from(userAchievements)
+    .innerJoin(achievements, eq(userAchievements.achievementSlug, achievements.slug))
+    .where(inArray(userAchievements.userId, memberIds));
+
+  const badgesByUser = new Map<number, { slug: string; name: string; icon: string; tier: string }>();
+  for (const row of earnedRows) {
+    const current = badgesByUser.get(row.userId);
+    const rowPriority = TIER_PRIORITY[row.tier] ?? 0;
+    const currentPriority = current ? (TIER_PRIORITY[current.tier] ?? 0) : -1;
+    if (rowPriority > currentPriority) {
+      badgesByUser.set(row.userId, { slug: row.slug, name: row.name, icon: row.icon, tier: row.tier });
+    }
+  }
+
   // Build sorted standings
   const standings = members
     .map((m) => ({
@@ -68,6 +99,7 @@ export async function standingsHandler(req: Request, res: Response) {
       avatarUrl: m.avatarUrl,
       points: pointsByUser.get(m.userId)?.total ?? 0,
       matchesPlayed: pointsByUser.get(m.userId)?.matches ?? 0,
+      topBadge: badgesByUser.get(m.userId) ?? null,
     }))
     .sort((a, b) => b.points - a.points);
 
