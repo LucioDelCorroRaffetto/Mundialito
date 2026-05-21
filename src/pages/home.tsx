@@ -177,8 +177,8 @@ export function HomePage() {
     <div className="animate-fade-in px-4 pt-6 pb-4 md:px-0 md:pt-8">
       {/* Greeting */}
       <div className="mb-4">
-        <p className="text-sm text-muted">¡Hola, {username ?? 'crack'}! 👋</p>
-        <h1 className="text-2xl font-display font-bold text-text">Mundialito</h1>
+        <p className="text-xs text-muted uppercase tracking-widest font-semibold mb-0.5">Mundialito</p>
+        <h1 className="text-2xl font-display font-bold text-text">¡Hola, {username ?? 'crack'}! 👋</h1>
       </div>
 
       {/* PWA install banner */}
@@ -212,9 +212,9 @@ export function HomePage() {
               </div>
               <div className="flex-1">
                 <p className="text-sm font-semibold text-text">
-                  {pendingCount} partido{pendingCount !== 1 ? 's' : ''} sin pronosticar
+                  {pendingCount} de tus próximos {apiMatches.length} sin pronosticar
                 </p>
-                <p className="text-xs text-muted">Tocá para hacer tus pronósticos</p>
+                <p className="text-xs text-muted">Tocá para hacerlos antes que empiece</p>
               </div>
               <ChevronRight size={16} className="text-orange-400 flex-shrink-0" />
             </Link>
