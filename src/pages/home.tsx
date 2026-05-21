@@ -289,15 +289,18 @@ export function HomePage() {
           )}
 
           {/* League actions */}
-          <div className="flex gap-3">
+          <div className="flex items-center gap-3">
             <Link to="/leagues/join" className="flex-1">
-              <Button variant="secondary" fullWidth>
-                <Search size={16} />
+              <Button variant="secondary" size="sm" fullWidth>
+                <Search size={15} />
                 Unirse a una liga
               </Button>
             </Link>
-            <Link to="/leagues" className="flex-1">
-              <Button variant="ghost" fullWidth>Ver todas</Button>
+            <Link
+              to="/leagues"
+              className="flex-shrink-0 text-sm font-semibold text-accent hover:underline"
+            >
+              Ver todas
             </Link>
           </div>
 

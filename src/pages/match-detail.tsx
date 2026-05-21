@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
-import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Clock, MapPin, CheckCircle2, Share2 } from 'lucide-react';
+import { ArrowLeft, Clock, MapPin, CheckCircle2, Share2, Users, Plus } from 'lucide-react';
 import { ROUND_LABELS } from '@/shared/data/mock';
 import { getMaxPossiblePoints } from '@/shared/lib/scoring';
 import { Button } from '@/shared/components/ui/button';
@@ -399,9 +399,8 @@ export function MatchDetailPage() {
   };
 
   const myLeagueList = myLeagues?.data ?? [];
-  // Show league picker if the user has any leagues.
-  // Also shows when auto-selected to a different league than the URL param.
-  const showLeaguePicker = myLeagueList.length > 0;
+  const hasLeague = myLeagueList.length > 0;
+  const showLeaguePicker = hasLeague;
 
   return (
     <div className="flex flex-col min-h-full animate-fade-in">
@@ -447,12 +446,25 @@ export function MatchDetailPage() {
               <span className="text-xs-s text-muted mt-1">Resultado final</span>
             )}
           </div>
-        ) : (
-          // Scheduled: show score input
+        ) : hasLeague ? (
+          // Scheduled + in a league: show score input
           <div className="flex items-center justify-around gap-4">
             <ScoreInput value={homeScore} onChange={updateHomeScore} team={homeTeamDisplay} />
             <span className="text-2xl-s font-display font-bold text-muted">vs</span>
             <ScoreInput value={awayScore} onChange={updateAwayScore} team={awayTeamDisplay} />
+          </div>
+        ) : (
+          // Scheduled + no league: show teams without input
+          <div className="flex items-center justify-around gap-4">
+            <div className="flex flex-col items-center gap-2">
+              <TeamFlag code={homeTeamDisplay.code} emoji={homeTeamDisplay.flag} size={48} />
+              <span className="text-base-s font-bold text-text">{homeTeamDisplay.code}</span>
+            </div>
+            <span className="text-2xl-s font-display font-bold text-muted">vs</span>
+            <div className="flex flex-col items-center gap-2">
+              <TeamFlag code={awayTeamDisplay.code} emoji={awayTeamDisplay.flag} size={48} />
+              <span className="text-base-s font-bold text-text">{awayTeamDisplay.code}</span>
+            </div>
           </div>
         )}
       </div>
@@ -468,6 +480,40 @@ export function MatchDetailPage() {
         </div>
       </div>
 
+      {/* ── No-league notice (Option B) ── */}
+      {!hasLeague && match.status === 'scheduled' && (
+        <div className="mx-4 mt-3 p-4 rounded-xl bg-elevated border border-border flex flex-col gap-3">
+          <div className="flex items-start gap-3">
+            <Users size={18} className="text-accent flex-shrink-0 mt-0.5" />
+            <div>
+              <p className="text-sm-s font-semibold text-text">
+                Necesitás una liga para pronosticar
+              </p>
+              <p className="text-xs-s text-muted mt-0.5">
+                Los pronósticos se hacen dentro de una liga. Creá la tuya o unite con un código.
+              </p>
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <Link
+              to="/leagues/create"
+              className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg bg-accent text-accent-on text-xs-s font-semibold"
+            >
+              <Plus size={14} />
+              Crear liga
+            </Link>
+            <Link
+              to="/leagues/join"
+              className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg bg-elevated border border-border text-text text-xs-s font-semibold hover:border-accent-border transition-colors"
+            >
+              <Users size={14} />
+              Unirse
+            </Link>
+          </div>
+        </div>
+      )}
+
+      {/* ── League picker (when user has leagues) ── */}
       {showLeaguePicker && (
         <div className="mx-4 mt-3">
           <p className="text-xs-s text-muted mb-2">Liga para el pronóstico</p>
@@ -491,7 +537,8 @@ export function MatchDetailPage() {
         </div>
       )}
 
-      {match.status === 'scheduled' && (homeScore + awayScore) > 0 && (
+      {/* ── Scorer picker (only when user has a league and scored > 0) ── */}
+      {hasLeague && match.status === 'scheduled' && (homeScore + awayScore) > 0 && (
         <div className="mx-4 mt-3 p-4 rounded-lg bg-card border border-border">
           <p className="text-sm-s font-semibold text-text mb-3">⚽ Goleadores (opcional · +2 pts c/u)</p>
           <div className="flex flex-col gap-3">
@@ -517,11 +564,13 @@ export function MatchDetailPage() {
         </div>
       )}
 
-      {match.status === 'scheduled' && (
+      {/* ── Points preview (only with league) ── */}
+      {hasLeague && match.status === 'scheduled' && (
         <PointsPreview home={homeScore} away={awayScore} scorerCount={homeScorers.length + awayScorers.length} />
       )}
 
-      {match.status === 'scheduled' ? (
+      {/* ── Save / saved state ── */}
+      {hasLeague && match.status === 'scheduled' ? (
         <div className="px-4 mt-4">
           {saved ? (
             <>
@@ -546,22 +595,11 @@ export function MatchDetailPage() {
             </>
           ) : (
             <>
-              {myLeagueList.length === 0 ? (
-                <div className="flex flex-col items-center gap-2 py-4 rounded-xl bg-elevated border border-border">
-                  <p className="text-sm-s font-semibold text-text">Necesitás una liga para pronosticar</p>
-                  <p className="text-xs-s text-muted text-center">
-                    Creá o unite a una liga y luego volvé acá a pronosticar
-                  </p>
-                </div>
-              ) : (
-                <>
-                  <Button fullWidth size="lg" onClick={handleSave} loading={upsertMutation.isPending} disabled={!leagueId}>
-                    {existingPrediction ? 'Actualizar pronóstico' : 'Guardar pronóstico'}
-                  </Button>
-                  {saveError && (
-                    <p className="text-xs-s text-red-400 mt-2 text-center">{saveError}</p>
-                  )}
-                </>
+              <Button fullWidth size="lg" onClick={handleSave} loading={upsertMutation.isPending} disabled={!leagueId}>
+                {existingPrediction ? 'Actualizar pronóstico' : 'Guardar pronóstico'}
+              </Button>
+              {saveError && (
+                <p className="text-xs-s text-red-400 mt-2 text-center">{saveError}</p>
               )}
             </>
           )}
