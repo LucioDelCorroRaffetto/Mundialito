@@ -1,7 +1,6 @@
 import { NavLink } from 'react-router-dom';
-import { Home, Users, User, Calendar, ShieldCheck, BarChart2, Star } from 'lucide-react';
+import { Home, Users, User, Calendar, BarChart2, Star } from 'lucide-react';
 import { cn } from '@/shared/lib/cn';
-import { useAuthStore } from '@/shared/stores/auth-store';
 
 const BASE_TABS = [
   { to: '/home',        label: 'Inicio',   Icon: Home },
@@ -12,11 +11,8 @@ const BASE_TABS = [
   { to: '/profile',     label: 'Perfil',   Icon: User },
 ];
 
-const ADMIN_TAB = { to: '/admin', label: 'Admin', Icon: ShieldCheck };
-
 export function TabBar() {
-  const isAdmin = useAuthStore((s) => s.user?.isAdmin);
-  const tabs = isAdmin ? [...BASE_TABS, ADMIN_TAB] : BASE_TABS;
+  const tabs = BASE_TABS;
 
   return (
     <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-card/95 backdrop-blur-md border-t border-border safe-bottom">

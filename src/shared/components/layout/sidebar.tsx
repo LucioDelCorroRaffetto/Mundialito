@@ -1,8 +1,7 @@
 import { NavLink } from 'react-router-dom';
-import { Home, Trophy, Users, User, Calendar, ShieldCheck, BarChart2, Star } from 'lucide-react';
+import { Home, Trophy, Users, User, Calendar, BarChart2, Star } from 'lucide-react';
 import { cn } from '@/shared/lib/cn';
 import { Logo } from '@/shared/components/logo';
-import { useAuthStore } from '@/shared/stores/auth-store';
 
 const baseNavItems = [
   { to: '/home',        label: 'Inicio',          Icon: Home },
@@ -15,10 +14,7 @@ const baseNavItems = [
 ];
 
 export function Sidebar() {
-  const isAdmin = useAuthStore((s) => s.user?.isAdmin);
-  const navItems = isAdmin
-    ? [...baseNavItems, { to: '/admin', label: 'Admin', Icon: ShieldCheck }]
-    : baseNavItems;
+  const navItems = baseNavItems;
   return (
     <aside className="hidden md:flex flex-col w-56 xl:w-64 shrink-0 h-screen sticky top-0 border-r border-border bg-card">
       {/* Logo */}
