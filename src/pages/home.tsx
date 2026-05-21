@@ -256,8 +256,8 @@ interface UpcomingMatch {
   id: number;
   kickoffUtc: string;
   city: string;
-  homeTeam: Team;
-  awayTeam: Team;
+  homeTeam: Pick<Team, 'id' | 'code' | 'flag' | 'name'>;
+  awayTeam: Pick<Team, 'id' | 'code' | 'flag' | 'name'>;
 }
 
 function UpcomingMatchesSection({
