@@ -46,6 +46,14 @@ function PointsPreview({ home, away, scorerCount }: { home: number; away: number
   );
 }
 
+const SCORER_POSITION_ORDER = ['FWD', 'MID', 'DEF', 'GK'] as const;
+const SCORER_POSITION_LABELS: Record<string, string> = {
+  FWD: 'Delanteros',
+  MID: 'Mediocampistas',
+  DEF: 'Defensores',
+  GK: 'Porteros',
+};
+
 function ScorerPicker({
   team, maxGoals, selected, onChange, players,
 }: {
@@ -55,9 +63,7 @@ function ScorerPicker({
   onChange: (ids: number[]) => void;
   players: { id: number; name: string; position: string; teamId: number }[];
 }) {
-  const teamPlayers = players.filter(
-    (p) => p.teamId === team.id && (p.position === 'FWD' || p.position === 'MID')
-  );
+  const teamPlayers = players.filter((p) => p.teamId === team.id);
 
   const togglePlayer = (id: number) => {
     if (selected.includes(id)) {
@@ -69,37 +75,55 @@ function ScorerPicker({
 
   return (
     <div>
-      <div className="flex items-center gap-2 mb-2">
+      <div className="flex items-center gap-2 mb-3">
         <TeamFlag code={team.code} emoji={team.flag} size={24} />
-        <span className="text-sm-s font-semibold text-text">{team.code}</span>
+        <span className="text-sm-s font-semibold text-text">{team.name}</span>
         <span className="text-xs-s text-muted ml-auto">
-          {selected.length} / {maxGoals}
+          {selected.length} / {maxGoals} goles
         </span>
       </div>
-      <div className="flex flex-wrap gap-1.5">
-        {teamPlayers.map((p) => {
-          const isSelected = selected.includes(p.id);
-          const isDisabled = !isSelected && selected.length >= maxGoals;
-          return (
-            <button
-              key={p.id}
-              type="button"
-              onClick={() => togglePlayer(p.id)}
-              disabled={isDisabled}
-              className={cn(
-                'px-2.5 py-1 rounded-md text-xs-s font-medium border transition-colors',
-                isSelected
-                  ? 'bg-accent text-accent-on border-accent'
-                  : isDisabled
-                  ? 'bg-elevated border-border text-muted opacity-50 cursor-not-allowed'
-                  : 'bg-elevated border-border text-text hover:border-accent-border'
-              )}
-            >
-              {p.name}
-            </button>
-          );
-        })}
-      </div>
+
+      {teamPlayers.length === 0 ? (
+        <p className="text-xs-s text-muted italic">Sin jugadores cargados para este equipo.</p>
+      ) : (
+        <div className="flex flex-col gap-3">
+          {SCORER_POSITION_ORDER.map((pos) => {
+            const posPlayers = teamPlayers.filter((p) => p.position === pos);
+            if (posPlayers.length === 0) return null;
+            return (
+              <div key={pos}>
+                <p className="text-xs-s text-muted font-semibold mb-1.5 uppercase tracking-wide">
+                  {SCORER_POSITION_LABELS[pos]}
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {posPlayers.map((p) => {
+                    const isSelected = selected.includes(p.id);
+                    const isDisabled = !isSelected && selected.length >= maxGoals;
+                    return (
+                      <button
+                        key={p.id}
+                        type="button"
+                        onClick={() => togglePlayer(p.id)}
+                        disabled={isDisabled}
+                        className={cn(
+                          'px-2.5 py-1 rounded-md text-xs-s font-medium border transition-colors',
+                          isSelected
+                            ? 'bg-accent text-accent-on border-accent'
+                            : isDisabled
+                            ? 'bg-elevated border-border text-muted opacity-50 cursor-not-allowed'
+                            : 'bg-elevated border-border text-text hover:border-accent-border'
+                        )}
+                      >
+                        {p.name}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
@@ -241,6 +265,25 @@ export function MatchDetailPage() {
   const [selectedLeagueId, setSelectedLeagueId] = useState<number | null>(leagueIdFromParams);
   const leagueId = selectedLeagueId;
 
+  // Validate leagueId against user's actual leagues.
+  // If the URL param points to a league the user doesn't belong to,
+  // reset to their first league (or null if they have none).
+  useEffect(() => {
+    const leagues = myLeagues?.data ?? [];
+    if (leagues.length === 0) {
+      setSelectedLeagueId(null);
+      return;
+    }
+    const isValid = leagues.some((l) => l.id === selectedLeagueId);
+    if (!isValid) {
+      // Auto-select their first league instead of using an invalid one
+      setSelectedLeagueId(leagues[0].id);
+    }
+  // Run when myLeagues loads — intentionally not depending on selectedLeagueId
+  // so we don't overwrite user's manual selection
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [myLeagues]);
+
   const { data: existingPrediction } = useMyPredictionForMatch(matchId, leagueId ?? undefined);
 
   const [homeScore, setHomeScore] = useState(0);
@@ -341,13 +384,24 @@ export function MatchDetailPage() {
       });
       setSaved(true);
       vibrate(20);
-    } catch (e: any) {
-      setSaveError(e?.response?.data?.error?.message ?? 'Error al guardar pronóstico');
+    } catch (e: unknown) {
+      const err = e as { response?: { data?: { error?: { message?: string } } } };
+      const apiMsg = err?.response?.data?.error?.message ?? '';
+      // Translate known English API messages to Spanish
+      const translated =
+        apiMsg.toLowerCase().includes('not a member')
+          ? 'No sos miembro de esa liga'
+          : apiMsg.toLowerCase().includes('locked') || apiMsg.toLowerCase().includes('started')
+          ? 'El pronóstico está cerrado para este partido'
+          : apiMsg || 'Error al guardar pronóstico';
+      setSaveError(translated);
     }
   };
 
   const myLeagueList = myLeagues?.data ?? [];
-  const showLeaguePicker = !leagueIdFromParams && myLeagueList.length > 0;
+  // Show league picker if the user has any leagues.
+  // Also shows when auto-selected to a different league than the URL param.
+  const showLeaguePicker = myLeagueList.length > 0;
 
   return (
     <div className="flex flex-col min-h-full animate-fade-in">
@@ -492,11 +546,22 @@ export function MatchDetailPage() {
             </>
           ) : (
             <>
-              <Button fullWidth size="lg" onClick={handleSave} loading={upsertMutation.isPending}>
-                {existingPrediction ? 'Actualizar pronóstico' : 'Guardar pronóstico'}
-              </Button>
-              {saveError && (
-                <p className="text-xs-s text-red-400 mt-2 text-center">{saveError}</p>
+              {myLeagueList.length === 0 ? (
+                <div className="flex flex-col items-center gap-2 py-4 rounded-xl bg-elevated border border-border">
+                  <p className="text-sm-s font-semibold text-text">Necesitás una liga para pronosticar</p>
+                  <p className="text-xs-s text-muted text-center">
+                    Creá o unite a una liga y luego volvé acá a pronosticar
+                  </p>
+                </div>
+              ) : (
+                <>
+                  <Button fullWidth size="lg" onClick={handleSave} loading={upsertMutation.isPending} disabled={!leagueId}>
+                    {existingPrediction ? 'Actualizar pronóstico' : 'Guardar pronóstico'}
+                  </Button>
+                  {saveError && (
+                    <p className="text-xs-s text-red-400 mt-2 text-center">{saveError}</p>
+                  )}
+                </>
               )}
             </>
           )}
