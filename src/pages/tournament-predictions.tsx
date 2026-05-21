@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Clock, CheckCircle2, Search, X } from 'lucide-react';
+import { ArrowLeft, Clock, CheckCircle2, Search, X, Trophy, Users } from 'lucide-react';
 import { Button } from '@/shared/components/ui/button';
 import { cn } from '@/shared/lib/cn';
 import { useTeams } from '@/shared/hooks/use-teams';
@@ -10,6 +10,7 @@ import {
   useTournamentPrediction,
   useUpsertTournamentPrediction,
 } from '@/shared/hooks/use-tournament-predictions';
+import { useMyLeagues } from '@/shared/hooks/use-leagues';
 import { SkeletonList } from '@/shared/components/skeleton';
 import { toast } from 'sonner';
 import type { Player, Team } from '@/shared/types/api';
@@ -282,8 +283,24 @@ function TopScorerCard({
 export function TournamentPredictionsPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+
+  // leagueId can come from URL param OR be chosen inline
   const leagueIdParam = searchParams.get('leagueId');
-  const leagueId = leagueIdParam ? Number(leagueIdParam) : undefined;
+
+  const { data: myLeaguesData, isLoading: leaguesLoading } = useMyLeagues();
+  const myLeagues = myLeaguesData?.data ?? [];
+
+  // selectedLeagueId: URL param → first league → null
+  const [selectedLeagueId, setSelectedLeagueId] = useState<number | null>(
+    leagueIdParam ? Number(leagueIdParam) : null,
+  );
+
+  // Auto-select first league once leagues load (only if none pre-selected)
+  useEffect(() => {
+    if (!selectedLeagueId && myLeagues.length > 0) {
+      setSelectedLeagueId(myLeagues[0].id);
+    }
+  }, [myLeagues, selectedLeagueId]);
 
   const [picks, setPicks] = useState<LocalPicks>({
     championTeamId: null,
@@ -301,8 +318,14 @@ export function TournamentPredictionsPage() {
   const { data: playersData } = usePlayers();
   const players = playersData ?? [];
 
-  const tournamentQuery = useTournamentPrediction(leagueId);
+  const tournamentQuery = useTournamentPrediction(selectedLeagueId ?? undefined);
   const upsertMutation = useUpsertTournamentPrediction();
+
+  // Reset + repopulate picks when league changes
+  useEffect(() => {
+    setInitialised(false);
+    setPicks({ championTeamId: null, runnerUpTeamId: null, topScorerPlayerId: null, revelationTeamId: null, surpriseEliminatedTeamId: null });
+  }, [selectedLeagueId]);
 
   // Populate picks from server data once loaded
   useEffect(() => {
@@ -323,13 +346,10 @@ export function TournamentPredictionsPage() {
   }, [tournamentQuery.data, tournamentQuery.isLoading, initialised]);
 
   const handleSave = async () => {
-    if (!leagueId) {
-      toast.error('Seleccioná una liga primero');
-      return;
-    }
+    if (!selectedLeagueId) return;
     try {
       await upsertMutation.mutateAsync({
-        leagueId,
+        leagueId: selectedLeagueId,
         championTeamId: picks.championTeamId,
         runnerUpTeamId: picks.runnerUpTeamId,
         topScorerPlayerId: picks.topScorerPlayerId,
@@ -346,52 +366,74 @@ export function TournamentPredictionsPage() {
     setPicks((prev) => ({ ...prev, [field]: id }));
   };
 
-  const isLoading = tournamentQuery.isLoading || teamsLoading;
+  const pageHeader = (
+    <div className="flex items-center gap-3 px-4 pt-5 pb-3">
+      <button
+        onClick={() => navigate(-1)}
+        className="p-2 rounded-md bg-elevated border border-border"
+        aria-label="Volver"
+      >
+        <ArrowLeft size={18} className="text-text" />
+      </button>
+      <div>
+        <h1 className="text-base-s font-bold text-text">Predicciones de Copa</h1>
+        <p className="text-xs-s text-muted">Elegí campeón, goleador y más · se evalúan al final del torneo</p>
+      </div>
+    </div>
+  );
 
-  if (!leagueId) {
+  // Still loading leagues
+  if (leaguesLoading) {
     return (
       <div className="flex flex-col min-h-full animate-fade-in pb-8">
-        <div className="flex items-center gap-3 px-4 pt-5 pb-3">
-          <button
-            onClick={() => navigate(-1)}
-            className="p-2 rounded-md bg-elevated border border-border"
-            aria-label="Volver"
-          >
-            <ArrowLeft size={18} className="text-text" />
-          </button>
-          <h1 className="text-base-s font-bold text-text">Predicciones de Copa</h1>
-        </div>
-        <div className="flex flex-col items-center justify-center flex-1 px-4 gap-3 mt-16">
-          <p className="text-base-s font-semibold text-text text-center">
-            Seleccioná una liga para ver tus pronósticos
-          </p>
-          <button
-            onClick={() => navigate('/leagues')}
-            className="px-4 py-2 rounded-lg bg-accent text-accent-on text-sm-s font-semibold"
-          >
-            Ir a ligas
-          </button>
+        {pageHeader}
+        <div className="px-4 mt-2"><SkeletonList count={5} /></div>
+      </div>
+    );
+  }
+
+  // User has no leagues → explain clearly and offer CTA
+  if (!leaguesLoading && myLeagues.length === 0) {
+    return (
+      <div className="flex flex-col min-h-full animate-fade-in pb-8">
+        {pageHeader}
+        <div className="mx-4 mt-6 p-6 rounded-xl bg-card border border-border flex flex-col items-center gap-4 text-center">
+          <div className="w-12 h-12 rounded-full bg-accent/10 flex items-center justify-center">
+            <Trophy size={22} className="text-accent" />
+          </div>
+          <div>
+            <p className="text-base-s font-bold text-text">Necesitás estar en una liga</p>
+            <p className="text-sm-s text-muted mt-1">
+              Los pronósticos de Copa son por liga. Unite o creá una para empezar.
+            </p>
+          </div>
+          <div className="flex gap-3 w-full">
+            <Link
+              to="/leagues/create"
+              className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-lg bg-accent text-accent-on text-sm-s font-semibold"
+            >
+              <Users size={14} />
+              Crear liga
+            </Link>
+            <Link
+              to="/leagues/join"
+              className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-lg bg-elevated border border-border text-text text-sm-s font-semibold"
+            >
+              Unirse
+            </Link>
+          </div>
         </div>
       </div>
     );
   }
 
+  const isLoading = tournamentQuery.isLoading || teamsLoading;
+
   if (isLoading) {
     return (
       <div className="flex flex-col min-h-full animate-fade-in pb-8">
-        <div className="flex items-center gap-3 px-4 pt-5 pb-3">
-          <button
-            onClick={() => navigate(-1)}
-            className="p-2 rounded-md bg-elevated border border-border"
-            aria-label="Volver"
-          >
-            <ArrowLeft size={18} className="text-text" />
-          </button>
-          <h1 className="text-base-s font-bold text-text">Predicciones de Copa</h1>
-        </div>
-        <div className="px-4 mt-2">
-          <SkeletonList count={5} />
-        </div>
+        {pageHeader}
+        <div className="px-4 mt-2"><SkeletonList count={5} /></div>
       </div>
     );
   }
@@ -401,19 +443,30 @@ export function TournamentPredictionsPage() {
   return (
     <div className="flex flex-col min-h-full animate-fade-in pb-8">
       {/* Header */}
-      <div className="flex items-center gap-3 px-4 pt-5 pb-3">
-        <button
-          onClick={() => navigate(-1)}
-          className="p-2 rounded-md bg-elevated border border-border"
-          aria-label="Volver"
-        >
-          <ArrowLeft size={18} className="text-text" />
-        </button>
-        <div>
-          <h1 className="text-base-s font-bold text-text">Predicciones de Copa</h1>
-          <p className="text-xs-s text-muted">Elegí campeón, goleador y más · se evalúan al final del torneo</p>
+      {pageHeader}
+
+      {/* League picker — show when user is in multiple leagues */}
+      {myLeagues.length > 1 && (
+        <div className="px-4 pb-3">
+          <p className="text-xs-s text-muted mb-2">Liga</p>
+          <div className="flex gap-1.5 overflow-x-auto no-scrollbar">
+            {myLeagues.map((league) => (
+              <button
+                key={league.id}
+                onClick={() => setSelectedLeagueId(league.id)}
+                className={cn(
+                  'flex-shrink-0 px-3 py-1.5 rounded-full text-xs-s font-semibold whitespace-nowrap border transition-colors',
+                  selectedLeagueId === league.id
+                    ? 'bg-accent text-accent-on border-accent'
+                    : 'bg-card border-border text-muted hover:text-text',
+                )}
+              >
+                {league.name}
+              </button>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Urgency badge */}
       <div className="mx-4 mb-4 flex items-center gap-2 px-3 py-2 rounded-lg bg-orange-500/15 border border-orange-500/30">
