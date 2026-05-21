@@ -18,6 +18,8 @@ const FIFA_TO_ISO2: Record<string, string> = {
   PAN: 'pa',
   CRC: 'cr',
   JAM: 'jm',
+  HAI: 'ht',
+  CUW: 'cw',
   // UEFA
   ESP: 'es',
   ENG: 'gb-eng', // England has its own flag code
@@ -39,6 +41,7 @@ const FIFA_TO_ISO2: Record<string, string> = {
   NOR: 'no',
   SWE: 'se',
   CZE: 'cz',
+  BIH: 'ba',
   HUN: 'hu',
   SVK: 'sk',
   SVN: 'si',
@@ -57,6 +60,8 @@ const FIFA_TO_ISO2: Record<string, string> = {
   JOR: 'jo',
   CHN: 'cn',
   IND: 'in',
+  // AFC
+  IRQ: 'iq',
   // CAF
   MAR: 'ma',
   SEN: 'sn',
@@ -67,6 +72,9 @@ const FIFA_TO_ISO2: Record<string, string> = {
   CMR: 'cm',
   CIV: 'ci',
   GHA: 'gh',
+  ZAF: 'za',
+  CPV: 'cv',
+  COD: 'cd',
   // OFC
   NZL: 'nz',
 };
