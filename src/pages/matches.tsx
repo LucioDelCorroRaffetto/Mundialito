@@ -115,7 +115,7 @@ export function MatchesPage() {
               'flex-1 py-2 rounded-md text-sm-s font-semibold transition-colors',
               mainTab === tab
                 ? 'bg-accent text-accent-on'
-                : 'bg-card border border-border text-muted hover:text-text',
+                : 'bg-elevated border border-border text-muted hover:text-text',
             )}
           >
             {tab}
@@ -130,14 +130,14 @@ export function MatchesPage() {
       ) : (
         <>
           {/* Group filter chips */}
-          <div className="flex gap-1.5 px-4 pb-3 overflow-x-auto no-scrollbar">
+          <div className="flex gap-1.5 px-4 py-1 pb-3 overflow-x-auto no-scrollbar">
             <button
               onClick={() => setGroupFilter(null)}
               className={cn(
                 'flex-shrink-0 px-3 py-1.5 rounded-full text-xs-s font-semibold transition-colors whitespace-nowrap border',
                 groupFilter === null
                   ? 'bg-accent text-accent-on border-accent'
-                  : 'bg-card border-border text-muted',
+                  : 'bg-elevated border-border text-muted hover:text-text',
               )}
             >
               Todos
@@ -150,7 +150,7 @@ export function MatchesPage() {
                   'flex-shrink-0 w-9 h-8 rounded-full text-xs-s font-bold transition-colors border',
                   groupFilter === g
                     ? 'bg-accent text-accent-on border-accent'
-                    : 'bg-card border-border text-muted',
+                    : 'bg-elevated border-border text-muted hover:text-text',
                 )}
               >
                 {g}
@@ -159,7 +159,7 @@ export function MatchesPage() {
           </div>
 
           {/* Status filter tabs */}
-          <div className="flex gap-1.5 px-4 pb-4 overflow-x-auto no-scrollbar">
+          <div className="flex gap-1.5 px-4 py-1 pb-4 overflow-x-auto no-scrollbar">
             {STATUS_TABS.map((tab) => (
               <button
                 key={tab}
@@ -168,7 +168,7 @@ export function MatchesPage() {
                   'flex-shrink-0 px-3 py-1.5 rounded-full text-xs-s font-semibold whitespace-nowrap transition-colors border',
                   statusFilter === tab
                     ? 'bg-accent text-accent-on border-accent'
-                    : 'bg-card border-border text-muted hover:text-text',
+                    : 'bg-elevated border-border text-muted hover:text-text',
                 )}
               >
                 {tab}

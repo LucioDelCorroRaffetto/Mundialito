@@ -52,25 +52,25 @@ function ScoreInput({
   team: { code: string; flag: string; name: string };
 }) {
   return (
-    <div className="flex flex-col items-center gap-3 flex-1">
-      <TeamFlag code={team.code} emoji={team.flag} size={48} />
+    <div className="flex flex-col items-center gap-2 flex-1 min-w-0">
+      <TeamFlag code={team.code} emoji={team.flag} size={44} />
       <span className="text-sm font-bold text-text tracking-wide">{teamDisplayCode(team.code)}</span>
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-1.5">
         <button
           onClick={() => onChange(Math.max(0, value - 1))}
           disabled={value === 0}
-          className="w-9 h-9 rounded-xl bg-elevated border border-border flex items-center justify-center text-muted disabled:opacity-30 active:scale-95 transition-all hover:border-border/80"
+          className="w-8 h-8 rounded-lg bg-elevated border border-border flex items-center justify-center text-muted disabled:opacity-30 active:scale-95 transition-all"
         >
-          <Minus size={16} strokeWidth={2.5} />
+          <Minus size={15} strokeWidth={2.5} />
         </button>
-        <div className="w-14 h-14 rounded-2xl bg-accent/10 border-2 border-accent/30 flex items-center justify-center">
-          <span className="text-4xl font-display font-bold text-accent tabular-nums leading-none">{value}</span>
+        <div className="w-12 h-12 rounded-xl bg-accent/10 border-2 border-accent/30 flex items-center justify-center">
+          <span className="text-3xl font-display font-bold text-accent tabular-nums leading-none">{value}</span>
         </div>
         <button
           onClick={() => onChange(value + 1)}
-          className="w-9 h-9 rounded-xl bg-accent flex items-center justify-center text-accent-on shadow-sm active:scale-95 transition-all"
+          className="w-8 h-8 rounded-lg bg-accent flex items-center justify-center text-accent-on shadow-sm active:scale-95 transition-all"
         >
-          <Plus size={16} strokeWidth={2.5} />
+          <Plus size={15} strokeWidth={2.5} />
         </button>
       </div>
     </div>
@@ -309,7 +309,7 @@ export function MatchDetailPage() {
       </div>
 
       {/* Score card */}
-      <div className="mx-4 p-5 rounded-xl bg-card border border-border shadow-card">
+      <div className="mx-4 p-4 rounded-xl bg-card border border-border shadow-card overflow-hidden">
         {match.status !== 'scheduled' && match.homeScore !== null ? (
           // Live / finished: show actual score
           <div className="flex flex-col items-center gap-2">
@@ -341,9 +341,9 @@ export function MatchDetailPage() {
           </div>
         ) : (
           // Scheduled: always show score input (no league required to predict)
-          <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center justify-between gap-1">
             <ScoreInput value={homeScore} onChange={updateHomeScore} team={homeTeamDisplay} />
-            <span className="text-xl font-display font-bold text-muted/50 flex-shrink-0 mb-6">vs</span>
+            <span className="text-sm font-bold text-muted/50 flex-shrink-0 pb-4">vs</span>
             <ScoreInput value={awayScore} onChange={updateAwayScore} team={awayTeamDisplay} />
           </div>
         )}
