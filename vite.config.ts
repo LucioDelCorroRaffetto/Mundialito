@@ -59,5 +59,13 @@ export default defineConfig({
   resolve: {
     alias: { '@': path.resolve(__dirname, './src') },
   },
-  server: { host: true, port: process.env.PORT ? Number(process.env.PORT) : 5174 },
+  server: {
+    host: true,
+    port: process.env.PORT ? Number(process.env.PORT) : 5174,
+    // Allow Google Sign-In popup to postMessage back (mirrors vercel.json headers)
+    headers: {
+      'Cross-Origin-Opener-Policy': 'unsafe-none',
+      'Cross-Origin-Embedder-Policy': 'unsafe-none',
+    },
+  },
 });

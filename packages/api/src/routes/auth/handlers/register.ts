@@ -8,9 +8,14 @@ import { ConflictError } from '../../../lib/errors.js';
 import { eq, or } from 'drizzle-orm';
 
 export const registerSchema = z.object({
-  email: z.string().email(),
-  username: z.string().min(3).max(30).regex(/^[a-zA-Z0-9_]+$/),
-  password: z.string().min(8),
+  email: z.string().email('Email inválido'),
+  username: z
+    .string()
+    .min(3, 'Mínimo 3 caracteres')
+    .max(30, 'Máximo 30 caracteres')
+    .regex(/^[a-zA-Z0-9_]+$/, 'Solo letras, números y guión bajo')
+    .refine((v) => /[a-zA-Z]/.test(v), 'El nombre de usuario debe tener al menos una letra'),
+  password: z.string().min(8, 'Mínimo 8 caracteres'),
 });
 
 export async function registerHandler(req: Request, res: Response) {

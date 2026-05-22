@@ -10,9 +10,14 @@ import { GoogleSignInButton } from '@/shared/components/google-sign-in-button';
 import { useRegister } from '@/shared/hooks/use-auth';
 
 const schema = z.object({
-  displayName: z.string().min(2, 'Mínimo 2 caracteres').max(60, 'Máximo 60 caracteres'),
+  displayName: z
+    .string()
+    .min(2, 'Mínimo 2 caracteres')
+    .max(30, 'Máximo 30 caracteres')
+    .regex(/^[a-zA-Z0-9_]+$/, 'Solo letras, números y guión bajo (_)')
+    .refine((v) => /[a-zA-Z]/.test(v), 'El nombre debe tener al menos una letra'),
   email: z.string().email('Email inválido'),
-  password: z.string().min(6, 'Mínimo 6 caracteres'),
+  password: z.string().min(8, 'Mínimo 8 caracteres'),
 });
 
 type FormValues = z.infer<typeof schema>;
@@ -78,7 +83,7 @@ export function RegisterPage() {
             label="Contraseña"
             type="password"
             autoComplete="new-password"
-            placeholder="Mínimo 6 caracteres"
+            placeholder="Mínimo 8 caracteres"
             {...register('password')}
             error={errors.password?.message}
           />

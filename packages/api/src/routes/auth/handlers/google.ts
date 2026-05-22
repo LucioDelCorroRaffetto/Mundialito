@@ -76,6 +76,7 @@ export async function googleAuthHandler(req: Request, res: Response) {
       .returning();
   }
 
+  const adminIds = process.env.ADMIN_USER_IDS?.split(',').map(Number).filter(Boolean) ?? [];
   const tokenPayload = { sub: user.id, username: user.username };
 
   return res.json({
@@ -84,6 +85,7 @@ export async function googleAuthHandler(req: Request, res: Response) {
       email: user.email,
       username: user.username,
       avatarUrl: user.avatarUrl,
+      isAdmin: adminIds.includes(user.id),
     },
     accessToken: signAccess(tokenPayload),
     refreshToken: signRefresh(tokenPayload),
