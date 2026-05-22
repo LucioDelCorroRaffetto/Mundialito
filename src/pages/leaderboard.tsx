@@ -105,7 +105,9 @@ function LeaderboardRow({ entry, isMe }: { entry: LeaderboardEntry; isMe: boolea
           </p>
           {entry.topBadge && <BadgeChip badge={entry.topBadge} />}
         </div>
-        <p className="text-xs text-muted">{entry.leagueCount} liga{entry.leagueCount !== 1 ? 's' : ''}</p>
+        {entry.leagueCount > 0 && (
+          <p className="text-xs text-muted">{entry.leagueCount} liga{entry.leagueCount !== 1 ? 's' : ''}</p>
+        )}
       </div>
       <span className={cn('text-base font-bold', isMe ? 'text-accent' : 'text-text')}>
         {entry.totalPoints}
@@ -119,8 +121,9 @@ export function LeaderboardPage() {
   const currentUser = useAuthStore((s) => s.user);
 
   const entries = data?.data ?? [];
-  const top3 = entries.slice(0, 3);
-  const rest = entries.slice(3);
+  const showPodium = entries.length >= 1 && entries[0].totalPoints > 0;
+  const top3 = showPodium ? entries.slice(0, 3) : [];
+  const rest = showPodium ? entries.slice(3) : entries;
 
   const myEntry = entries.find((e) => e.userId === currentUser?.id);
 
@@ -158,8 +161,8 @@ export function LeaderboardPage() {
         </div>
       )}
 
-      {/* Podium */}
-      {top3.length > 0 && (
+      {/* Podium — only when at least one player has scored */}
+      {showPodium && top3.length > 0 && (
         <div className="px-4">
           <div className="flex items-end justify-center gap-3 py-4">
             {top3.map((entry, i) => (
