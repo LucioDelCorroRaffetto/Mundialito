@@ -21,7 +21,7 @@ export function GoogleSignInButton({ redirectTo = '/home' }: Props) {
     if (!credentialResponse.credential) return;
     try {
       const { data } = await apiClient.post<{
-        user: { id: number; email: string; username: string; avatarUrl: string | null };
+        user: { id: number; email: string; username: string; avatarUrl: string | null; isAdmin?: boolean };
         accessToken: string;
         refreshToken: string;
       }>('/auth/google', { credential: credentialResponse.credential });

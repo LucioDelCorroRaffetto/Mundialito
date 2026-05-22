@@ -7,6 +7,7 @@ import { motion } from 'framer-motion';
 import { Logo } from '@/shared/components/logo';
 import { Button } from '@/shared/components/ui/button';
 import { Input } from '@/shared/components/ui/input';
+import { PasswordInput } from '@/shared/components/ui/password-input';
 import { GoogleSignInButton } from '@/shared/components/google-sign-in-button';
 import { useLogin } from '@/shared/hooks/use-auth';
 
@@ -80,11 +81,10 @@ export function LoginPage() {
             {...register('email')}
             error={errors.email?.message}
           />
-          <Input
+          <PasswordInput
             label="Contraseña"
-            type="password"
             autoComplete="current-password"
-            placeholder="••••••"
+            placeholder="Tu contraseña"
             {...register('password')}
             error={errors.password?.message}
           />
