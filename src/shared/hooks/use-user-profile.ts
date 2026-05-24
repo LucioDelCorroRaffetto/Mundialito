@@ -5,6 +5,12 @@ export interface UserPublicProfile {
   id: number;
   username: string;
   avatarUrl: string | null;
+  isAdmin: boolean;
+  adminProfile: {
+    role: string;
+    emoji: string;
+    bio: string;
+  } | null;
   stats: {
     totalPoints: number;
     totalPredictions: number;

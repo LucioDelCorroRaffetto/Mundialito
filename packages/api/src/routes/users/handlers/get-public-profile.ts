@@ -11,12 +11,28 @@ import {
   fantasyTeams,
 } from '../../../db/schema/index.js';
 
+// ─── Admin helpers ───────────────────────────────────────────────────────────
+function getAdminIds(): number[] {
+  return process.env.ADMIN_USER_IDS?.split(',').map(Number).filter(Boolean) ?? [];
+}
+
+/** Fun presidential profile injected for the admin account. */
+const ADMIN_PROFILE = {
+  role: 'Presidente de la FIFA',
+  emoji: '🏛️',
+  bio: '48 equipos. 16 sedes. 3 países anfitriones. Todo idea mía. ' +
+       'Si el torneo sale bien, fue por mi gestión. Si sale mal, culpen a otros. ' +
+       'Disponible para fotos y discursos de 45 minutos. 📣',
+};
+
 export async function getPublicProfileHandler(req: Request, res: Response) {
   const userId = parseInt(req.params['userId'] as string, 10);
 
   if (isNaN(userId)) {
     return res.status(400).json({ error: 'Invalid userId' });
   }
+
+  const isAdmin = getAdminIds().includes(userId);
 
   // Fetch user
   const [user] = await db
@@ -106,6 +122,8 @@ export async function getPublicProfileHandler(req: Request, res: Response) {
       id: user.id,
       username: user.username,
       avatarUrl: user.avatarUrl,
+      isAdmin,
+      adminProfile: isAdmin ? ADMIN_PROFILE : null,
       stats: {
         totalPoints,
         totalPredictions,

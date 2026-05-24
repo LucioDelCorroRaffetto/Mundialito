@@ -9,7 +9,9 @@
     "start": "node dist/server.js",
     "db:generate": "drizzle-kit generate",
     "db:push": "drizzle-kit push",
-    "db:seed": "tsx src/scripts/seed.ts"
+    "db:seed": "tsx src/scripts/seed.ts",
+    "sync:squads": "tsx src/scripts/sync-squads.ts",
+    "setup:infantino": "tsx src/scripts/setup-infantino.ts"
   },
   "dependencies": {
     "@libsql/client": "^0.14.0",

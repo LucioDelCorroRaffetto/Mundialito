@@ -43,11 +43,12 @@ export default {
         card: '0 4px 16px rgba(0,0,0,0.15)',
       },
       animation: {
-        'fade-in': 'fadeIn 200ms ease-out',
-        'slide-up': 'slideUp 320ms cubic-bezier(0.4, 0, 0.2, 1)',
+        'fade-in':   'fadeIn 200ms ease-out',
+        'slide-up':  'slideUp 320ms cubic-bezier(0.4, 0, 0.2, 1)',
+        'spin-slow': 'spin 4s linear infinite',
       },
       keyframes: {
-        fadeIn: { from: { opacity: '0' }, to: { opacity: '1' } },
+        fadeIn:  { from: { opacity: '0' }, to: { opacity: '1' } },
         slideUp: { from: { transform: 'translateY(20px)', opacity: '0' }, to: { transform: 'translateY(0)', opacity: '1' } },
       },
     },
