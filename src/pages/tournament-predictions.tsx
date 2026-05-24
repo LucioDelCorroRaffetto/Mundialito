@@ -26,6 +26,7 @@ interface LocalPicks {
 
 interface PickCardProps {
   title: string;
+  subtitle?: string;
   points: number;
   selectedTeamId: number | null;
   onSelect: (id: number) => void;
@@ -37,6 +38,7 @@ interface PickCardProps {
 
 function PickCard({
   title,
+  subtitle,
   points,
   selectedTeamId,
   onSelect,
@@ -53,7 +55,8 @@ function PickCard({
       <div className="flex items-center justify-between">
         <div>
           <p className="text-base-s font-bold text-text">{title}</p>
-          <p className="text-xs-s text-accent font-semibold">+{points} pts</p>
+          {subtitle && <p className="text-xs-s text-muted mt-0.5">{subtitle}</p>}
+          <p className="text-xs-s text-accent font-semibold mt-0.5">+{points} pts</p>
         </div>
         {team ? (
           <div className="flex items-center gap-2">
@@ -100,6 +103,10 @@ function PickCard({
     </div>
   );
 }
+
+// Goleador unlock: all squads published by June 2
+const SCORER_UNLOCK = new Date('2026-06-02T00:00:00-03:00');
+const scorerLocked = new Date() < SCORER_UNLOCK;
 
 interface TopScorerCardProps {
   sectionId: string;
@@ -167,6 +174,26 @@ function TopScorerCard({
       setQuery('');
     }
   }, [isOpen]);
+
+  if (scorerLocked) {
+    return (
+      <div className="p-4 rounded-xl bg-card border border-border flex flex-col gap-3">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-base-s font-bold text-text">Goleador del torneo</p>
+            <p className="text-xs-s text-accent font-semibold">+15 pts</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-3 p-3 rounded-lg bg-elevated border border-border">
+          <span className="text-lg">📋</span>
+          <div>
+            <p className="text-sm-s font-semibold text-text">Disponible el 2 de junio</p>
+            <p className="text-xs-s text-muted">Esperando listas oficiales de todos los países</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="p-4 rounded-xl bg-card border border-border flex flex-col gap-3">
@@ -508,7 +535,8 @@ export function TournamentPredictionsPage() {
           teams={teams}
         />
         <PickCard
-          title="Revelación"
+          title="Ceniciento del torneo"
+          subtitle="Equipo modesto que llegará más lejos de lo esperado"
           points={10}
           selectedTeamId={picks.revelationTeamId}
           onSelect={setField('revelationTeamId')}
@@ -518,7 +546,8 @@ export function TournamentPredictionsPage() {
           teams={teams}
         />
         <PickCard
-          title="Eliminado sorpresa"
+          title="Decepción del torneo"
+          subtitle="Favorito o candidato que caerá antes de tiempo"
           points={10}
           selectedTeamId={picks.surpriseEliminatedTeamId}
           onSelect={setField('surpriseEliminatedTeamId')}
@@ -537,8 +566,8 @@ export function TournamentPredictionsPage() {
             ['Campeón', '50 pts'],
             ['Finalista', '20 pts'],
             ['Goleador del torneo', '15 pts'],
-            ['Revelación', '10 pts'],
-            ['Eliminado sorpresa', '10 pts'],
+            ['Ceniciento del torneo', '10 pts'],
+            ['Decepción del torneo', '10 pts'],
           ].map(([label, pts]) => (
             <div key={label} className="flex items-center justify-between">
               <span className="text-sm-s text-muted">{label}</span>

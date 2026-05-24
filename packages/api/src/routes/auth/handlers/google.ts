@@ -7,6 +7,9 @@ import { signAccess, signRefresh } from '../../../lib/jwt.js';
 import { z } from 'zod';
 import { GOOGLE_CLIENT_ID } from '../../../constants.js';
 
+// Singleton — shares the internal certificate cache across requests
+const googleClient = new OAuth2Client(GOOGLE_CLIENT_ID);
+
 const bodySchema = z.object({
   credential: z.string().min(1),
 });
@@ -17,11 +20,9 @@ export async function googleAuthHandler(req: Request, res: Response) {
     return res.status(400).json({ error: 'Missing credential' });
   }
 
-  const client = new OAuth2Client(GOOGLE_CLIENT_ID);
-
   let ticket;
   try {
-    ticket = await client.verifyIdToken({
+    ticket = await googleClient.verifyIdToken({
       idToken: parsed.data.credential,
       audience: GOOGLE_CLIENT_ID,
     });
