@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Share2, Users, Trophy } from 'lucide-react';
+import { ArrowLeft, Share2, Users, Trophy, ChevronRight } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/shared/lib/cn';
 import { ShareSheet } from '@/shared/components/share-sheet';
@@ -20,27 +20,35 @@ function Row({ row, isMe }: { row: StandingRow; isMe: boolean }) {
       initial={{ opacity: 0, x: -8 }}
       animate={{ opacity: 1, x: 0 }}
       transition={{ delay: row.position * 0.04 }}
-      className={cn('flex items-center gap-3 px-4 py-3 border-b border-border last:border-0', isMe && 'bg-accent-soft')}
     >
-      <span className={cn('w-6 text-center text-sm-s font-bold', isMe ? 'text-accent' : 'text-muted')}>
-        {row.position}
-      </span>
-      <div className="w-8 h-8 rounded-full bg-elevated flex items-center justify-center flex-shrink-0 overflow-hidden">
-        {row.avatarUrl ? (
-          <img src={row.avatarUrl} alt={row.username} className="w-full h-full object-cover" />
-        ) : (
-          <span className="text-sm-s font-bold text-text">{initials}</span>
+      <Link
+        to={`/u/${row.userId}`}
+        className={cn(
+          'flex items-center gap-3 px-4 py-3 border-b border-border last:border-0 cursor-pointer hover:bg-elevated transition-colors',
+          isMe && 'bg-accent-soft hover:bg-accent-soft/80'
         )}
-      </div>
-      <div className="flex-1 min-w-0">
-        <p className={cn('text-sm-s font-semibold truncate', isMe ? 'text-accent' : 'text-text')}>
-          {row.username} {isMe && '(vos)'}
-        </p>
-        <p className="text-xs-s text-muted">{row.matchesPlayed} jugados</p>
-      </div>
-      <div className="flex items-center gap-1.5">
-        <span className={cn('text-base-s font-bold', isMe ? 'text-accent' : 'text-text')}>{row.points}</span>
-      </div>
+      >
+        <span className={cn('w-6 text-center text-sm-s font-bold', isMe ? 'text-accent' : 'text-muted')}>
+          {row.position}
+        </span>
+        <div className="w-8 h-8 rounded-full bg-elevated flex items-center justify-center flex-shrink-0 overflow-hidden">
+          {row.avatarUrl ? (
+            <img src={row.avatarUrl} alt={row.username} className="w-full h-full object-cover" />
+          ) : (
+            <span className="text-sm-s font-bold text-text">{initials}</span>
+          )}
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className={cn('text-sm-s font-semibold truncate', isMe ? 'text-accent' : 'text-text')}>
+            {row.username} {isMe && '(vos)'}
+          </p>
+          <p className="text-xs-s text-muted">{row.matchesPlayed} jugados</p>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <span className={cn('text-base-s font-bold', isMe ? 'text-accent' : 'text-text')}>{row.points}</span>
+          <ChevronRight size={16} className="text-muted flex-shrink-0" />
+        </div>
+      </Link>
     </motion.div>
   );
 }

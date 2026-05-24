@@ -53,7 +53,7 @@ function ScoreInput({
 }) {
   return (
     <div className="flex flex-col items-center gap-2 flex-1 min-w-0">
-      <TeamFlag code={team.code} emoji={team.flag} size={44} />
+      <TeamFlag code={team.code} emoji={team.flag} size={48} />
       <span className="text-sm font-bold text-text tracking-wide">{teamDisplayCode(team.code)}</span>
       <div className="flex items-center gap-1.5">
         <button

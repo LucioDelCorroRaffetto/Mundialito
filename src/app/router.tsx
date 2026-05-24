@@ -21,6 +21,7 @@ import { AchievementsPage } from '@/pages/achievements';
 import { AdminPage } from '@/pages/admin';
 import { LeaderboardPage } from '@/pages/leaderboard';
 import { TournamentPredictionsPage } from '@/pages/tournament-predictions';
+import { UserProfilePage } from '@/pages/user-profile';
 
 export const router = createBrowserRouter([
   { path: '/', element: <ErrorBoundary><SplashPage /></ErrorBoundary> },
@@ -43,6 +44,7 @@ export const router = createBrowserRouter([
       { path: '/achievements', element: <ErrorBoundary><AchievementsPage /></ErrorBoundary> },
       { path: '/leaderboard', element: <ErrorBoundary><LeaderboardPage /></ErrorBoundary> },
       { path: '/tournament', element: <ErrorBoundary><TournamentPredictionsPage /></ErrorBoundary> },
+      { path: '/u/:userId', element: <ErrorBoundary><UserProfilePage /></ErrorBoundary> },
       { path: '/admin', element: <ErrorBoundary><RequireAdmin><AdminPage /></RequireAdmin></ErrorBoundary> },
     ],
   },

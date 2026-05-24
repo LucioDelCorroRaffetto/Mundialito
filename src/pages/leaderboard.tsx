@@ -1,5 +1,6 @@
+import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { BarChart2 } from 'lucide-react';
+import { BarChart2, ChevronRight } from 'lucide-react';
 import { cn } from '@/shared/lib/cn';
 import { SkeletonList } from '@/shared/components/skeleton';
 import { useGlobalLeaderboard, type LeaderboardEntry, type TopBadge } from '@/shared/hooks/use-leaderboard';
@@ -45,24 +46,26 @@ function PodiumCard({ entry, place }: { entry: LeaderboardEntry; place: 0 | 1 | 
       className={cn('flex flex-col items-center gap-2', place === 0 ? 'order-2' : place === 1 ? 'order-1' : 'order-3')}
     >
       <span className="text-xl">{medal.label}</span>
-      <div
-        className={cn(
-          'w-12 h-12 rounded-full border-2 flex items-center justify-center flex-shrink-0 overflow-hidden',
-          medal.border
-        )}
-      >
-        {entry.avatarUrl ? (
-          <img src={entry.avatarUrl} alt={entry.username} className="w-full h-full object-cover" />
-        ) : (
-          <span className={cn('text-base font-bold', medal.text)}>{initials}</span>
-        )}
-      </div>
-      <div className="flex flex-col items-center gap-0.5">
-        <p className={cn('text-xs font-semibold text-center max-w-[80px] truncate', medal.text)}>
-          {entry.username}
-        </p>
-        {entry.topBadge && <BadgeChip badge={entry.topBadge} />}
-      </div>
+      <Link to={`/u/${entry.userId}`} className="flex flex-col items-center gap-2">
+        <div
+          className={cn(
+            'w-12 h-12 rounded-full border-2 flex items-center justify-center flex-shrink-0 overflow-hidden',
+            medal.border
+          )}
+        >
+          {entry.avatarUrl ? (
+            <img src={entry.avatarUrl} alt={entry.username} className="w-full h-full object-cover" />
+          ) : (
+            <span className={cn('text-base font-bold', medal.text)}>{initials}</span>
+          )}
+        </div>
+        <div className="flex flex-col items-center gap-0.5">
+          <p className={cn('text-xs font-semibold text-center max-w-[80px] truncate', medal.text)}>
+            {entry.username}
+          </p>
+          {entry.topBadge && <BadgeChip badge={entry.topBadge} />}
+        </div>
+      </Link>
       <p className="text-xs text-muted">{entry.totalPoints} pts</p>
       <div
         className={cn(
@@ -79,13 +82,14 @@ function PodiumCard({ entry, place }: { entry: LeaderboardEntry; place: 0 | 1 | 
 function LeaderboardRow({ entry, isMe }: { entry: LeaderboardEntry; isMe: boolean }) {
   const initials = entry.username.slice(0, 1).toUpperCase();
   return (
+    <Link to={`/u/${entry.userId}`}>
     <motion.div
       initial={{ opacity: 0, x: -8 }}
       animate={{ opacity: 1, x: 0 }}
       transition={{ delay: (entry.rank - 3) * 0.03 }}
       className={cn(
-        'flex items-center gap-3 px-4 py-3 border-b border-border last:border-0',
-        isMe && 'bg-accent-soft'
+        'flex items-center gap-3 px-4 py-3 border-b border-border last:border-0 hover:bg-elevated transition-colors',
+        isMe && 'bg-accent-soft hover:bg-accent-soft/80'
       )}
     >
       <span className={cn('w-7 text-center text-sm font-bold', isMe ? 'text-accent' : 'text-muted')}>
@@ -112,7 +116,9 @@ function LeaderboardRow({ entry, isMe }: { entry: LeaderboardEntry; isMe: boolea
       <span className={cn('text-base font-bold', isMe ? 'text-accent' : 'text-text')}>
         {entry.totalPoints}
       </span>
+      <ChevronRight size={16} className="text-muted flex-shrink-0" />
     </motion.div>
+    </Link>
   );
 }
 
