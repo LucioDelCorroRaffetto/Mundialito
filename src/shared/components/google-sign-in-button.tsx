@@ -27,6 +27,7 @@ export function GoogleSignInButton({ redirectTo = '/home' }: Props) {
       }>('/auth/google', { credential: credentialResponse.credential });
 
       login(data.user, data.accessToken);
+      localStorage.setItem('mundialito_refresh', data.refreshToken);
       navigate(redirectTo, { replace: true });
     } catch {
       toast.error('No se pudo iniciar sesión con Google');
