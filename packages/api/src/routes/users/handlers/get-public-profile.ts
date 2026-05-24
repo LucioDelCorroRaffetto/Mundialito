@@ -12,7 +12,7 @@ import {
 } from '../../../db/schema/index.js';
 
 export async function getPublicProfileHandler(req: Request, res: Response) {
-  const userId = parseInt(req.params.userId, 10);
+  const userId = parseInt(req.params['userId'] as string, 10);
 
   if (isNaN(userId)) {
     return res.status(400).json({ error: 'Invalid userId' });
