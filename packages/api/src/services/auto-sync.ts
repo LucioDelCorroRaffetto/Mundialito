@@ -1,15 +1,19 @@
 /**
- * Auto-sync service: runs syncScores() on a timer so scores update
- * automatically during the tournament without manual intervention.
+ * Auto-sync service: keeps scores updated during the tournament without
+ * manual intervention.
  *
  * Strategy:
- *  - Every 3 minutes: sync today's matches (catches live updates & final scores)
- *  - Every 30 minutes: also sync yesterday (safety net for late-night finishes)
+ *  Primary:  football-data.org  (every 3 min, requires FOOTBALL_DATA_API_KEY)
+ *  Fallback: ESPN public API    (no key, no limits, triggered automatically
+ *                                when primary fails or key is missing)
  *
- * football-data.org free tier: 10 req/min → 1 req/3min is well within limits.
+ * Schedule:
+ *  - Every 3 min  → sync today
+ *  - Every 30 min → also sync yesterday (safety net for late-night finishes)
  */
 
-import { syncScores } from './sync-scores.js';
+import { syncScores, type SyncScoresOptions, type SyncScoresResult } from './sync-scores.js';
+import { syncScoresFromEspn } from './sync-espn.js';
 
 const THREE_MINUTES  = 3  * 60 * 1000;
 const THIRTY_MINUTES = 30 * 60 * 1000;
@@ -24,16 +28,43 @@ function yesterdayUTC(): string {
   return d.toISOString().slice(0, 10);
 }
 
-async function runSync(label: string, dateFrom: string, dateTo: string) {
-  if (!process.env.FOOTBALL_DATA_API_KEY) return; // silently skip if key not set
+/**
+ * Returns true if the primary result looks like a failure:
+ *  - has errors (network issue, key expired, 4xx/5xx, etc.)
+ *  - OR the key is not set at all
+ */
+function primaryFailed(result: SyncScoresResult): boolean {
+  return result.errors.length > 0;
+}
+
+async function runSync(label: string, options: SyncScoresOptions) {
+  const date = options.dateFrom ?? todayUTC();
+  let provider = 'football-data.org';
 
   try {
-    const result = await syncScores({ dateFrom, dateTo });
+    // 1️⃣ Try primary (football-data.org)
+    let result: SyncScoresResult;
+
+    if (!process.env.FOOTBALL_DATA_API_KEY) {
+      // Key not configured — go straight to fallback
+      result = { synced: 0, errors: ['FOOTBALL_DATA_API_KEY not set'], matchesChecked: 0 };
+    } else {
+      result = await syncScores(options);
+    }
+
+    if (primaryFailed(result)) {
+      // 2️⃣ Fallback: ESPN (no key required, no rate limits)
+      provider = 'ESPN';
+      console.warn(`[AutoSync:${label}] Primary failed (${result.errors.join('; ')}) — trying ESPN fallback`);
+      result = await syncScoresFromEspn(date);
+    }
+
+    // Log meaningful activity only
     if (result.synced > 0) {
-      console.log(`[AutoSync:${label}] synced=${result.synced} checked=${result.matchesChecked}`);
+      console.log(`[AutoSync:${label}][${provider}] synced=${result.synced} checked=${result.matchesChecked}`);
     }
     if (result.errors.length > 0) {
-      console.error(`[AutoSync:${label}] errors:`, result.errors);
+      console.error(`[AutoSync:${label}][${provider}] errors:`, result.errors);
     }
   } catch (err) {
     console.error(`[AutoSync:${label}] unexpected error:`, err);
@@ -41,20 +72,19 @@ async function runSync(label: string, dateFrom: string, dateTo: string) {
 }
 
 export function startAutoSync() {
-  if (!process.env.FOOTBALL_DATA_API_KEY) {
-    console.warn('[AutoSync] FOOTBALL_DATA_API_KEY not set — auto-sync disabled');
-    return;
+  const hasKey = !!process.env.FOOTBALL_DATA_API_KEY;
+  if (!hasKey) {
+    console.warn('[AutoSync] FOOTBALL_DATA_API_KEY not set — will use ESPN API as primary');
+  } else {
+    console.log('[AutoSync] football-data.org primary + ESPN fallback — every 3 min');
   }
 
-  console.log('[AutoSync] Starting: every 3 min for today, every 30 min for yesterday');
+  // Initial run shortly after server starts
+  setTimeout(() => runSync('today', { dateFrom: todayUTC(), dateTo: todayUTC() }), 15_000);
 
-  // Initial run after a short delay (let the server fully start first)
-  setTimeout(() => runSync('today', todayUTC(), todayUTC()), 15_000);
+  // Every 3 minutes: today's matches
+  setInterval(() => runSync('today', { dateFrom: todayUTC(), dateTo: todayUTC() }), THREE_MINUTES);
 
-  // Every 3 minutes: sync today
-  setInterval(() => runSync('today', todayUTC(), todayUTC()), THREE_MINUTES);
-
-  // Every 30 minutes: sync yesterday too (catches any matches that finished
-  // after midnight or where status update was delayed)
-  setInterval(() => runSync('yesterday', yesterdayUTC(), yesterdayUTC()), THIRTY_MINUTES);
+  // Every 30 minutes: yesterday too (catches late finishes / delayed status updates)
+  setInterval(() => runSync('yesterday', { dateFrom: yesterdayUTC(), dateTo: yesterdayUTC() }), THIRTY_MINUTES);
 }

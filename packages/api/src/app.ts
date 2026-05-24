@@ -5,6 +5,7 @@ import { tokenParse } from './middleware/token-parse.js';
 import { errorHandler } from './middleware/error-handler.js';
 import { apiRouter } from './routes/index.js';
 import { syncScores } from './services/sync-scores.js';
+import { syncScoresFromEspn } from './services/sync-espn.js';
 
 export const app = express();
 
@@ -38,10 +39,25 @@ app.post('/sync', async (req, res) => {
   if (secret && req.headers['x-sync-secret'] !== secret) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
+
   const today = new Date().toISOString().slice(0, 10);
-  const result = await syncScores({ dateFrom: today, dateTo: today }).catch((err) => ({
+
+  // Try primary (football-data.org), fall back to ESPN if it fails
+  let result = await syncScores({ dateFrom: today, dateTo: today }).catch((err) => ({
     synced: 0, errors: [String(err)], matchesChecked: 0,
   }));
+
+  if (result.errors.length > 0 || !process.env.FOOTBALL_DATA_API_KEY) {
+    const espnResult = await syncScoresFromEspn(today).catch((err) => ({
+      synced: 0, errors: [String(err)], matchesChecked: 0,
+    }));
+    result = {
+      synced: result.synced + espnResult.synced,
+      errors: [...result.errors.map((e) => `[fd] ${e}`), ...espnResult.errors.map((e) => `[espn] ${e}`)],
+      matchesChecked: Math.max(result.matchesChecked, espnResult.matchesChecked),
+    };
+  }
+
   return res.json({ data: result });
 });
 app.use('/api/v1', apiRouter);
