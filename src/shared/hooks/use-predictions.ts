@@ -36,14 +36,10 @@ export function useMyPredictionForMatch(matchId: number | undefined) {
   return useQuery({
     queryKey: ['prediction', matchId],
     queryFn: async (): Promise<Prediction | null> => {
-      try {
-        const { data } = await apiClient.get<Prediction>(`/predictions/match/${matchId}/mine`);
-        return data;
-      } catch (e: unknown) {
-        // 404 = no prediction yet — treat as null, not an error
-        if ((e as { response?: { status?: number } })?.response?.status === 404) return null;
-        throw e;
-      }
+      const { data } = await apiClient.get<{ data: Prediction | null }>(
+        `/predictions/match/${matchId}/mine`,
+      );
+      return data.data;
     },
     enabled: matchId !== undefined,
   });

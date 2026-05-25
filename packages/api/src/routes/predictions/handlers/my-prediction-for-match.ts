@@ -22,6 +22,7 @@ export async function myPredictionForMatchHandler(req: Request, res: Response) {
     )
     .get();
 
-  if (!prediction) throw new NotFoundError('Prediction');
-  return res.json(prediction);
+  // Return null (not 404) when no prediction exists yet — the client
+  // distinguishes "not predicted" from "error" by checking data === null.
+  return res.json({ data: prediction ?? null });
 }
