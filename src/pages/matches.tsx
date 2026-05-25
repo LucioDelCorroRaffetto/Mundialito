@@ -9,6 +9,8 @@ import { ROUND_LABELS } from '@/shared/data/mock';
 import type { Match, Team } from '@/shared/types/api';
 import { TeamFlag } from '@/shared/components/ui/team-flag';
 import { GroupStandings } from '@/shared/components/group-standings';
+import { BracketView } from '@/shared/components/bracket-view';
+import { R32_LABELS } from '@/shared/data/bracket';
 import { cn } from '@/shared/lib/cn';
 
 function formatDate(utc: string) {
@@ -40,9 +42,17 @@ const PLACEHOLDER_TEAM: Team = {
   confederation: null,
 };
 
-/** Short display label for a team code — hides internal 'TBD' placeholder */
-function teamDisplayCode(code: string): string {
-  return code === 'TBD' ? '?' : code;
+/** Short display label for a team.
+ *  For TBD teams in knockout matches, shows the bracket slot label (e.g. "1° Grp A"). */
+function teamDisplayLabel(
+  code: string,
+  matchNumber: number,
+  side: 'home' | 'away',
+): string {
+  if (code !== 'TBD') return code;
+  const label = R32_LABELS[matchNumber];
+  if (label) return label[side];
+  return 'Por definir';
 }
 
 function getTeam(teamMap: Map<number, Team> | undefined, id: number): Team {
@@ -54,7 +64,7 @@ type StatusTab = (typeof STATUS_TABS)[number];
 
 const WC_GROUPS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L'] as const;
 
-const MAIN_TABS = ['Partidos', 'Grupos'] as const;
+const MAIN_TABS = ['Partidos', 'Grupos', 'Cuadro'] as const;
 type MainTab = (typeof MAIN_TABS)[number];
 
 export function MatchesPage() {
@@ -126,6 +136,10 @@ export function MatchesPage() {
       {mainTab === 'Grupos' ? (
         <div className="px-4 pb-8">
           <GroupStandings teams={teams} matches={groupMatches} />
+        </div>
+      ) : mainTab === 'Cuadro' ? (
+        <div className="px-3 pb-8">
+          <BracketView matches={matches} teamMap={teamMap} />
         </div>
       ) : (
         <>
@@ -224,8 +238,12 @@ export function MatchesPage() {
                         </div>
                         <div className="flex items-center gap-2 mt-1">
                           <span className="flex items-center gap-1.5 text-sm-s font-semibold text-text">
-                            <TeamFlag code={homeTeam.code} emoji={homeTeam.flag} size={20} />
-                            {teamDisplayCode(homeTeam.code)}
+                            {homeTeam.code !== 'TBD' && (
+                              <TeamFlag code={homeTeam.code} emoji={homeTeam.flag} size={20} />
+                            )}
+                            <span className={homeTeam.code === 'TBD' ? 'text-muted text-xs-s' : ''}>
+                              {teamDisplayLabel(homeTeam.code, match.matchNumber, 'home')}
+                            </span>
                           </span>
                           {(match.status === 'live' || match.status === 'finished') &&
                           match.homeScore !== null ? (
@@ -241,8 +259,12 @@ export function MatchesPage() {
                             <span className="text-xs-s font-bold text-muted">vs</span>
                           )}
                           <span className="flex items-center gap-1.5 text-sm-s font-semibold text-text">
-                            {teamDisplayCode(awayTeam.code)}{' '}
-                            <TeamFlag code={awayTeam.code} emoji={awayTeam.flag} size={20} />
+                            <span className={awayTeam.code === 'TBD' ? 'text-muted text-xs-s' : ''}>
+                              {teamDisplayLabel(awayTeam.code, match.matchNumber, 'away')}
+                            </span>
+                            {awayTeam.code !== 'TBD' && (
+                              <TeamFlag code={awayTeam.code} emoji={awayTeam.flag} size={20} />
+                            )}
                           </span>
                         </div>
                         {prediction && (

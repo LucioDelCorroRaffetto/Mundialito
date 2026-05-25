@@ -75,8 +75,6 @@ export function GroupStandings({ teams, matches }: Props) {
     [teams, matches, selectedGroup],
   );
 
-  const hasResults = matches.some((m) => m.group === selectedGroup && m.status === 'finished');
-
   return (
     <div className="flex flex-col gap-4">
       {/* Group selector */}
@@ -117,65 +115,83 @@ export function GroupStandings({ teams, matches }: Props) {
           </div>
         ) : (
           standings.map((row, idx) => {
-            const isQualified = idx < 2; // top 2 auto-qualify
-            const isBubble = idx === 2; // 3rd place might qualify
+            const isQualified = idx < 2;   // top 2 — clasifica directo
+            const isBubble    = idx === 2; // 3ro — puede clasificar como mejor tercero
+            const isEliminated = idx === 3; // 4to — eliminado
+
             return (
               <div
                 key={row.team.id}
                 className={cn(
-                  'flex items-center gap-2 px-3 py-3 border-b border-border last:border-0',
-                  isQualified && hasResults && 'bg-green-500/5',
-                  isBubble && hasResults && 'bg-yellow-500/5',
+                  'flex items-center gap-2 py-3 border-b border-border last:border-0',
+                  // left color bar via padding + border-left trick
+                  'pl-0',
                 )}
               >
-                <span
-                  className={cn(
-                    'w-5 text-center text-sm-s font-bold',
-                    isQualified && hasResults ? 'text-green-400' : 'text-muted',
-                  )}
-                >
-                  {idx + 1}
-                </span>
-                <div className="flex-1 flex items-center gap-2 min-w-0">
-                  <TeamFlag code={row.team.code} emoji={row.team.flag} size={20} />
-                  <span className="text-sm-s font-semibold text-text truncate">
-                    {row.team.name}
+                {/* Color indicator bar */}
+                <div className={cn(
+                  'w-1 self-stretch rounded-r-sm flex-shrink-0',
+                  isQualified  ? 'bg-green-500'  : '',
+                  isBubble     ? 'bg-yellow-400' : '',
+                  isEliminated ? 'bg-red-500'    : '',
+                  !isQualified && !isBubble && !isEliminated ? 'bg-transparent' : '',
+                )} />
+
+                <div className="flex items-center gap-2 flex-1 min-w-0 pr-3">
+                  <span
+                    className={cn(
+                      'w-5 text-center text-sm-s font-bold flex-shrink-0',
+                      isQualified  ? 'text-green-400'  : '',
+                      isBubble     ? 'text-yellow-400' : '',
+                      isEliminated ? 'text-red-400'    : '',
+                      !isQualified && !isBubble && !isEliminated ? 'text-muted' : '',
+                    )}
+                  >
+                    {idx + 1}
+                  </span>
+                  <div className="flex-1 flex items-center gap-2 min-w-0">
+                    <TeamFlag code={row.team.code} emoji={row.team.flag} size={20} />
+                    <span className="text-sm-s font-semibold text-text truncate">
+                      {row.team.name}
+                    </span>
+                  </div>
+                  <span className="w-6 text-center text-xs-s text-muted">{row.played}</span>
+                  <span className="w-6 text-center text-xs-s text-text">{row.won}</span>
+                  <span className="w-6 text-center text-xs-s text-text">{row.drawn}</span>
+                  <span className="w-6 text-center text-xs-s text-text">{row.lost}</span>
+                  <span
+                    className={cn(
+                      'w-8 text-center text-xs-s font-semibold',
+                      row.gd > 0 ? 'text-green-400' : row.gd < 0 ? 'text-red-400' : 'text-muted',
+                    )}
+                  >
+                    {row.gd > 0 ? `+${row.gd}` : row.gd}
+                  </span>
+                  <span className="w-7 text-center text-sm-s font-bold text-accent">
+                    {row.pts}
                   </span>
                 </div>
-                <span className="w-6 text-center text-xs-s text-muted">{row.played}</span>
-                <span className="w-6 text-center text-xs-s text-text">{row.won}</span>
-                <span className="w-6 text-center text-xs-s text-text">{row.drawn}</span>
-                <span className="w-6 text-center text-xs-s text-text">{row.lost}</span>
-                <span
-                  className={cn(
-                    'w-8 text-center text-xs-s font-semibold',
-                    row.gd > 0 ? 'text-green-400' : row.gd < 0 ? 'text-red-400' : 'text-muted',
-                  )}
-                >
-                  {row.gd > 0 ? `+${row.gd}` : row.gd}
-                </span>
-                <span className="w-7 text-center text-sm-s font-bold text-accent">
-                  {row.pts}
-                </span>
               </div>
             );
           })
         )}
       </div>
 
-      {/* Legend */}
-      {hasResults && (
-        <div className="flex items-center gap-4 text-xs-s text-muted px-1">
-          <span className="flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-sm bg-green-500/40" />
-            Clasificado directo
-          </span>
-          <span className="flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-sm bg-yellow-500/40" />
-            Puede clasificar
-          </span>
-        </div>
-      )}
+      {/* Legend — always visible */}
+      <div className="flex items-center gap-3 text-xs-s text-muted px-1 flex-wrap">
+        <span className="flex items-center gap-1.5">
+          <span className="w-2.5 h-2.5 rounded-sm bg-green-500" />
+          Clasificado
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="w-2.5 h-2.5 rounded-sm bg-yellow-400" />
+          Puede clasificar
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="w-2.5 h-2.5 rounded-sm bg-red-500" />
+          Eliminado
+        </span>
+      </div>
     </div>
   );
 }
