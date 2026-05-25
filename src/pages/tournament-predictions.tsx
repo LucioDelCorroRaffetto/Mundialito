@@ -52,19 +52,19 @@ function PickCard({
 
   return (
     <div className="p-4 rounded-xl bg-card border border-border flex flex-col gap-3">
-      <div className="flex items-center justify-between">
-        <div>
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex-1 min-w-0">
           <p className="text-base-s font-bold text-text">{title}</p>
           {subtitle && <p className="text-xs-s text-muted mt-0.5">{subtitle}</p>}
           <p className="text-xs-s text-accent font-semibold mt-0.5">+{points} pts</p>
         </div>
         {team ? (
-          <div className="flex items-center gap-2">
-            <TeamFlag code={team.code} emoji={team.flag} size={32} />
-            <span className="text-sm-s font-semibold text-text">{team.name}</span>
+          <div className="flex items-center gap-2 flex-shrink-0 max-w-[55%]">
+            <TeamFlag code={team.code} emoji={team.flag} size={24} />
+            <span className="text-sm-s font-semibold text-text leading-tight text-right">{team.name}</span>
             <button
               onClick={() => setOpenSection(isOpen ? null : sectionId)}
-              className="text-xs-s text-muted underline ml-2"
+              className="text-xs-s text-muted underline whitespace-nowrap"
             >
               Cambiar
             </button>
@@ -72,7 +72,7 @@ function PickCard({
         ) : (
           <button
             onClick={() => setOpenSection(isOpen ? null : sectionId)}
-            className="px-3 py-1.5 rounded-lg bg-accent text-accent-on text-sm-s font-semibold"
+            className="flex-shrink-0 px-3 py-1.5 rounded-lg bg-accent text-accent-on text-sm-s font-semibold"
           >
             Elegir
           </button>
@@ -470,6 +470,27 @@ export function TournamentPredictionsPage() {
 
   const saving = upsertMutation.isPending;
 
+  // Compare local picks vs server-saved picks to detect unsaved changes
+  const savedPicks: LocalPicks = tournamentQuery.data
+    ? {
+        championTeamId: tournamentQuery.data.championTeamId,
+        runnerUpTeamId: tournamentQuery.data.runnerUpTeamId,
+        topScorerPlayerId: tournamentQuery.data.topScorerPlayerId,
+        revelationTeamId: tournamentQuery.data.revelationTeamId,
+        surpriseEliminatedTeamId: tournamentQuery.data.surpriseEliminatedTeamId,
+      }
+    : { championTeamId: null, runnerUpTeamId: null, topScorerPlayerId: null, revelationTeamId: null, surpriseEliminatedTeamId: null };
+
+  const isDirty =
+    picks.championTeamId !== savedPicks.championTeamId ||
+    picks.runnerUpTeamId !== savedPicks.runnerUpTeamId ||
+    picks.topScorerPlayerId !== savedPicks.topScorerPlayerId ||
+    picks.revelationTeamId !== savedPicks.revelationTeamId ||
+    picks.surpriseEliminatedTeamId !== savedPicks.surpriseEliminatedTeamId;
+
+  // Show "saved" only when server has data AND user hasn't changed anything
+  const showSaved = !isDirty && !!tournamentQuery.data && !saving;
+
   return (
     <div className="flex flex-col min-h-full animate-fade-in pb-8">
       {/* Header */}
@@ -582,8 +603,9 @@ export function TournamentPredictionsPage() {
 
       {/* Save button */}
       <div className="px-4 mt-4">
-        {upsertMutation.isSuccess ? (
+        {showSaved ? (
           <motion.div
+            key="saved"
             initial={{ scale: 0.9, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
             className="flex items-center justify-center gap-2 py-3 rounded-lg bg-green-500/15 border border-green-500/30"
@@ -594,7 +616,7 @@ export function TournamentPredictionsPage() {
             </span>
           </motion.div>
         ) : (
-          <Button fullWidth size="lg" onClick={handleSave} loading={saving}>
+          <Button fullWidth size="lg" onClick={handleSave} loading={saving} disabled={saving}>
             Guardar pronósticos
           </Button>
         )}

@@ -6,11 +6,11 @@ import { tournamentPredictions } from '../../../db/schema/index.js';
 
 export const upsertTournamentPredictionSchema = z.object({
   leagueId: z.number().int().positive(),
-  championTeamId: z.number().int().positive().optional(),
-  runnerUpTeamId: z.number().int().positive().optional(),
-  topScorerPlayerId: z.number().int().positive().optional(),
-  revelationTeamId: z.number().int().positive().optional(),
-  surpriseEliminatedTeamId: z.number().int().positive().optional(),
+  championTeamId: z.number().int().positive().nullable().optional(),
+  runnerUpTeamId: z.number().int().positive().nullable().optional(),
+  topScorerPlayerId: z.number().int().positive().nullable().optional(),
+  revelationTeamId: z.number().int().positive().nullable().optional(),
+  surpriseEliminatedTeamId: z.number().int().positive().nullable().optional(),
 });
 
 export async function upsertTournamentPredictionHandler(req: Request, res: Response) {
