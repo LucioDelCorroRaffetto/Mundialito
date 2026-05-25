@@ -222,7 +222,7 @@ export function FantasyPage() {
 
   // Exclude internal placeholder teams (TBD for knockouts, PO1/PO2 for playoffs)
   const teams = (teamsData ?? []).filter(
-    (t) => t.code !== 'TBD' && t.confederation !== null && !t.code.startsWith('PO'),
+    (t) => t.confederation !== null && t.code !== 'TBD' && t.code !== 'PO1' && t.code !== 'PO2',
   );
   const players = playersData ?? [];
 

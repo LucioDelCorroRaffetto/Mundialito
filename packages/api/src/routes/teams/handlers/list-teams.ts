@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { z } from 'zod';
-import { and, eq, asc, isNotNull, notLike } from 'drizzle-orm';
+import { and, eq, asc, isNotNull, notInArray } from 'drizzle-orm';
 import { db } from '../../../db/index.js';
 import { teams } from '../../../db/schema/index.js';
 
@@ -18,10 +18,11 @@ export async function listTeamsHandler(req: Request, res: Response) {
   }
   const { group, confederation } = parsed.data;
 
-  // Always exclude internal placeholder teams (TBD for knockout slots, PO* for intercontinental playoffs)
+  // Always exclude internal placeholder teams (TBD for knockout slots, PO1/PO2 for intercontinental playoffs)
+  // NOTE: use exact codes, NOT a LIKE pattern — 'PO%' would also match 'POR' (Portugal)
   const conditions = [
     isNotNull(teams.confederation),
-    notLike(teams.code, 'PO%'),
+    notInArray(teams.code, ['TBD', 'PO1', 'PO2']),
   ];
   if (group) conditions.push(eq(teams.group, group));
   if (confederation) conditions.push(eq(teams.confederation, confederation));

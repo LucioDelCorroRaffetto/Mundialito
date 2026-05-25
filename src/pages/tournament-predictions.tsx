@@ -342,7 +342,7 @@ export function TournamentPredictionsPage() {
   const { data: teamsData, isLoading: teamsLoading } = useTeams();
   // Filter out internal placeholder teams (TBD for knockout slots, PO1/PO2 for intercontinental playoffs)
   const teams = (teamsData ?? []).filter(
-    (t) => t.code !== 'TBD' && t.confederation !== null && !t.code.startsWith('PO'),
+    (t) => t.confederation !== null && t.code !== 'TBD' && t.code !== 'PO1' && t.code !== 'PO2',
   );
 
   const { data: playersData } = usePlayers();
