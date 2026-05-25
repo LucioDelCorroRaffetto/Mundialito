@@ -220,7 +220,10 @@ export function FantasyPage() {
 
   const myLeagues = leaguesResponse?.data ?? [];
 
-  const teams = teamsData ?? [];
+  // Exclude internal placeholder teams (TBD for knockouts, PO1/PO2 for playoffs)
+  const teams = (teamsData ?? []).filter(
+    (t) => t.code !== 'TBD' && t.confederation !== null && !t.code.startsWith('PO'),
+  );
   const players = playersData ?? [];
 
   // Preload existing squad, starters and captain
