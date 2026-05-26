@@ -737,7 +737,7 @@ export function FantasyPage() {
         <motion.div
           initial={{ y: 80 }}
           animate={{ y: 0 }}
-          className="fixed bottom-20 left-0 right-0 flex justify-center px-4 pointer-events-none"
+          className="fixed bottom-20 md:bottom-6 left-0 right-0 flex justify-center px-4 pointer-events-none"
         >
           <button
             onClick={handleSave}
