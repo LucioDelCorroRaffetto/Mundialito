@@ -249,16 +249,28 @@ export function SettingsPage() {
         </button>
 
         {/* Author credit */}
-        <div className="flex flex-col items-center gap-1 pt-2 pb-1">
+        <div className="flex flex-col items-center gap-1.5 pt-2 pb-1">
           <p className="text-xs-s text-muted/50">⚽ Mundialito 2026 · Hecho con ❤️ por</p>
-          <a
-            href="https://www.instagram.com/luchodelcorro"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-xs-s text-muted/60 hover:text-accent transition-colors font-medium"
-          >
-            @luchodelcorro
-          </a>
+          <p className="text-xs-s text-muted/70 font-medium">Lucio Del Corro Raffetto</p>
+          <div className="flex items-center gap-3">
+            <a
+              href="https://www.linkedin.com/in/luciodelcorroraffetto/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-xs-s text-muted/50 hover:text-accent transition-colors"
+            >
+              LinkedIn
+            </a>
+            <span className="text-muted/30 text-xs-s">·</span>
+            <a
+              href="https://github.com/LucioDelCorroRaffetto/Mundialito"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-xs-s text-muted/50 hover:text-accent transition-colors"
+            >
+              GitHub
+            </a>
+          </div>
         </div>
       </div>
     </div>
