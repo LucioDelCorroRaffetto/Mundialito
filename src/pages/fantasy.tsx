@@ -734,21 +734,41 @@ export function FantasyPage() {
 
       {/* Save button — only on squad & lineup tabs */}
       {(tab === 'squad' || tab === 'lineup') && selectedPlayerIds.length > 0 && (
-        <motion.div
-          initial={{ y: 80 }}
-          animate={{ y: 0 }}
-          className="fixed bottom-20 md:bottom-6 left-0 right-0 flex justify-center px-4 pointer-events-none"
-        >
-          <button
-            onClick={handleSave}
-            disabled={updateSquad.isPending}
-            className="pointer-events-auto w-full max-w-md py-4 rounded-xl bg-accent text-accent-on font-bold text-base-s shadow-lg disabled:opacity-60"
+        <>
+          {/* Mobile: fixed above the tab bar */}
+          <motion.div
+            initial={{ y: 80 }}
+            animate={{ y: 0 }}
+            className="md:hidden fixed bottom-20 left-0 right-0 flex justify-center px-4 pointer-events-none"
           >
-            {updateSquad.isPending
-              ? 'Guardando...'
-              : `Guardar equipo (${selectedPlayerIds.length} · ${starterIds.length}/${STARTERS_COUNT} titulares)`}
-          </button>
-        </motion.div>
+            <button
+              onClick={handleSave}
+              disabled={updateSquad.isPending}
+              className="pointer-events-auto w-full max-w-md py-4 rounded-xl bg-accent text-accent-on font-bold text-base-s shadow-lg disabled:opacity-60"
+            >
+              {updateSquad.isPending
+                ? 'Guardando...'
+                : `Guardar equipo (${selectedPlayerIds.length} · ${starterIds.length}/${STARTERS_COUNT} titulares)`}
+            </button>
+          </motion.div>
+
+          {/* Desktop: inline at bottom of content, not fixed */}
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="hidden md:block px-0 pb-2"
+          >
+            <button
+              onClick={handleSave}
+              disabled={updateSquad.isPending}
+              className="w-full py-4 rounded-xl bg-accent text-accent-on font-bold text-base-s shadow-lg disabled:opacity-60 hover:opacity-90 transition-opacity"
+            >
+              {updateSquad.isPending
+                ? 'Guardando...'
+                : `Guardar equipo (${selectedPlayerIds.length} · ${starterIds.length}/${STARTERS_COUNT} titulares)`}
+            </button>
+          </motion.div>
+        </>
       )}
     </div>
   );
