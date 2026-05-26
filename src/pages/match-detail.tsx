@@ -246,6 +246,10 @@ export function MatchDetailPage() {
   const homeTeamDisplay = homeTeam ?? { id: match.homeTeamId, name: String(match.homeTeamId), code: '?', flag: '🏳️', group: null, confederation: null };
   const awayTeamDisplay = awayTeam ?? { id: match.awayTeamId, name: String(match.awayTeamId), code: '?', flag: '🏳️', group: null, confederation: null };
 
+  // Knock-out matches with undetermined opponents can't be predicted yet
+  const teamsAreTbd = homeTeamDisplay.code === 'TBD' || homeTeamDisplay.code === '?'
+    || awayTeamDisplay.code === 'TBD' || awayTeamDisplay.code === '?';
+
   const myLeagueList = myLeagues?.data ?? [];
   const hasLeague = myLeagueList.length > 0;
 
@@ -368,12 +372,25 @@ export function MatchDetailPage() {
       </div>
 
       {/* Points preview */}
-      {match.status === 'scheduled' && (
+      {match.status === 'scheduled' && !teamsAreTbd && (
         <PointsPreview home={homeScore} away={awayScore} />
       )}
 
+      {/* TBD block — teams not yet determined */}
+      {match.status === 'scheduled' && teamsAreTbd && (
+        <div className="mx-4 mt-4 p-4 rounded-lg bg-elevated border border-border flex items-start gap-3">
+          <span className="text-xl flex-shrink-0">🔒</span>
+          <div>
+            <p className="text-sm-s font-semibold text-text">Pronóstico no disponible aún</p>
+            <p className="text-xs-s text-muted mt-0.5">
+              Los equipos de este partido se definen en la fase de grupos. Podrás pronosticar cuando se conozcan los clasificados.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Save / saved state */}
-      {match.status === 'scheduled' ? (
+      {match.status === 'scheduled' && !teamsAreTbd ? (
         <div className="px-4 mt-4">
           {saved ? (
             <>
