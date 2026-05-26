@@ -33,8 +33,8 @@ export function calculatePoints(r: PredictionResult): number {
   switch (type) {
     case 'exact':       return 5;
     case 'winner_diff': return 3;
+    case 'draw':        return 3; // mismo nivel que ganador+diferencia
     case 'winner':      return 1;
-    case 'draw':        return 1;
     case 'miss':        return 0;
   }
 }
@@ -59,8 +59,8 @@ export function getMaxPossiblePoints(home: number, away: number): {
   const isDraw = home === away;
   return {
     ifExact: 5,
-    ifWinnerDiff: isDraw ? 1 : 3,  // empate no tiene "diferencia"
-    ifWinner: isDraw ? 1 : 1,
+    ifWinnerDiff: 3,        // draw correcto y ganador+dif valen lo mismo: 3
+    ifWinner: isDraw ? 0 : 1, // si es empate no hay "solo ganador"
     isDraw,
   };
 }

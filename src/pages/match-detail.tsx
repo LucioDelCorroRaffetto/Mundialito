@@ -22,7 +22,7 @@ function teamDisplayCode(code: string): string {
 }
 
 function PointsPreview({ home, away }: { home: number; away: number }) {
-  const { isDraw, ifExact, ifWinnerDiff } = getMaxPossiblePoints(home, away);
+  const { isDraw, ifExact, ifWinnerDiff, ifWinner } = getMaxPossiblePoints(home, away);
   return (
     <div className="mx-4 mt-3 p-4 rounded-lg bg-elevated border border-border">
       <p className="text-sm-s font-semibold text-text mb-2">
@@ -34,9 +34,15 @@ function PointsPreview({ home, away }: { home: number; away: number }) {
           <span className="text-sm-s font-bold text-accent">+{ifExact} pts</span>
         </div>
         <div className="flex items-center justify-between">
-          <span className="text-sm-s text-muted">{isDraw ? 'Empate acertado' : 'Resultado correcto'}</span>
-          <span className="text-sm-s font-bold text-accent">+{ifWinnerDiff} pt{ifWinnerDiff !== 1 ? 's' : ''}</span>
+          <span className="text-sm-s text-muted">{isDraw ? 'Empate acertado' : 'Ganador + diferencia'}</span>
+          <span className="text-sm-s font-bold text-accent">+{ifWinnerDiff} pts</span>
         </div>
+        {!isDraw && (
+          <div className="flex items-center justify-between">
+            <span className="text-sm-s text-muted">Solo ganador correcto</span>
+            <span className="text-sm-s font-bold text-accent">+{ifWinner} pt</span>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -472,8 +478,8 @@ export function MatchDetailPage() {
           {[
             ['Marcador exacto', '5 pts'],
             ['Ganador + diferencia', '3 pts'],
+            ['Empate acertado', '3 pts'],
             ['Ganador correcto', '1 pt'],
-            ['Empate acertado', '1 pt'],
           ].map(([label, pts]) => (
             <div key={label} className="flex items-center justify-between">
               <span className="text-sm-s text-muted">{label}</span>
