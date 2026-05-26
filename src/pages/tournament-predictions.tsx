@@ -59,12 +59,15 @@ function PickCard({
           <p className="text-xs-s text-accent font-semibold mt-0.5">+{points} pts</p>
         </div>
         {team ? (
-          <div className="flex items-center gap-2 flex-shrink-0 max-w-[55%]">
+          <div className="flex items-center gap-2 flex-shrink-0">
             <TeamFlag code={team.code} emoji={team.flag} size={24} />
-            <span className="text-sm-s font-semibold text-text leading-tight text-right">{team.name}</span>
+            <div className="flex flex-col items-end">
+              <span className="text-sm-s font-semibold text-text leading-tight">{team.code}</span>
+              <span className="text-[10px] text-muted leading-tight max-w-[80px] text-right truncate">{team.name}</span>
+            </div>
             <button
               onClick={() => setOpenSection(isOpen ? null : sectionId)}
-              className="text-xs-s text-muted underline whitespace-nowrap"
+              className="text-xs-s text-accent underline whitespace-nowrap font-semibold"
             >
               Cambiar
             </button>
