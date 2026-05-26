@@ -4,7 +4,7 @@ import { ChevronDown, Check, Clock, Trophy, LayoutList, Layers, Star, Crown, Bar
 import { cn } from '@/shared/lib/cn';
 import { useTeams } from '@/shared/hooks/use-teams';
 import { usePlayers } from '@/shared/hooks/use-players';
-import { useMyFantasyTeam, useUpdateFantasySquad, useFantasyStandings } from '@/shared/hooks/use-fantasy';
+import { useMyFantasyTeam, useUpdateFantasySquad, useFantasyStandings, useUserFantasyTeam } from '@/shared/hooks/use-fantasy';
 import { useMyLeagues } from '@/shared/hooks/use-leagues';
 import { useAuthStore } from '@/shared/stores/auth-store';
 import { SkeletonList } from '@/shared/components/skeleton';
@@ -1042,12 +1042,158 @@ function LineupTab({
   );
 }
 
+// ─── User fantasy team drawer ────────────────────────────────────────────────
+
+function UserTeamDrawer({
+  userId,
+  username,
+  teamName,
+  onClose,
+}: {
+  userId: number;
+  username: string;
+  teamName: string;
+  onClose: () => void;
+}) {
+  const { data, isLoading } = useUserFantasyTeam(userId);
+  const squad = data?.squad ?? [];
+
+  const starters = squad.filter((p) => p.isStarter);
+  const bench = squad.filter((p) => !p.isStarter);
+  const captain = squad.find((p) => p.isCaptain);
+  const totalPoints = data?.team?.totalPoints ?? 0;
+
+  const ORDER: Position[] = ['GK', 'DEF', 'MID', 'FWD'];
+  const byPosition = ORDER.map((pos) => ({
+    pos,
+    players: starters.filter((p) => p.position === pos),
+  })).filter((g) => g.players.length > 0);
+
+  return (
+    /* Backdrop */
+    <div
+      className="fixed inset-0 z-50 flex items-end justify-center"
+      onClick={onClose}
+    >
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+      {/* Sheet */}
+      <motion.div
+        initial={{ y: '100%' }}
+        animate={{ y: 0 }}
+        exit={{ y: '100%' }}
+        transition={{ type: 'spring', damping: 30, stiffness: 300 }}
+        className="relative z-10 w-full max-w-lg bg-card rounded-t-2xl border-t border-border max-h-[85vh] flex flex-col"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Handle */}
+        <div className="flex justify-center pt-3 pb-1 flex-shrink-0">
+          <div className="w-10 h-1 rounded-full bg-border" />
+        </div>
+
+        {/* Header */}
+        <div className="px-5 pb-3 border-b border-border flex items-center gap-3 flex-shrink-0">
+          <Trophy size={18} className="text-accent flex-shrink-0" />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm-s font-bold text-text truncate">{teamName}</p>
+            <p className="text-xs-s text-muted truncate">{username}</p>
+          </div>
+          <span className="text-lg font-bold text-accent">{totalPoints} pts</span>
+        </div>
+
+        {/* Body */}
+        <div className="overflow-y-auto flex-1 px-4 pb-6">
+          {isLoading ? (
+            <div className="py-8"><SkeletonList count={5} /></div>
+          ) : squad.length === 0 ? (
+            <div className="py-12 flex flex-col items-center gap-2">
+              <Trophy size={32} className="text-muted opacity-30" />
+              <p className="text-sm-s text-muted">Este usuario aún no armó su equipo</p>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-4 pt-3">
+              {/* Starters */}
+              <div>
+                <p className="text-xs-s font-bold text-muted uppercase tracking-wide mb-2">Titulares</p>
+                <div className="rounded-xl bg-elevated border border-border overflow-hidden">
+                  {byPosition.map(({ pos, players }) => (
+                    <div key={pos}>
+                      <div className="px-3 py-1.5 border-b border-border bg-card flex items-center gap-2">
+                        <span className={cn('text-[10px] font-bold px-1.5 py-0.5 rounded-full', POSITION_COLORS[pos])}>
+                          {pos}
+                        </span>
+                      </div>
+                      {players.map((p, idx) => {
+                        const isCap = p.isCaptain;
+                        const isLast = idx === players.length - 1;
+                        return (
+                          <div
+                            key={p.id}
+                            className={cn('flex items-center gap-3 px-3 py-2.5', !isLast && 'border-b border-border/50')}
+                          >
+                            <PlayerAvatar photoUrl={p.photoUrl} name={p.name} position={p.position} />
+                            <span className="flex-1 text-sm-s font-medium text-text truncate">{p.name}</span>
+                            {isCap && (
+                              <span className="flex items-center gap-1 text-xs-s font-bold text-accent bg-accent/10 px-2 py-0.5 rounded-full flex-shrink-0">
+                                <Crown size={10} /> CAP
+                              </span>
+                            )}
+                            <span className="text-xs-s font-bold text-accent w-10 text-right flex-shrink-0">
+                              {p.fantasyPoints} pts
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Bench */}
+              {bench.length > 0 && (
+                <div>
+                  <p className="text-xs-s font-bold text-muted uppercase tracking-wide mb-2">Suplentes</p>
+                  <div className="rounded-xl bg-elevated border border-border overflow-hidden">
+                    {bench.map((p, idx) => (
+                      <div
+                        key={p.id}
+                        className={cn('flex items-center gap-3 px-3 py-2.5 opacity-50', idx < bench.length - 1 && 'border-b border-border/50')}
+                      >
+                        <PlayerAvatar photoUrl={p.photoUrl} name={p.name} position={p.position} />
+                        <span className="flex-1 text-sm-s font-medium text-text truncate">{p.name}</span>
+                        <span className={cn('text-[10px] font-bold px-1.5 py-0.5 rounded-full', POSITION_COLORS[p.position])}>
+                          {p.position}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {captain && (
+                <div className="p-3 rounded-xl bg-accent/10 border border-accent/20 flex items-center gap-3">
+                  <Crown size={16} className="text-accent flex-shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs-s text-muted">Capitán</p>
+                    <p className="text-sm-s font-bold text-text truncate">{captain.name}</p>
+                  </div>
+                  <span className="text-xs-s font-bold text-accent">×2 pts</span>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
 // ─── Fantasy standings tab ───────────────────────────────────────────────────
 
 function FantasyStandings() {
   const { data, isLoading } = useFantasyStandings();
   const currentUser = useAuthStore((s) => s.user);
   const entries = data ?? [];
+  const [viewingUser, setViewingUser] = useState<{ userId: number; username: string; teamName: string } | null>(null);
 
   if (isLoading) {
     return (
@@ -1067,49 +1213,62 @@ function FantasyStandings() {
   }
 
   return (
-    <div className="mx-4 rounded-xl bg-card border border-border overflow-hidden">
-      <div className="flex items-center gap-3 px-4 py-2 border-b border-border bg-elevated">
-        <span className="w-7 text-center text-xs-s text-muted">#</span>
-        <span className="w-8 flex-shrink-0" />
-        <span className="flex-1 text-xs-s text-muted">Equipo</span>
-        <span className="text-xs-s text-muted">Pts</span>
-      </div>
-      {entries.map((entry) => {
-        const isMe = entry.userId === currentUser?.id;
-        const initials = entry.username.slice(0, 1).toUpperCase();
-        return (
-          <motion.div
-            key={entry.teamId}
-            initial={{ opacity: 0, x: -8 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: Math.min(entry.rank, 20) * 0.02 }}
-            className={cn(
-              'flex items-center gap-3 px-4 py-3 border-b border-border last:border-0',
-              isMe && 'bg-accent-soft'
-            )}
-          >
-            <span className={cn('w-7 text-center text-sm-s font-bold', isMe ? 'text-accent' : 'text-muted')}>
-              {entry.rank}
-            </span>
-            <div className="w-8 h-8 rounded-full bg-elevated border border-border flex items-center justify-center flex-shrink-0 overflow-hidden">
-              {entry.avatarUrl ? (
-                <img src={entry.avatarUrl} alt={entry.username} className="w-full h-full object-cover" />
-              ) : (
-                <span className="text-sm-s font-bold text-text">{initials}</span>
+    <>
+      <div className="mx-4 rounded-xl bg-card border border-border overflow-hidden">
+        <div className="flex items-center gap-3 px-4 py-2 border-b border-border bg-elevated">
+          <span className="w-7 text-center text-xs-s text-muted">#</span>
+          <span className="w-8 flex-shrink-0" />
+          <span className="flex-1 text-xs-s text-muted">Equipo</span>
+          <span className="text-xs-s text-muted">Pts</span>
+        </div>
+        {entries.map((entry) => {
+          const isMe = entry.userId === currentUser?.id;
+          const initials = entry.username.slice(0, 1).toUpperCase();
+          return (
+            <motion.button
+              key={entry.userId}
+              initial={{ opacity: 0, x: -8 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: Math.min(entry.rank, 20) * 0.02 }}
+              onClick={() => setViewingUser({ userId: entry.userId, username: entry.username, teamName: entry.teamName })}
+              className={cn(
+                'w-full flex items-center gap-3 px-4 py-3 border-b border-border last:border-0 text-left transition-colors hover:bg-elevated',
+                isMe && 'bg-accent-soft hover:bg-accent-soft'
               )}
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className={cn('text-sm-s font-semibold truncate', isMe ? 'text-accent' : 'text-text')}>
-                {entry.teamName} {isMe && '(vos)'}
-              </p>
-              <p className="text-xs-s text-muted truncate">{entry.username}</p>
-            </div>
-            <span className={cn('text-base-s font-bold', isMe ? 'text-accent' : 'text-text')}>
-              {entry.totalPoints}
-            </span>
-          </motion.div>
-        );
-      })}
-    </div>
+            >
+              <span className={cn('w-7 text-center text-sm-s font-bold', isMe ? 'text-accent' : 'text-muted')}>
+                {entry.rank}
+              </span>
+              <div className="w-8 h-8 rounded-full bg-elevated border border-border flex items-center justify-center flex-shrink-0 overflow-hidden">
+                {entry.avatarUrl ? (
+                  <img src={entry.avatarUrl} alt={entry.username} className="w-full h-full object-cover" />
+                ) : (
+                  <span className="text-sm-s font-bold text-text">{initials}</span>
+                )}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className={cn('text-sm-s font-semibold truncate', isMe ? 'text-accent' : 'text-text')}>
+                  {entry.teamName} {isMe && '(vos)'}
+                </p>
+                <p className="text-xs-s text-muted truncate">{entry.username}</p>
+              </div>
+              <span className={cn('text-base-s font-bold', isMe ? 'text-accent' : 'text-text')}>
+                {entry.totalPoints}
+              </span>
+            </motion.button>
+          );
+        })}
+      </div>
+      <p className="text-center text-xs-s text-muted/50 mt-2">Tocá un equipo para ver su plantel</p>
+
+      {viewingUser && (
+        <UserTeamDrawer
+          userId={viewingUser.userId}
+          username={viewingUser.username}
+          teamName={viewingUser.teamName}
+          onClose={() => setViewingUser(null)}
+        />
+      )}
+    </>
   );
 }

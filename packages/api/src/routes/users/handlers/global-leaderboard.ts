@@ -71,11 +71,25 @@ export async function globalLeaderboardHandler(req: Request, res: Response) {
     }
   }
 
+  // Fetch achievement bonus points per user
+  const achievementBonuses = await db
+    .select({
+      userId: userAchievements.userId,
+      totalBonus: sql<number>`sum(${achievements.pointsBonus})`,
+    })
+    .from(userAchievements)
+    .innerJoin(achievements, eq(userAchievements.achievementSlug, achievements.slug))
+    .groupBy(userAchievements.userId);
+  const bonusByUser = new Map(achievementBonuses.map((r) => [r.userId, Number(r.totalBonus)]));
+
   // Assign ranks (shared rank for ties)
+  // totalPoints = prediction points + achievement bonus points
   let rank = 0;
   let lastPoints = -1;
   const data = rows.map((row, idx) => {
-    const pts = Number(row.totalPoints);
+    const predPts = Number(row.totalPoints);
+    const bonus = bonusByUser.get(row.userId) ?? 0;
+    const pts = predPts + bonus;
     if (pts !== lastPoints) {
       rank = offset + idx + 1;
       lastPoints = pts;
@@ -86,6 +100,7 @@ export async function globalLeaderboardHandler(req: Request, res: Response) {
       username: row.username,
       avatarUrl: row.avatarUrl,
       totalPoints: pts,
+      achievementBonus: bonus,
       leagueCount: leagueCountByUser.get(row.userId) ?? 0,
       predictionCount: Number(row.predictionCount),
       topBadge: badgesByUser.get(row.userId) ?? null,

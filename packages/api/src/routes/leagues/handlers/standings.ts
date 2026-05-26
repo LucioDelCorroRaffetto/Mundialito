@@ -2,7 +2,7 @@ import { Request, Response } from 'express';
 import { db } from '../../../db/index.js';
 import { predictions, leagueMembers, users, matches, userAchievements, achievements } from '../../../db/schema/index.js';
 import { NotFoundError, AppError } from '../../../lib/errors.js';
-import { and, eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray, sql } from 'drizzle-orm';
 import { calculatePoints } from '../../../lib/scoring.js';
 
 // Tier priority for picking the "top" badge (higher = better)
@@ -91,16 +91,33 @@ export async function standingsHandler(req: Request, res: Response) {
     }
   }
 
-  // Build sorted standings
+  // Fetch achievement bonus points per member
+  const achievementBonuses = await db
+    .select({
+      userId: userAchievements.userId,
+      totalBonus: sql<number>`sum(${achievements.pointsBonus})`,
+    })
+    .from(userAchievements)
+    .innerJoin(achievements, eq(userAchievements.achievementSlug, achievements.slug))
+    .where(inArray(userAchievements.userId, memberIds))
+    .groupBy(userAchievements.userId);
+  const bonusByUser = new Map(achievementBonuses.map((r) => [r.userId, Number(r.totalBonus)]));
+
+  // Build sorted standings (prode points + achievement bonus)
   const standings = members
-    .map((m) => ({
-      userId: m.userId,
-      username: m.username,
-      avatarUrl: m.avatarUrl,
-      points: pointsByUser.get(m.userId)?.total ?? 0,
-      matchesPlayed: pointsByUser.get(m.userId)?.matches ?? 0,
-      topBadge: badgesByUser.get(m.userId) ?? null,
-    }))
+    .map((m) => {
+      const predPoints = pointsByUser.get(m.userId)?.total ?? 0;
+      const bonus = bonusByUser.get(m.userId) ?? 0;
+      return {
+        userId: m.userId,
+        username: m.username,
+        avatarUrl: m.avatarUrl,
+        points: predPoints + bonus,
+        achievementBonus: bonus,
+        matchesPlayed: pointsByUser.get(m.userId)?.matches ?? 0,
+        topBadge: badgesByUser.get(m.userId) ?? null,
+      };
+    })
     .sort((a, b) => b.points - a.points);
 
   // Assign positions (ties share the same rank)

@@ -52,14 +52,14 @@ export async function getFantasyStandingsHandler(req: Request, res: Response) {
         .innerJoin(users, eq(fantasyTeams.userId, users.id))
         .orderBy(desc(fantasyTeams.totalPoints)));
 
-  let position = 0;
+  let rank = 0;
   let lastPoints = -1;
   const data = rows.map((row, idx) => {
     if (row.totalPoints !== lastPoints) {
-      position = idx + 1;
+      rank = idx + 1;
       lastPoints = row.totalPoints;
     }
-    return { ...row, position };
+    return { ...row, rank };
   });
 
   return res.json({ data });

@@ -108,7 +108,6 @@ export interface MatchPlayerStatsResponse {
 /** Una fila de la tabla de posiciones fantasy. */
 export interface FantasyStandingEntry {
   rank: number;
-  teamId: number;
   teamName: string;
   userId: number;
   username: string;

@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import { Lock } from 'lucide-react';
+import { Lock, Zap } from 'lucide-react';
 import { useAllAchievements, useMyAchievements } from '@/shared/hooks/use-achievements';
 import { SkeletonList } from '@/shared/components/skeleton';
 
@@ -13,6 +13,8 @@ export function AchievementsPage() {
 
   const earned = all.filter(a => earnedSlugs.has(a.slug));
   const locked = all.filter(a => !earnedSlugs.has(a.slug));
+
+  const totalBonus = earned.reduce((sum, a) => sum + a.pointsBonus, 0);
 
   if (allLoading) return <div className="p-4"><SkeletonList count={8} /></div>;
 
@@ -35,6 +37,24 @@ export function AchievementsPage() {
         />
       </div>
 
+      {/* Bonus points explanation */}
+      <div className="mx-4 p-4 rounded-xl bg-accent/10 border border-accent/20 flex items-start gap-3">
+        <Zap size={18} className="text-accent flex-shrink-0 mt-0.5" />
+        <div className="flex-1">
+          <p className="text-sm-s font-semibold text-text">Los puntos de logros cuentan de verdad</p>
+          <p className="text-xs-s text-muted mt-0.5 leading-relaxed">
+            Cada logro tiene un <span className="text-text font-semibold">bonus de puntos</span> que se suma
+            automáticamente a tu puntaje en la tabla global y en las ligas. Desbloquear logros es una
+            forma extra de escalar posiciones.
+          </p>
+          {totalBonus > 0 && (
+            <p className="text-sm-s font-bold text-accent mt-2">
+              +{totalBonus} pts acumulados hasta ahora
+            </p>
+          )}
+        </div>
+      </div>
+
       {/* Earned */}
       {earned.length > 0 && (
         <div className="px-4">
@@ -55,11 +75,9 @@ export function AchievementsPage() {
                   <p className="text-sm-s font-bold text-text leading-tight">{a.name}</p>
                   <p className="text-xs-s text-muted mt-0.5 leading-snug">{a.description}</p>
                 </div>
-                {a.pointsBonus > 0 && (
-                  <span className="self-start text-xs-s bg-accent/20 text-accent px-2 py-0.5 rounded-full font-semibold">
-                    +{a.pointsBonus} pts
-                  </span>
-                )}
+                <span className="self-start text-xs-s bg-accent/20 text-accent px-2 py-0.5 rounded-full font-semibold">
+                  +{a.pointsBonus} pts
+                </span>
                 <p className="text-xs-s text-muted">
                   {earnedMap.get(a.slug) ? new Date(earnedMap.get(a.slug)!).toLocaleDateString('es-AR') : ''}
                 </p>
@@ -92,11 +110,9 @@ export function AchievementsPage() {
                   <p className="text-sm-s font-bold text-muted leading-tight">{a.name}</p>
                   <p className="text-xs-s text-muted/70 mt-0.5 leading-snug">{a.description}</p>
                 </div>
-                {a.pointsBonus > 0 && (
-                  <span className="self-start text-xs-s bg-white/5 text-muted px-2 py-0.5 rounded-full font-semibold">
-                    +{a.pointsBonus} pts
-                  </span>
-                )}
+                <span className="self-start text-xs-s bg-white/5 text-muted px-2 py-0.5 rounded-full font-semibold">
+                  +{a.pointsBonus} pts
+                </span>
               </motion.div>
             ))}
           </div>

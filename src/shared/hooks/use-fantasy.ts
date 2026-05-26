@@ -55,6 +55,18 @@ export function useUpdateFantasySquad() {
   });
 }
 
+/** Fantasy team of any user (read-only, for standings viewer). */
+export function useUserFantasyTeam(userId: number | null) {
+  return useQuery({
+    queryKey: ['fantasy', 'team', userId],
+    queryFn: async () => {
+      const { data } = await apiClient.get<FantasyTeamWithSquad>(`/fantasy/team/${userId}`);
+      return data;
+    },
+    enabled: userId != null,
+  });
+}
+
 /** Tabla de posiciones fantasy global (o de una liga si se pasa leagueId). */
 export function useFantasyStandings(leagueId?: number) {
   return useQuery({
