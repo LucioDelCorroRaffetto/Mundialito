@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import { db } from '../../../db/index.js';
 import { predictions, users, leagueMembers, userAchievements, achievements } from '../../../db/schema/index.js';
-import { eq, sql, desc, inArray } from 'drizzle-orm';
+import { eq, sql, desc, inArray, notInArray } from 'drizzle-orm';
 
 // Tier priority for picking the "top" badge (higher = better)
 const TIER_PRIORITY: Record<string, number> = {
@@ -15,9 +15,12 @@ export async function globalLeaderboardHandler(req: Request, res: Response) {
   const limit = Math.min(Number(req.query.limit) || 50, 200);
   const offset = Number(req.query.offset) || 0;
 
+  // Exclude admin/bot accounts from the leaderboard
+  const hiddenIds = process.env.ADMIN_USER_IDS?.split(',').map(Number).filter(Boolean) ?? [];
+
   // Aggregate total points per user across ALL leagues
   // predictionCount = number of predictions with non-null points (i.e. scored matches)
-  const rows = await db
+  const baseQuery = db
     .select({
       userId: users.id,
       username: users.username,
@@ -31,6 +34,24 @@ export async function globalLeaderboardHandler(req: Request, res: Response) {
     .orderBy(desc(sql`coalesce(sum(${predictions.points}), 0)`))
     .limit(limit)
     .offset(offset);
+
+  const rows = hiddenIds.length > 0
+    ? await db
+        .select({
+          userId: users.id,
+          username: users.username,
+          avatarUrl: users.avatarUrl,
+          totalPoints: sql<number>`coalesce(sum(${predictions.points}), 0)`,
+          predictionCount: sql<number>`count(${predictions.id})`,
+        })
+        .from(users)
+        .leftJoin(predictions, eq(predictions.userId, users.id))
+        .where(notInArray(users.id, hiddenIds))
+        .groupBy(users.id, users.username, users.avatarUrl)
+        .orderBy(desc(sql`coalesce(sum(${predictions.points}), 0)`))
+        .limit(limit)
+        .offset(offset)
+    : await baseQuery;
 
   // Count distinct leagues per user
   const leagueCounts = await db
@@ -82,29 +103,34 @@ export async function globalLeaderboardHandler(req: Request, res: Response) {
     .groupBy(userAchievements.userId);
   const bonusByUser = new Map(achievementBonuses.map((r) => [r.userId, Number(r.totalBonus)]));
 
-  // Assign ranks (shared rank for ties)
-  // totalPoints = prediction points + achievement bonus points
-  let rank = 0;
-  let lastPoints = -1;
-  const data = rows.map((row, idx) => {
+  // Build enriched rows with total = pred + achievement bonus, then sort descending
+  const enriched = rows.map((row) => {
     const predPts = Number(row.totalPoints);
     const bonus = bonusByUser.get(row.userId) ?? 0;
-    const pts = predPts + bonus;
-    if (pts !== lastPoints) {
-      rank = offset + idx + 1;
-      lastPoints = pts;
-    }
     return {
-      rank,
       userId: row.userId,
       username: row.username,
       avatarUrl: row.avatarUrl,
-      totalPoints: pts,
+      totalPoints: predPts + bonus,
       achievementBonus: bonus,
       leagueCount: leagueCountByUser.get(row.userId) ?? 0,
       predictionCount: Number(row.predictionCount),
       topBadge: badgesByUser.get(row.userId) ?? null,
     };
+  });
+
+  // Sort by total points desc (SQL sorted by pred_pts only; bonuses may change order)
+  enriched.sort((a, b) => b.totalPoints - a.totalPoints);
+
+  // Assign ranks (shared rank for ties)
+  let rank = 0;
+  let lastPoints = -1;
+  const data = enriched.map((row, idx) => {
+    if (row.totalPoints !== lastPoints) {
+      rank = offset + idx + 1;
+      lastPoints = row.totalPoints;
+    }
+    return { rank, ...row };
   });
 
   return res.json({ data, meta: { limit, offset, total: data.length } });

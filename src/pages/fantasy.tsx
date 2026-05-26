@@ -46,12 +46,6 @@ const PITCH_ROWS: { pos: Position; slots: number }[] = [
   { pos: 'GK',  slots: 2 },
 ];
 
-const PITCH_POS_COLORS: Record<Position, { ring: string; bg: string; text: string }> = {
-  GK:  { ring: 'ring-yellow-400',  bg: 'bg-yellow-400/20',  text: 'text-yellow-300' },
-  DEF: { ring: 'ring-blue-400',    bg: 'bg-blue-400/20',    text: 'text-blue-300' },
-  MID: { ring: 'ring-green-400',   bg: 'bg-green-400/20',   text: 'text-green-300' },
-  FWD: { ring: 'ring-red-400',     bg: 'bg-red-400/20',     text: 'text-red-300' },
-};
 
 interface PitchPlayer {
   id: number;
@@ -60,6 +54,31 @@ interface PitchPlayer {
   photoUrl: string | null;
   shirtNumber: number | null;
 }
+
+// Shirt SVG — flat color with number
+function Shirt({ color, textColor, number }: { color: string; textColor: string; number?: number | null }) {
+  return (
+    <svg viewBox="0 0 40 36" className="w-full h-full" fill="none">
+      {/* Body */}
+      <path d="M10 6 L4 14 L10 16 L10 34 L30 34 L30 16 L36 14 L30 6 L24 4 C23 8 17 8 16 4 Z" fill={color} />
+      {/* Collar */}
+      <ellipse cx="20" cy="5" rx="4" ry="2.5" fill={textColor} opacity="0.25" />
+      {/* Number */}
+      {number != null && (
+        <text x="20" y="24" textAnchor="middle" fontSize="11" fontWeight="bold" fill={textColor} fontFamily="sans-serif">
+          {number}
+        </text>
+      )}
+    </svg>
+  );
+}
+
+const SHIRT_COLORS: Record<Position, { bg: string; text: string; ring: string }> = {
+  GK:  { bg: '#f59e0b', text: '#1c1917', ring: 'ring-yellow-400' },
+  DEF: { bg: '#3b82f6', text: '#ffffff', ring: 'ring-blue-400' },
+  MID: { bg: '#22c55e', text: '#ffffff', ring: 'ring-green-400' },
+  FWD: { bg: '#ef4444', text: '#ffffff', ring: 'ring-red-400' },
+};
 
 function PitchSlot({
   player,
@@ -74,53 +93,49 @@ function PitchSlot({
   isStarter?: boolean;
   isCaptain?: boolean;
 }) {
-  const colors = PITCH_POS_COLORS[pos];
+  const shirt = SHIRT_COLORS[pos];
+
   if (!player) {
     return (
-      <div className="flex flex-col items-center gap-1">
-        <div className={cn('w-10 h-10 rounded-full border-2 border-dashed border-white/20 flex items-center justify-center')} >
-          <span className="text-white/20 text-xs font-bold">{pos}</span>
+      <div className="flex flex-col items-center gap-1 w-[52px]">
+        <div className="w-9 h-9 opacity-20">
+          <Shirt color="#ffffff" textColor="#ffffff" />
         </div>
-        <span className="text-[9px] text-white/20 truncate max-w-[48px] text-center">vacío</span>
+        <span className="text-[8px] text-white/20 text-center leading-tight">{pos}</span>
       </div>
     );
   }
-  const lastName = player.name.split(' ').pop() ?? player.name;
+
+  const lastName = player.name.split(' ').slice(-1)[0] ?? player.name;
+  const isBench = isStarter === false;
+
   return (
     <button
       onClick={() => onRemove?.(player.id)}
-      className="flex flex-col items-center gap-1 group"
+      className={cn('flex flex-col items-center gap-0.5 group w-[52px]', isBench && 'opacity-40')}
       title={`Quitar ${player.name}`}
     >
-      <div className="relative">
-        <div
-          className={cn(
-            'w-10 h-10 rounded-full ring-2 overflow-hidden flex-shrink-0',
-            colors.ring,
-            colors.bg,
-            isStarter === false && 'opacity-40 grayscale'
-          )}
-        >
-          {player.photoUrl ? (
-            <img src={player.photoUrl} alt={player.name} className="w-full h-full object-cover object-top" />
-          ) : (
-            <span className={cn('w-full h-full flex items-center justify-center text-sm font-bold', colors.text)}>
-              {player.name.charAt(0)}
-            </span>
-          )}
+      <div className="relative w-9 h-9">
+        {/* Shirt */}
+        <div className={cn('w-full h-full drop-shadow-md transition-transform group-hover:scale-110', isBench && 'grayscale')}>
+          <Shirt color={shirt.bg} textColor={shirt.text} number={player.shirtNumber} />
         </div>
+        {/* Photo overlay — circular, top-right */}
+        {player.photoUrl && (
+          <div className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full border border-white/40 overflow-hidden bg-black/40 flex-shrink-0">
+            <img src={player.photoUrl} alt="" className="w-full h-full object-cover object-top" />
+          </div>
+        )}
+        {/* Captain badge */}
         {isCaptain && (
-          <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-accent flex items-center justify-center">
+          <span className="absolute -top-1 -left-1 w-4 h-4 rounded-full bg-accent flex items-center justify-center shadow-md">
             <Crown size={9} className="text-accent-on" />
           </span>
         )}
       </div>
-      <span className="text-[9px] text-white/80 font-semibold truncate max-w-[48px] text-center leading-tight group-hover:text-white transition-colors">
+      <span className="text-[9px] text-white font-semibold truncate max-w-[52px] text-center leading-tight group-hover:text-white/70 transition-colors drop-shadow-sm">
         {lastName}
       </span>
-      {player.shirtNumber != null && (
-        <span className="text-[8px] text-white/40">{player.shirtNumber}</span>
-      )}
     </button>
   );
 }
@@ -148,21 +163,43 @@ function PitchView({
   }
 
   return (
-    <div className="mx-4 rounded-xl overflow-hidden relative" style={{ background: 'linear-gradient(180deg, #2d6a4f 0%, #40916c 25%, #52b788 50%, #40916c 75%, #2d6a4f 100%)' }}>
-      {/* Pitch markings */}
-      <div className="absolute inset-0 pointer-events-none">
-        <div className="absolute left-1/2 top-0 bottom-0 w-px bg-white/10 -translate-x-px" />
-        <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-20 h-20 rounded-full border border-white/10" />
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-24 h-8 border-b border-x border-white/10 rounded-b-lg" />
-        <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-24 h-8 border-t border-x border-white/10 rounded-t-lg" />
+    <div
+      className="mx-4 rounded-2xl overflow-hidden relative shadow-xl"
+      style={{ background: 'linear-gradient(175deg, #1a5c35 0%, #2d8653 35%, #3aaa68 50%, #2d8653 65%, #1a5c35 100%)' }}
+    >
+      {/* Pitch markings — more detailed */}
+      <div className="absolute inset-0 pointer-events-none select-none">
+        {/* Center line */}
+        <div className="absolute left-0 right-0 top-1/2 h-px bg-white/12" />
+        {/* Center circle */}
+        <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-16 h-16 rounded-full border border-white/12" />
+        <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-1 h-1 rounded-full bg-white/20" />
+        {/* Top box */}
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-28 h-10 border-b border-x border-white/12 rounded-b-xl" />
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-14 h-4 border-b border-x border-white/12" />
+        {/* Bottom box */}
+        <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-28 h-10 border-t border-x border-white/12 rounded-t-xl" />
+        <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-14 h-4 border-t border-x border-white/12" />
+        {/* Grass stripes */}
+        {Array.from({ length: 6 }).map((_, i) => (
+          <div
+            key={i}
+            className="absolute left-0 right-0"
+            style={{
+              top: `${i * (100 / 6)}%`,
+              height: `${100 / 12}%`,
+              background: 'rgba(0,0,0,0.04)',
+            }}
+          />
+        ))}
       </div>
 
-      <div className="relative flex flex-col gap-2 py-4 px-3">
+      <div className="relative flex flex-col gap-3 py-5 px-2">
         {PITCH_ROWS.map(({ pos, slots }) => {
           const posPlayers = byPosition[pos];
           const filledSlots = Array.from({ length: slots }, (_, i) => posPlayers[i]);
           return (
-            <div key={pos} className="flex justify-around items-start px-2">
+            <div key={pos} className="flex justify-around items-center px-1">
               {filledSlots.map((player, i) => (
                 <PitchSlot
                   key={player?.id ?? `empty-${pos}-${i}`}
@@ -177,8 +214,10 @@ function PitchView({
           );
         })}
       </div>
-      <p className="text-center text-[9px] text-white/30 pb-2">
-        Tocá un jugador para quitarlo
+
+      {/* Bottom hint */}
+      <p className="text-center text-[8px] text-white/25 pb-2 tracking-wide uppercase">
+        Tocá para quitar
       </p>
     </div>
   );
@@ -693,8 +732,8 @@ export function FantasyPage() {
         </>
       )}
 
-      {/* Save button — visible on squad & lineup tabs */}
-      {tab !== 'standings' && selectedPlayerIds.length > 0 && (
+      {/* Save button — only on squad & lineup tabs */}
+      {(tab === 'squad' || tab === 'lineup') && selectedPlayerIds.length > 0 && (
         <motion.div
           initial={{ y: 80 }}
           animate={{ y: 0 }}
@@ -861,9 +900,9 @@ function FantasyGuide() {
         <p>Los puntos se acumulan <span className="text-text font-semibold">automáticamente</span> a lo largo del torneo a medida que se juegan los partidos. No necesitás hacer nada — el sistema actualiza los puntos de tus jugadores después de cada partido.</p>
         <div className="flex flex-col gap-2">
           {[
-            { emoji: '⚽', text: 'Fase de grupos: hasta 3 partidos por equipo (6–16 junio)' },
-            { emoji: '🔥', text: 'Ronda de 32 y 16: más partidos = más chances de sumar' },
-            { emoji: '🏅', text: 'Cuartos, semis y final: los mejores jugadores suman en las etapas decisivas' },
+            { emoji: '⚽', text: 'Fase de grupos: 3 partidos por equipo (11 jun – 2 jul)' },
+            { emoji: '🔥', text: 'Ronda de 32 y Octavos: eliminación directa, cada partido cuenta' },
+            { emoji: '🏅', text: 'Cuartos, Semis y Final (26 jun – 19 jul): los mejores jugadores suman en las etapas decisivas' },
           ].map(({ emoji, text }) => (
             <div key={text} className="flex items-start gap-2">
               <span className="flex-shrink-0">{emoji}</span>
