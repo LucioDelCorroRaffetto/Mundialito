@@ -33,13 +33,15 @@ function slotLabel(matchNumber: number, side: 'home' | 'away', roundIndex: numbe
 }
 
 // ─── Layout constants ────────────────────────────────────────────────────────
-const CARD_H  = 64;  // px — fixed height of every MatchCard
-const CARD_W  = 122; // px — fixed width  of every MatchCard
-const SLOT_H  = CARD_H + 8; // vertical pitch between R32 cards (72 px)
-const HALF_GAP = 28; // extra gap between bracket halves in R32
-const COL_GAP  = 8;  // horizontal gap between columns
+// Kept compact so the full bracket (~700 px tall) fits on a mobile screen
+// without excessive vertical scrolling.
+const CARD_H   = 40;  // px — fixed height of every MatchCard (2 rows × 20 px)
+const CARD_W   = 110; // px — fixed width  of every MatchCard
+const SLOT_H   = 44;  // CARD_H + 4 px gap between consecutive R32 cards
+const HALF_GAP = 12;  // extra gap between bracket halves (top 8 vs bottom 8)
+const COL_GAP  = 8;   // horizontal gap between columns
 
-// Total container height: 8 slots + gap + 8 slots
+// Total container height: 8 slots + half-gap + 8 slots ≈ 716 px
 const TOTAL_H = 8 * SLOT_H + HALF_GAP + 8 * SLOT_H;
 
 /**
@@ -102,6 +104,7 @@ function MatchCard({ match, matchNumber, roundIndex, teamMap }: MatchCardProps) 
   const homeWon = isFinished && match!.homeScore! > match!.awayScore!;
   const awayWon = isFinished && match!.awayScore! > match!.homeScore!;
 
+  // Each row is exactly CARD_H/2 = 20px tall
   const row = (
     tbd: boolean,
     label: string,
@@ -112,30 +115,31 @@ function MatchCard({ match, matchNumber, roundIndex, teamMap }: MatchCardProps) 
   ) => (
     <div
       className={cn(
-        'flex items-center gap-1 px-2 flex-1 min-w-0',
+        'flex items-center gap-1 px-1.5 min-w-0',
         border && 'border-b border-border',
         won && 'bg-accent/5',
       )}
+      style={{ height: CARD_H / 2 }}
     >
       {tbd ? (
-        <span className="text-[8px] leading-tight text-muted flex-1 truncate">{label}</span>
+        <span className="text-[7px] leading-tight text-muted flex-1 truncate">{label}</span>
       ) : (
         <>
           <TeamFlag code={team.code} emoji={team.flag} size={16} />
           <span
             className={cn(
-              'flex-1 text-[10px] font-semibold truncate leading-tight',
+              'flex-1 text-[9px] font-semibold truncate leading-tight',
               won ? 'text-text' : 'text-muted',
             )}
           >
-            {team.name.length > 9 ? team.code : team.name}
+            {team.code}
           </span>
         </>
       )}
       {showScore && score != null && (
         <span
           className={cn(
-            'text-[11px] font-bold tabular-nums ml-0.5 flex-shrink-0',
+            'text-[10px] font-bold tabular-nums flex-shrink-0',
             isLive ? 'text-red-400' : won ? 'text-accent' : 'text-muted',
           )}
         >
