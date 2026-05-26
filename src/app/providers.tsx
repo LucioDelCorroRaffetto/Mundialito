@@ -8,7 +8,11 @@ import { router } from './router';
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      staleTime: 1000 * 60,
+      // 2-minute stale window: returning users see instant cached content
+      // (reduces LCP on revisits dramatically — no spinner on nav)
+      staleTime: 1000 * 60 * 2,
+      // Keep unused cache for 10 minutes so back-navigation is instant
+      gcTime: 1000 * 60 * 10,
       refetchOnWindowFocus: false,
       retry: 1,
     },

@@ -54,7 +54,7 @@ function PodiumCard({ entry, place }: { entry: LeaderboardEntry; place: 0 | 1 | 
           )}
         >
           {entry.avatarUrl ? (
-            <img src={entry.avatarUrl} alt={entry.username} className="w-full h-full object-cover" />
+            <img src={entry.avatarUrl} alt={entry.username} width={48} height={48} className="w-full h-full object-cover" />
           ) : (
             <span className={cn('text-base font-bold', medal.text)}>{initials}</span>
           )}
@@ -97,7 +97,7 @@ function LeaderboardRow({ entry, isMe }: { entry: LeaderboardEntry; isMe: boolea
       </span>
       <div className="w-8 h-8 rounded-full bg-elevated border border-border flex items-center justify-center flex-shrink-0 overflow-hidden">
         {entry.avatarUrl ? (
-          <img src={entry.avatarUrl} alt={entry.username} className="w-full h-full object-cover" />
+          <img src={entry.avatarUrl} alt={entry.username} width={32} height={32} loading="lazy" className="w-full h-full object-cover" />
         ) : (
           <span className="text-sm font-bold text-text">{initials}</span>
         )}

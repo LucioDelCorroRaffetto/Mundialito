@@ -12,9 +12,19 @@
     <meta name="mobile-web-app-capable" content="yes" />
     <title>Mundialito · El prode + fantasy del Mundial</title>
     <meta name="description" content="El prode + fantasy del Mundial entre amigos. Crea ligas privadas, predice resultados, arma tu equipo fantasy y competí contra tus amigos." />
+    <!-- Preconnect to font CDNs -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Oswald:wght@500;700&family=Russo+One&family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet" />
+    <!-- Preconnect to API so first data fetch starts ASAP -->
+    <link rel="preconnect" href="https://mundialito-d2jk.onrender.com" />
+    <!--
+      Inter (body font) — display=swap: briefly shows fallback, then swaps.
+      Oswald/Russo One/Space Grotesk (display fonts) — display=optional: no
+      swap, no CLS. If font doesn't arrive within ~100 ms, browser keeps the
+      fallback for that page load. Acceptable for decorative headings.
+    -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;700&family=Russo+One&family=Space+Grotesk:wght@400;500;700&display=optional" rel="stylesheet" />
   </head>
   <body>
     <div id="root"></div>
