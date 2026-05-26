@@ -177,20 +177,32 @@ export function GroupStandings({ teams, matches }: Props) {
         )}
       </div>
 
-      {/* Legend — always visible */}
-      <div className="flex items-center gap-3 text-xs-s text-muted px-1 flex-wrap">
-        <span className="flex items-center gap-1.5">
-          <span className="w-2.5 h-2.5 rounded-sm bg-green-500" />
-          Clasificado
-        </span>
-        <span className="flex items-center gap-1.5">
-          <span className="w-2.5 h-2.5 rounded-sm bg-yellow-400" />
-          Puede clasificar
-        </span>
-        <span className="flex items-center gap-1.5">
-          <span className="w-2.5 h-2.5 rounded-sm bg-red-500" />
-          Eliminado
-        </span>
+      {/* Legend */}
+      <div className="flex flex-col gap-2 px-1">
+        <div className="flex items-center gap-3 flex-wrap">
+          <span className="flex items-center gap-1.5 text-xs-s text-muted">
+            <span className="w-2.5 h-2.5 rounded-sm bg-green-500 flex-shrink-0" />
+            Clasificado directo (1° y 2°)
+          </span>
+          <span className="flex items-center gap-1.5 text-xs-s text-muted">
+            <span className="w-2.5 h-2.5 rounded-sm bg-yellow-400 flex-shrink-0" />
+            Puede clasificar como mejor 3°
+          </span>
+          <span className="flex items-center gap-1.5 text-xs-s text-muted">
+            <span className="w-2.5 h-2.5 rounded-sm bg-red-500 flex-shrink-0" />
+            Eliminado
+          </span>
+        </div>
+        {/* Rule explanation */}
+        <div className="p-3 rounded-lg bg-elevated border border-border">
+          <p className="text-xs-s text-muted leading-relaxed">
+            <span className="font-semibold text-text">¿Cómo clasifican los terceros?</span>
+            {' '}Los 12 grupos aportan 1° y 2° (24 equipos). Los{' '}
+            <span className="text-yellow-400 font-semibold">8 mejores terceros</span>
+            {' '}de los 12 grupos también avanzan a la Ronda de 32.
+            El criterio de desempate es: puntos → diferencia de gol → goles a favor → fair play → sorteo.
+          </p>
+        </div>
       </div>
     </div>
   );

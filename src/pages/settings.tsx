@@ -247,6 +247,19 @@ export function SettingsPage() {
         >
           Cerrar sesión
         </button>
+
+        {/* Author credit */}
+        <div className="flex flex-col items-center gap-1 pt-2 pb-1">
+          <p className="text-xs-s text-muted/50">⚽ Mundialito 2026 · Hecho con ❤️ por</p>
+          <a
+            href="https://www.instagram.com/luchodelcorro"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-xs-s text-muted/60 hover:text-accent transition-colors font-medium"
+          >
+            @luchodelcorro
+          </a>
+        </div>
       </div>
     </div>
   );

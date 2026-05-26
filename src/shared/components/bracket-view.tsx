@@ -27,28 +27,65 @@ function isTbd(team: Team) {
   return team.code === 'TBD' || team.id === 0;
 }
 
-/** Label to show when a team slot is not yet determined */
-function slotLabel(
-  matchNumber: number,
-  side: 'home' | 'away',
-  roundIndex: number,
-): string {
-  if (roundIndex === 0) {
-    // R32: use the fixed bracket label
-    return R32_LABELS[matchNumber]?.[side] ?? 'Por definir';
-  }
+function slotLabel(matchNumber: number, side: 'home' | 'away', roundIndex: number): string {
+  if (roundIndex === 0) return R32_LABELS[matchNumber]?.[side] ?? 'Por definir';
   return 'Por definir';
 }
 
+// ─── Layout constants ────────────────────────────────────────────────────────
+const CARD_H  = 64;  // px — fixed height of every MatchCard
+const CARD_W  = 122; // px — fixed width  of every MatchCard
+const SLOT_H  = CARD_H + 8; // vertical pitch between R32 cards (72 px)
+const HALF_GAP = 28; // extra gap between bracket halves in R32
+const COL_GAP  = 8;  // horizontal gap between columns
+
+// Total container height: 8 slots + gap + 8 slots
+const TOTAL_H = 8 * SLOT_H + HALF_GAP + 8 * SLOT_H;
+
+/**
+ * Compute the top-position (and center) of every match in the bracket.
+ *
+ * R32: positions are fixed, evenly-spaced with a half-separator after match 7.
+ * R16 … Final: each match is vertically centered between its two children.
+ */
+function computePositions(): Map<number, { top: number; center: number }> {
+  const pos = new Map<number, { top: number; center: number }>();
+
+  // R32 — fixed positions
+  const r32Order = BRACKET_ROUNDS[0].matches.map((m) => m.matchNumber);
+  for (let i = 0; i < r32Order.length; i++) {
+    const top =
+      i < 8
+        ? i * SLOT_H
+        : 8 * SLOT_H + HALF_GAP + (i - 8) * SLOT_H;
+    pos.set(r32Order[i], { top, center: top + CARD_H / 2 });
+  }
+
+  // R16 → Final — derive from children
+  for (let ri = 1; ri < BRACKET_ROUNDS.length; ri++) {
+    for (const bm of BRACKET_ROUNDS[ri].matches) {
+      if (!bm.children) continue;
+      const [c1, c2] = bm.children;
+      const p1 = pos.get(c1);
+      const p2 = pos.get(c2);
+      if (!p1 || !p2) continue;
+      const center = (p1.center + p2.center) / 2;
+      pos.set(bm.matchNumber, { top: center - CARD_H / 2, center });
+    }
+  }
+
+  return pos;
+}
+
+// ─── MatchCard ────────────────────────────────────────────────────────────────
 interface MatchCardProps {
   match: Match | undefined;
   matchNumber: number;
   roundIndex: number;
   teamMap: Map<number, Team> | undefined;
-  compact?: boolean;
 }
 
-function MatchCard({ match, matchNumber, roundIndex, teamMap, compact = false }: MatchCardProps) {
+function MatchCard({ match, matchNumber, roundIndex, teamMap }: MatchCardProps) {
   const homeTeam = match ? getTeam(teamMap, match.homeTeamId) : TBD_TEAM;
   const awayTeam = match ? getTeam(teamMap, match.awayTeamId) : TBD_TEAM;
 
@@ -62,184 +99,143 @@ function MatchCard({ match, matchNumber, roundIndex, teamMap, compact = false }:
   const homeLabel = homeTbd ? slotLabel(matchNumber, 'home', roundIndex) : homeTeam.code;
   const awayLabel = awayTbd ? slotLabel(matchNumber, 'away', roundIndex) : awayTeam.code;
 
-  const content = (
-    <div className={cn(
-      'rounded-lg border bg-card border-border flex flex-col overflow-hidden',
-      isLive && 'border-red-500/40',
-      compact ? 'w-28' : 'w-32',
-    )}>
-      {/* Home row */}
-      <div className={cn(
-        'flex items-center gap-1.5 px-2 py-1.5 border-b border-border',
-        isFinished && match.homeScore! > match.awayScore! && 'bg-accent/5',
-      )}>
-        {homeTbd ? (
-          <span className="text-[9px] text-muted flex-1 leading-tight">{homeLabel}</span>
-        ) : (
-          <>
-            <TeamFlag code={homeTeam.code} emoji={homeTeam.flag} size={16} />
-            <span className={cn(
-              'flex-1 text-[10px] font-semibold truncate',
-              isFinished && match.homeScore! > match.awayScore! ? 'text-text' : 'text-muted',
-            )}>
-              {homeTeam.name.length > 10 ? homeTeam.code : homeTeam.name}
-            </span>
-          </>
-        )}
-        {showScore && (
-          <span className={cn(
-            'text-[11px] font-bold font-display tabular-nums ml-1',
-            isLive ? 'text-red-400' : isFinished && match.homeScore! > match.awayScore! ? 'text-accent' : 'text-muted',
-          )}>
-            {match.homeScore}
-          </span>
-        )}
-      </div>
+  const homeWon = isFinished && match!.homeScore! > match!.awayScore!;
+  const awayWon = isFinished && match!.awayScore! > match!.homeScore!;
 
-      {/* Away row */}
-      <div className={cn(
-        'flex items-center gap-1.5 px-2 py-1.5',
-        isFinished && match.awayScore! > match.homeScore! && 'bg-accent/5',
-      )}>
-        {awayTbd ? (
-          <span className="text-[9px] text-muted flex-1 leading-tight">{awayLabel}</span>
-        ) : (
-          <>
-            <TeamFlag code={awayTeam.code} emoji={awayTeam.flag} size={16} />
-            <span className={cn(
-              'flex-1 text-[10px] font-semibold truncate',
-              isFinished && match.awayScore! > match.homeScore! ? 'text-text' : 'text-muted',
-            )}>
-              {awayTeam.name.length > 10 ? awayTeam.code : awayTeam.name}
-            </span>
-          </>
-        )}
-        {showScore && (
-          <span className={cn(
-            'text-[11px] font-bold font-display tabular-nums ml-1',
-            isLive ? 'text-red-400' : isFinished && match.awayScore! > match.homeScore! ? 'text-accent' : 'text-muted',
-          )}>
-            {match.awayScore}
+  const row = (
+    tbd: boolean,
+    label: string,
+    team: Team,
+    won: boolean,
+    score: number | null | undefined,
+    border: boolean,
+  ) => (
+    <div
+      className={cn(
+        'flex items-center gap-1 px-2 flex-1 min-w-0',
+        border && 'border-b border-border',
+        won && 'bg-accent/5',
+      )}
+    >
+      {tbd ? (
+        <span className="text-[8px] leading-tight text-muted flex-1 truncate">{label}</span>
+      ) : (
+        <>
+          <TeamFlag code={team.code} emoji={team.flag} size={16} />
+          <span
+            className={cn(
+              'flex-1 text-[10px] font-semibold truncate leading-tight',
+              won ? 'text-text' : 'text-muted',
+            )}
+          >
+            {team.name.length > 9 ? team.code : team.name}
           </span>
-        )}
-      </div>
+        </>
+      )}
+      {showScore && score != null && (
+        <span
+          className={cn(
+            'text-[11px] font-bold tabular-nums ml-0.5 flex-shrink-0',
+            isLive ? 'text-red-400' : won ? 'text-accent' : 'text-muted',
+          )}
+        >
+          {score}
+        </span>
+      )}
     </div>
   );
 
-  if (!match) return content;
-  return <Link to={`/matches/${match.id}`}>{content}</Link>;
+  const card = (
+    <div
+      className={cn(
+        'rounded-lg border bg-card border-border flex flex-col overflow-hidden flex-shrink-0',
+        isLive && 'border-red-500/50',
+      )}
+      style={{ width: CARD_W, height: CARD_H }}
+    >
+      {row(homeTbd, homeLabel, homeTeam, homeWon, match?.homeScore, true)}
+      {row(awayTbd, awayLabel, awayTeam, awayWon, match?.awayScore, false)}
+    </div>
+  );
+
+  if (!match) return card;
+  return <Link to={`/matches/${match.id}`}>{card}</Link>;
 }
 
-
-
+// ─── BracketView ──────────────────────────────────────────────────────────────
 export function BracketView({ matches, teamMap }: Props) {
   const matchByNum = useMemo(
     () => new Map(matches.map((m) => [m.matchNumber, m])),
     [matches],
   );
 
-  const slotHeight = 72;
-  const totalSlots = 16;
-  const colHeight  = totalSlots * slotHeight;
+  const positions = useMemo(() => computePositions(), []);
 
-  // Helper: spacing for a given number of matches
-  function colSpacing(numMatches: number) {
-    return (colHeight - numMatches * slotHeight) / (numMatches + 1);
-  }
+  const rounds = [
+    { label: 'R32',      matchNums: BRACKET_ROUNDS[0].matches.map((m) => m.matchNumber), ri: 0 },
+    { label: 'Octavos',  matchNums: BRACKET_ROUNDS[1].matches.map((m) => m.matchNumber), ri: 1 },
+    { label: 'Cuartos',  matchNums: BRACKET_ROUNDS[2].matches.map((m) => m.matchNumber), ri: 2 },
+    { label: 'Semis',    matchNums: BRACKET_ROUNDS[3].matches.map((m) => m.matchNumber), ri: 3 },
+    { label: 'Final',    matchNums: BRACKET_ROUNDS[4].matches.map((m) => m.matchNumber), ri: 4 },
+  ];
 
-  // Render a single column with equal vertical spacing
-  function renderColumn(
-    roundIndex: number,
-    roundLabel: string,
-    matchNums: number[],
-    numMatches: number,
-  ) {
-    const spacing = colSpacing(numMatches);
-
-    return (
-      <div key={roundIndex} className="flex flex-col flex-shrink-0">
-        <div className="text-[10px] font-bold text-muted uppercase tracking-wider text-center mb-3 h-4">
-          {roundLabel}
-        </div>
-        <div style={{ height: colHeight }} className="relative">
-          {matchNums.map((mn, i) => {
-            const match = matchByNum.get(mn);
-            // Calculate vertical position
-            const slotCenter = spacing + i * (slotHeight + spacing) + slotHeight / 2;
-            const top = slotCenter - slotHeight / 2;
-
-            // Half separator: extra gap after 8th match in R32
-            const extraOffset = roundIndex === 0 && i >= 8 ? spacing : 0;
-
-            return (
-              <div
-                key={mn}
-                className="absolute left-0 right-0"
-                style={{ top: top + extraOffset }}
-              >
-                <MatchCard
-                  match={match}
-                  matchNumber={mn}
-                  roundIndex={roundIndex}
-                  teamMap={teamMap}
-                />
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    );
-  }
-
-  const r32Nums = BRACKET_ROUNDS[0].matches.map((m) => m.matchNumber);
-  const r16Nums = BRACKET_ROUNDS[1].matches.map((m) => m.matchNumber);
-  const qfNums  = BRACKET_ROUNDS[2].matches.map((m) => m.matchNumber);
-  const sfNums  = BRACKET_ROUNDS[3].matches.map((m) => m.matchNumber);
-  const finalNum = BRACKET_ROUNDS[4].matches.map((m) => m.matchNumber);
   const thirdMatch = matchByNum.get(THIRD_PLACE_MATCH.matchNumber);
 
-  // Gap between columns
-  const GAP = 8;
-
   return (
-    <div className="pb-8">
+    <div className="pb-6">
       {/* Horizontally scrollable bracket */}
-      <div className="overflow-x-auto pb-4">
+      <div className="overflow-x-auto pb-3">
         <div
           className="flex items-start"
-          style={{ gap: GAP, paddingBottom: 8, minWidth: 'max-content', paddingLeft: 4, paddingRight: 4 }}
+          style={{ gap: COL_GAP, padding: '0 4px 8px', minWidth: 'max-content' }}
         >
-          {renderColumn(0, 'Ronda de 32', r32Nums, 16)}
-          {renderColumn(1, 'Octavos', r16Nums, 8)}
-          {renderColumn(2, 'Cuartos', qfNums, 4)}
-          {renderColumn(3, 'Semis', sfNums, 2)}
-          {renderColumn(4, 'Final', finalNum, 1)}
+          {rounds.map(({ label, matchNums, ri }) => (
+            <div key={ri} className="flex flex-col flex-shrink-0">
+              {/* Round label */}
+              <p className="text-[9px] font-bold text-muted uppercase tracking-wider text-center mb-2 h-3">
+                {label}
+              </p>
+              {/* Column — fixed height, each card absolutely positioned */}
+              <div className="relative flex-shrink-0" style={{ width: CARD_W, height: TOTAL_H }}>
+                {matchNums.map((mn) => {
+                  const p = positions.get(mn);
+                  if (!p) return null;
+                  return (
+                    <div key={mn} className="absolute left-0" style={{ top: p.top }}>
+                      <MatchCard
+                        match={matchByNum.get(mn)}
+                        matchNumber={mn}
+                        roundIndex={ri}
+                        teamMap={teamMap}
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
         </div>
       </div>
 
-      {/* Third place match */}
-      <div className="mt-4 px-1">
-        <p className="text-xs-s font-bold text-muted uppercase tracking-wider mb-2">
-          3er Puesto
-        </p>
-        <div className="inline-block">
-          <MatchCard
-            match={thirdMatch}
-            matchNumber={THIRD_PLACE_MATCH.matchNumber}
-            roundIndex={5}
-            teamMap={teamMap}
-          />
-        </div>
+      {/* Third-place match */}
+      <div className="mt-2 px-1">
+        <p className="text-[9px] font-bold text-muted uppercase tracking-wider mb-2">3er Puesto</p>
+        <MatchCard
+          match={thirdMatch}
+          matchNumber={THIRD_PLACE_MATCH.matchNumber}
+          roundIndex={5}
+          teamMap={teamMap}
+        />
       </div>
 
       {/* Legend */}
-      <div className="mt-4 px-1 flex items-center gap-3 text-[10px] text-muted">
-        <span className="flex items-center gap-1">
-          <span className="w-2 h-2 rounded-sm bg-accent/30 border border-accent/50" />
+      <div className="mt-3 px-1 flex items-center gap-4 text-[10px] text-muted">
+        <span className="flex items-center gap-1.5">
+          <span className="w-2 h-2 rounded-sm bg-accent/40 border border-accent/60" />
           Ganador
         </span>
-        <span className="flex items-center gap-1">
-          <span className="w-2 h-2 rounded-sm bg-red-500/30 border border-red-500/50" />
+        <span className="flex items-center gap-1.5">
+          <span className="w-2 h-2 rounded-sm bg-red-500/40 border border-red-500/60" />
           En vivo
         </span>
       </div>
