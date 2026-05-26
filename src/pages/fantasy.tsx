@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { ChevronDown, Check, Clock, Trophy, LayoutList, Layers, Star, Crown, BarChart2 } from 'lucide-react';
+import { ChevronDown, Check, Clock, Trophy, LayoutList, Layers, Star, Crown, BarChart2, BookOpen, ChevronRight } from 'lucide-react';
 import { cn } from '@/shared/lib/cn';
 import { useTeams } from '@/shared/hooks/use-teams';
 import { usePlayers } from '@/shared/hooks/use-players';
@@ -201,7 +201,7 @@ const POSITION_LABELS: Record<Position, string> = {
   FWD: 'Delantero',
 };
 
-type Tab = 'squad' | 'lineup' | 'standings';
+type Tab = 'squad' | 'lineup' | 'standings' | 'guide';
 
 export function FantasyPage() {
   const [tab, setTab] = useState<Tab>('squad');
@@ -414,6 +414,7 @@ export function FantasyPage() {
           { id: 'squad', label: 'Plantel' },
           { id: 'lineup', label: 'Titulares' },
           { id: 'standings', label: 'Tabla' },
+          { id: 'guide', label: 'Guía' },
         ] as { id: Tab; label: string }[]).map((t) => (
           <button
             key={t.id}
@@ -448,6 +449,7 @@ export function FantasyPage() {
         </div>
       </div>
 
+      {tab === 'guide' && <FantasyGuide />}
       {tab === 'standings' && <FantasyStandings />}
 
       {tab === 'lineup' && (
@@ -709,6 +711,216 @@ export function FantasyPage() {
           </button>
         </motion.div>
       )}
+    </div>
+  );
+}
+
+// ─── Fantasy Guide ────────────────────────────────────────────────────────────
+
+function GuideSection({
+  emoji,
+  title,
+  children,
+  defaultOpen = false,
+}: {
+  emoji: string;
+  title: string;
+  children: React.ReactNode;
+  defaultOpen?: boolean;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <div className="rounded-xl bg-card border border-border overflow-hidden">
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className="w-full flex items-center gap-3 px-4 py-3.5 text-left"
+      >
+        <span className="text-xl flex-shrink-0">{emoji}</span>
+        <span className="flex-1 text-sm-s font-semibold text-text">{title}</span>
+        <ChevronRight
+          size={16}
+          className={cn('text-muted transition-transform flex-shrink-0', open && 'rotate-90')}
+        />
+      </button>
+      {open && (
+        <div className="px-4 pb-4 border-t border-border pt-3 flex flex-col gap-3 text-sm-s text-muted leading-relaxed">
+          {children}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ScoreRow({ label, value, highlight }: { label: string; value: string; highlight?: boolean }) {
+  return (
+    <div className="flex items-center justify-between py-1.5 border-b border-border/50 last:border-0">
+      <span className="text-sm-s text-muted">{label}</span>
+      <span className={cn('text-sm-s font-bold', highlight ? 'text-accent' : value.startsWith('-') ? 'text-red-400' : 'text-green-400')}>
+        {value}
+      </span>
+    </div>
+  );
+}
+
+
+function FantasyGuide() {
+  return (
+    <div className="flex flex-col gap-3 px-4 pb-4">
+      <div className="flex items-center gap-2 py-1">
+        <BookOpen size={16} className="text-accent" />
+        <p className="text-sm-s font-bold text-text">¿Cómo funciona el Fantasy?</p>
+      </div>
+
+      {/* Intro */}
+      <div className="p-4 rounded-xl bg-accent/10 border border-accent/20">
+        <p className="text-sm-s text-text leading-relaxed">
+          El Fantasy del Mundialito es un juego en el que armás tu <span className="font-semibold">equipo de 15 jugadores reales</span> del Mundial FIFA 2026.
+          Cada vez que tus jugadores actúan en un partido, ganás puntos según su rendimiento.
+          Gana el que acumule más puntos al final del torneo.
+        </p>
+      </div>
+
+      <GuideSection emoji="📋" title="Paso 1 — Armá tu plantel (15 jugadores)" defaultOpen>
+        <p>Tu plantel tiene que tener exactamente <span className="text-text font-semibold">15 jugadores</span> con esta distribución obligatoria:</p>
+        <div className="rounded-lg bg-elevated border border-border overflow-hidden">
+          {[
+            { pos: 'GK', label: 'Porteros',         count: '2',  color: 'text-yellow-400' },
+            { pos: 'DEF', label: 'Defensores',       count: '5',  color: 'text-blue-400'   },
+            { pos: 'MID', label: 'Mediocampistas',   count: '5',  color: 'text-green-400'  },
+            { pos: 'FWD', label: 'Delanteros',       count: '3',  color: 'text-red-400'    },
+          ].map(({ pos, label, count, color }) => (
+            <div key={pos} className="flex items-center gap-3 px-3 py-2.5 border-b border-border last:border-0">
+              <span className={cn('w-10 text-xs font-bold text-center px-1.5 py-0.5 rounded-full bg-elevated border border-border', color)}>{pos}</span>
+              <span className="flex-1 text-sm-s text-text">{label}</span>
+              <span className="text-sm-s font-bold text-text">{count}</span>
+            </div>
+          ))}
+        </div>
+        <p>En la pestaña <span className="text-text font-semibold">Plantel</span> expandís cada selección y tocás los jugadores para agregarlos. Podés ver el plantel en lista o en formato cancha.</p>
+      </GuideSection>
+
+      <GuideSection emoji="⭐" title="Paso 2 — Elegí tus 11 titulares">
+        <p>De tus 15 jugadores, tenés que marcar <span className="text-text font-semibold">11 como titulares</span> y 4 quedan en el banco de suplentes.</p>
+        <div className="p-3 rounded-lg bg-elevated border border-border">
+          <p className="text-xs-s font-semibold text-text mb-1">⚠️ Importante</p>
+          <p className="text-xs-s">Solo los <span className="text-text font-semibold">titulares</span> suman puntos. Los suplentes no acumulan puntos por más goles que hagan.</p>
+        </div>
+        <p>Usá la pestaña <span className="text-text font-semibold">Titulares</span> para marcar quiénes arrancan y quiénes se quedan en el banco.</p>
+      </GuideSection>
+
+      <GuideSection emoji="👑" title="Paso 3 — Elegí tu capitán">
+        <p>Entre los 11 titulares, elegí <span className="text-text font-semibold">1 capitán</span>. El capitán es tu jugador clave:</p>
+        <div className="p-3 rounded-lg bg-accent/10 border border-accent/30">
+          <p className="text-sm-s font-bold text-accent text-center">El capitán suma el DOBLE de puntos</p>
+          <p className="text-xs-s text-muted text-center mt-0.5">Si tu capitán hace un gol y suma 6 pts, vos recibís 12 pts</p>
+        </div>
+        <p>Elegí como capitán al jugador que esperes que tenga más participación en el torneo — los goleadores y asistidores son buenas opciones.</p>
+      </GuideSection>
+
+      <GuideSection emoji="📊" title="Sistema de puntuación por partido">
+        <p>Cada vez que tus jugadores titulares juegan un partido del Mundial, suman o restan puntos según lo que hagan:</p>
+
+        <div className="rounded-lg bg-elevated border border-border overflow-hidden">
+          <div className="px-3 py-2 border-b border-border bg-card">
+            <p className="text-xs-s font-bold text-muted uppercase tracking-wide">Puntos base</p>
+          </div>
+          <div className="px-3">
+            <ScoreRow label="Jugar el partido" value="+2 pts" />
+            <ScoreRow label="No jugar" value="0 pts" />
+          </div>
+
+          <div className="px-3 py-2 border-b border-border border-t bg-card">
+            <p className="text-xs-s font-bold text-muted uppercase tracking-wide">Goles (por posición)</p>
+          </div>
+          <div className="px-3">
+            <ScoreRow label="Gol de Portero" value="+6 pts" />
+            <ScoreRow label="Gol de Defensor" value="+6 pts" />
+            <ScoreRow label="Gol de Mediocampista" value="+5 pts" />
+            <ScoreRow label="Gol de Delantero" value="+4 pts" />
+          </div>
+
+          <div className="px-3 py-2 border-b border-border border-t bg-card">
+            <p className="text-xs-s font-bold text-muted uppercase tracking-wide">Otras acciones</p>
+          </div>
+          <div className="px-3">
+            <ScoreRow label="Asistencia (cualquier posición)" value="+3 pts" />
+            <ScoreRow label="Valla invicta — Portero o Defensor" value="+4 pts" />
+            <ScoreRow label="Valla invicta — Mediocampista" value="+1 pt" />
+            <ScoreRow label="Tarjeta amarilla" value="-1 pt" />
+            <ScoreRow label="Tarjeta roja" value="-3 pts" />
+          </div>
+        </div>
+
+        <div className="p-3 rounded-lg bg-elevated border border-border">
+          <p className="text-xs-s font-semibold text-text mb-1">¿Qué es valla invicta?</p>
+          <p className="text-xs-s">El equipo del jugador no recibió ningún gol en ese partido. Los porteros y defensores suman puntos extra por mantener el arco en cero.</p>
+        </div>
+      </GuideSection>
+
+      <GuideSection emoji="🏆" title="¿Cómo se acumulan los puntos?">
+        <p>Los puntos se acumulan <span className="text-text font-semibold">automáticamente</span> a lo largo del torneo a medida que se juegan los partidos. No necesitás hacer nada — el sistema actualiza los puntos de tus jugadores después de cada partido.</p>
+        <div className="flex flex-col gap-2">
+          {[
+            { emoji: '⚽', text: 'Fase de grupos: hasta 3 partidos por equipo (6–16 junio)' },
+            { emoji: '🔥', text: 'Ronda de 32 y 16: más partidos = más chances de sumar' },
+            { emoji: '🏅', text: 'Cuartos, semis y final: los mejores jugadores suman en las etapas decisivas' },
+          ].map(({ emoji, text }) => (
+            <div key={text} className="flex items-start gap-2">
+              <span className="flex-shrink-0">{emoji}</span>
+              <p className="text-xs-s">{text}</p>
+            </div>
+          ))}
+        </div>
+        <p>Los jugadores que llegan más lejos en el torneo tienen más partidos para sumar puntos. Vale la pena elegir jugadores de selecciones fuertes.</p>
+      </GuideSection>
+
+      <GuideSection emoji="💡" title="Tips para armar un buen equipo">
+        <div className="flex flex-col gap-2.5">
+          {[
+            { tip: 'Capitán goleador', desc: 'Elegí de capitán al delantero o mediocampista de una selección que esperes que avance lejos en el torneo.' },
+            { tip: 'Defensores de selecciones sólidas', desc: 'Una selección que llegue a semis puede sumar varias vallas invictas. 4 pts × varios partidos = mucho.' },
+            { tip: 'Distribuí por selecciones', desc: 'Si todos tus jugadores son del mismo equipo y esa selección pierde en octavos, tus puntos se cortan ahí.' },
+            { tip: 'El capitán tiene que jugar', desc: 'Si tu capitán no juega un partido, perdés el doble bonus. Revisá antes de cada fecha.' },
+          ].map(({ tip, desc }) => (
+            <div key={tip} className="p-3 rounded-lg bg-elevated border border-border">
+              <p className="text-xs-s font-semibold text-text mb-0.5">✅ {tip}</p>
+              <p className="text-xs-s text-muted">{desc}</p>
+            </div>
+          ))}
+        </div>
+      </GuideSection>
+
+      <GuideSection emoji="❓" title="Preguntas frecuentes">
+        <div className="flex flex-col gap-3">
+          {[
+            {
+              q: '¿Puedo cambiar mi equipo después de armarlo?',
+              a: 'Sí, podés modificar tu plantel, titulares y capitán hasta que empiece el torneo (11 de junio). Una vez que arrancan los partidos, los cambios pueden quedar bloqueados.',
+            },
+            {
+              q: '¿Qué pasa si un jugador de mi equipo no juega ningún partido?',
+              a: 'Si un jugador no fue convocado o no juega, suma 0 puntos en esos partidos. Si es tu capitán, perdés el bonus doble en esos partidos.',
+            },
+            {
+              q: '¿Hace falta estar en una liga para jugar al Fantasy?',
+              a: 'No. Tu equipo es global y compite automáticamente en la tabla general. Si te unís a una liga, también compite dentro de esa liga.',
+            },
+            {
+              q: '¿Cuándo se actualizan los puntos?',
+              a: 'Los puntos se actualizan automáticamente después de cada partido, cuando el admin carga las estadísticas de los jugadores.',
+            },
+            {
+              q: '¿Qué es la valla invicta (clean sheet)?',
+              a: 'Un equipo tiene valla invicta cuando termina un partido sin recibir ningún gol. Solo aplica si el jugador jugó ese partido.',
+            },
+          ].map(({ q, a }) => (
+            <div key={q}>
+              <p className="text-xs-s font-semibold text-text mb-1">🙋 {q}</p>
+              <p className="text-xs-s text-muted">{a}</p>
+            </div>
+          ))}
+        </div>
+      </GuideSection>
     </div>
   );
 }
