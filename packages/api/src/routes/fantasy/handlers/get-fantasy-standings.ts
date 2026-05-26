@@ -35,6 +35,7 @@ export async function getFantasyStandingsHandler(req: Request, res: Response) {
   const baseSelect = {
     userId: fantasyTeams.userId,
     username: users.username,
+    avatarUrl: users.avatarUrl,
     teamName: fantasyTeams.name,
     totalPoints: fantasyTeams.totalPoints,
   };
