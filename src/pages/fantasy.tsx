@@ -735,33 +735,21 @@ export function FantasyPage() {
       {/* Save button — only on squad & lineup tabs */}
       {(tab === 'squad' || tab === 'lineup') && selectedPlayerIds.length > 0 && (
         <>
-          {/* Mobile: fixed above the tab bar */}
+          {/*
+            Single fixed button for both mobile and desktop.
+            - Mobile: bottom-20 (above the 56px tab bar), full-width centered
+            - Desktop: bottom-6, offset left by sidebar width (w-56 / xl:w-64)
+              so it floats inside the main content area, not behind the sidebar.
+          */}
           <motion.div
             initial={{ y: 80 }}
             animate={{ y: 0 }}
-            className="md:hidden fixed bottom-20 left-0 right-0 flex justify-center px-4 pointer-events-none"
+            className="fixed bottom-20 md:bottom-6 left-0 md:left-56 xl:left-64 right-0 flex justify-center px-4 pointer-events-none z-30"
           >
             <button
               onClick={handleSave}
               disabled={updateSquad.isPending}
-              className="pointer-events-auto w-full max-w-md py-4 rounded-xl bg-accent text-accent-on font-bold text-base-s shadow-lg disabled:opacity-60"
-            >
-              {updateSquad.isPending
-                ? 'Guardando...'
-                : `Guardar equipo (${selectedPlayerIds.length} · ${starterIds.length}/${STARTERS_COUNT} titulares)`}
-            </button>
-          </motion.div>
-
-          {/* Desktop: inline at bottom of content, not fixed */}
-          <motion.div
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="hidden md:block px-0 pb-2"
-          >
-            <button
-              onClick={handleSave}
-              disabled={updateSquad.isPending}
-              className="w-full py-4 rounded-xl bg-accent text-accent-on font-bold text-base-s shadow-lg disabled:opacity-60 hover:opacity-90 transition-opacity"
+              className="pointer-events-auto w-full max-w-xl py-4 rounded-xl bg-accent text-accent-on font-bold text-base-s shadow-lg disabled:opacity-60 hover:opacity-90 transition-opacity"
             >
               {updateSquad.isPending
                 ? 'Guardando...'
