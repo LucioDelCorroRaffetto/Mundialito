@@ -32,28 +32,29 @@ function slotLabel(matchNumber: number, side: 'home' | 'away', roundIndex: numbe
   return 'Por definir';
 }
 
-// ─── Layout constants ────────────────────────────────────────────────────────
-// Kept compact so the full bracket (~700 px tall) fits on a mobile screen
-// without excessive vertical scrolling.
-const CARD_H   = 40;  // px — fixed height of every MatchCard (2 rows × 20 px)
-const CARD_W   = 110; // px — fixed width  of every MatchCard
-const SLOT_H   = 44;  // CARD_H + 4 px gap between consecutive R32 cards
-const HALF_GAP = 12;  // extra gap between bracket halves (top 8 vs bottom 8)
-const COL_GAP  = 8;   // horizontal gap between columns
+// ─── Round accent colours ────────────────────────────────────────────────────
+const ROUND_STYLES = [
+  { label: 'R32',     pill: 'bg-slate-700/60 text-slate-300',   accent: '#64748b', lineColor: 'rgba(100,116,139,0.35)' },
+  { label: 'Octavos', pill: 'bg-blue-900/60 text-blue-300',    accent: '#60a5fa', lineColor: 'rgba(96,165,250,0.35)'  },
+  { label: 'Cuartos', pill: 'bg-violet-900/60 text-violet-300', accent: '#a78bfa', lineColor: 'rgba(167,139,250,0.35)' },
+  { label: 'Semis',   pill: 'bg-orange-900/60 text-orange-300', accent: '#fb923c', lineColor: 'rgba(251,146,60,0.35)'  },
+  { label: 'Final',   pill: 'bg-yellow-900/60 text-yellow-300', accent: '#ffc857', lineColor: 'rgba(255,200,87,0.5)'   },
+];
 
-// Total container height: 8 slots + half-gap + 8 slots ≈ 716 px
+// ─── Layout constants ─────────────────────────────────────────────────────────
+const CARD_H    = 44;   // px — 2 rows × 22 px
+const CARD_W    = 118;  // px
+const SLOT_H    = 50;   // CARD_H + 6 px gap
+const HALF_GAP  = 16;
+const CONN_W    = 22;   // width of SVG connector between columns
+const COL_GAP   = 0;    // columns abut the connectors directly
+
 const TOTAL_H = 8 * SLOT_H + HALF_GAP + 8 * SLOT_H;
 
-/**
- * Compute the top-position (and center) of every match in the bracket.
- *
- * R32: positions are fixed, evenly-spaced with a half-separator after match 7.
- * R16 … Final: each match is vertically centered between its two children.
- */
+// ─── Position computation ────────────────────────────────────────────────────
 function computePositions(): Map<number, { top: number; center: number }> {
   const pos = new Map<number, { top: number; center: number }>();
 
-  // R32 — fixed positions
   const r32Order = BRACKET_ROUNDS[0].matches.map((m) => m.matchNumber);
   for (let i = 0; i < r32Order.length; i++) {
     const top =
@@ -63,7 +64,6 @@ function computePositions(): Map<number, { top: number; center: number }> {
     pos.set(r32Order[i], { top, center: top + CARD_H / 2 });
   }
 
-  // R16 → Final — derive from children
   for (let ri = 1; ri < BRACKET_ROUNDS.length; ri++) {
     for (const bm of BRACKET_ROUNDS[ri].matches) {
       if (!bm.children) continue;
@@ -77,6 +77,62 @@ function computePositions(): Map<number, { top: number; center: number }> {
   }
 
   return pos;
+}
+
+// ─── SVG connector between two columns ───────────────────────────────────────
+function BracketConnectors({
+  roundIndex,
+  positions,
+  lineColor,
+}: {
+  roundIndex: number;   // index of the RIGHT (parent) round
+  positions: Map<number, { top: number; center: number }>;
+  lineColor: string;
+}) {
+  const paths: React.ReactNode[] = [];
+
+  for (const bm of BRACKET_ROUNDS[roundIndex].matches) {
+    if (!bm.children) continue;
+    const [c1, c2] = bm.children;
+    const p1  = positions.get(c1);
+    const p2  = positions.get(c2);
+    const par = positions.get(bm.matchNumber);
+    if (!p1 || !p2 || !par) continue;
+
+    const mid = par.center;
+    const cx  = CONN_W / 2;
+
+    // Two arms from child centres → midpoint, then one line to parent
+    paths.push(
+      <path
+        key={bm.matchNumber}
+        d={`M 0 ${p1.center} H ${cx} V ${p2.center} H 0`}
+        fill="none"
+        stroke={lineColor}
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />,
+      <line
+        key={`out-${bm.matchNumber}`}
+        x1={cx} y1={mid} x2={CONN_W} y2={mid}
+        stroke={lineColor}
+        strokeWidth="1.5"
+        strokeLinecap="round"
+      />,
+    );
+  }
+
+  return (
+    <svg
+      width={CONN_W}
+      height={TOTAL_H}
+      className="flex-shrink-0 self-end"
+      style={{ marginBottom: 0 }}
+    >
+      {paths}
+    </svg>
+  );
 }
 
 // ─── MatchCard ────────────────────────────────────────────────────────────────
@@ -104,45 +160,43 @@ function MatchCard({ match, matchNumber, roundIndex, teamMap }: MatchCardProps) 
   const homeWon = isFinished && match!.homeScore! > match!.awayScore!;
   const awayWon = isFinished && match!.awayScore! > match!.homeScore!;
 
-  // Each row is exactly CARD_H/2 = 20px tall
+  const rs = ROUND_STYLES[Math.min(roundIndex, ROUND_STYLES.length - 1)];
+  const accentColor = rs.accent;
+
   const row = (
     tbd: boolean,
     label: string,
     team: Team,
     won: boolean,
     score: number | null | undefined,
-    border: boolean,
+    isTop: boolean,
   ) => (
     <div
       className={cn(
-        'flex items-center gap-1 px-1.5 min-w-0',
-        border && 'border-b border-border',
-        won && 'bg-accent/5',
+        'flex items-center gap-1.5 px-2 min-w-0 relative',
+        isTop && 'border-b border-white/5',
+        won && 'bg-white/5',
       )}
       style={{ height: CARD_H / 2 }}
     >
       {tbd ? (
-        <span className="text-[7px] leading-tight text-muted flex-1 truncate">{label}</span>
+        <span className="text-[7px] leading-tight text-white/25 flex-1 truncate italic">{label}</span>
       ) : (
         <>
           <TeamFlag code={team.code} emoji={team.flag} size={16} />
-          <span
-            className={cn(
-              'flex-1 text-[9px] font-semibold truncate leading-tight',
-              won ? 'text-text' : 'text-muted',
-            )}
-          >
+          <span className={cn(
+            'flex-1 text-[9px] font-bold truncate leading-tight tracking-wide',
+            won ? 'text-white' : 'text-white/50',
+          )}>
             {team.code}
           </span>
         </>
       )}
       {showScore && score != null && (
-        <span
-          className={cn(
-            'text-[10px] font-bold tabular-nums flex-shrink-0',
-            isLive ? 'text-red-400' : won ? 'text-accent' : 'text-muted',
-          )}
-        >
+        <span className={cn(
+          'text-[11px] font-black tabular-nums flex-shrink-0 min-w-[14px] text-right',
+          isLive ? 'text-red-400' : won ? 'text-accent' : 'text-white/40',
+        )}>
           {score}
         </span>
       )}
@@ -152,18 +206,34 @@ function MatchCard({ match, matchNumber, roundIndex, teamMap }: MatchCardProps) 
   const card = (
     <div
       className={cn(
-        'rounded-lg border bg-card border-border flex flex-col overflow-hidden flex-shrink-0',
-        isLive && 'border-red-500/50',
+        'flex flex-col overflow-hidden flex-shrink-0 relative',
+        'rounded-lg border border-white/8 bg-[#1a1f2e]',
+        isLive && 'border-red-500/60 shadow-[0_0_8px_rgba(239,68,68,0.3)]',
+        !isLive && 'shadow-[0_2px_8px_rgba(0,0,0,0.4)]',
       )}
-      style={{ width: CARD_W, height: CARD_H }}
+      style={{
+        width: CARD_W,
+        height: CARD_H,
+        // Left accent bar coloured by round (or red if live)
+        borderLeft: `2.5px solid ${isLive ? '#ef4444' : accentColor}`,
+      }}
     >
+      {/* Subtle gradient overlay for depth */}
+      <div
+        className="absolute inset-0 pointer-events-none"
+        style={{ background: `linear-gradient(135deg, ${accentColor}08 0%, transparent 60%)` }}
+      />
       {row(homeTbd, homeLabel, homeTeam, homeWon, match?.homeScore, true)}
       {row(awayTbd, awayLabel, awayTeam, awayWon, match?.awayScore, false)}
     </div>
   );
 
   if (!match) return card;
-  return <Link to={`/matches/${match.id}`}>{card}</Link>;
+  return (
+    <Link to={`/matches/${match.id}`} className="hover:opacity-80 transition-opacity">
+      {card}
+    </Link>
+  );
 }
 
 // ─── BracketView ──────────────────────────────────────────────────────────────
@@ -176,70 +246,108 @@ export function BracketView({ matches, teamMap }: Props) {
   const positions = useMemo(() => computePositions(), []);
 
   const rounds = [
-    { label: 'R32',      matchNums: BRACKET_ROUNDS[0].matches.map((m) => m.matchNumber), ri: 0 },
-    { label: 'Octavos',  matchNums: BRACKET_ROUNDS[1].matches.map((m) => m.matchNumber), ri: 1 },
-    { label: 'Cuartos',  matchNums: BRACKET_ROUNDS[2].matches.map((m) => m.matchNumber), ri: 2 },
-    { label: 'Semis',    matchNums: BRACKET_ROUNDS[3].matches.map((m) => m.matchNumber), ri: 3 },
-    { label: 'Final',    matchNums: BRACKET_ROUNDS[4].matches.map((m) => m.matchNumber), ri: 4 },
+    { matchNums: BRACKET_ROUNDS[0].matches.map((m) => m.matchNumber), ri: 0 },
+    { matchNums: BRACKET_ROUNDS[1].matches.map((m) => m.matchNumber), ri: 1 },
+    { matchNums: BRACKET_ROUNDS[2].matches.map((m) => m.matchNumber), ri: 2 },
+    { matchNums: BRACKET_ROUNDS[3].matches.map((m) => m.matchNumber), ri: 3 },
+    { matchNums: BRACKET_ROUNDS[4].matches.map((m) => m.matchNumber), ri: 4 },
   ];
 
   const thirdMatch = matchByNum.get(THIRD_PLACE_MATCH.matchNumber);
 
   return (
     <div className="pb-6">
-      {/* Horizontally scrollable bracket */}
+      {/* Round labels row */}
+      <div
+        className="flex items-center mb-3"
+        style={{ gap: COL_GAP, paddingLeft: 4, paddingRight: 4, minWidth: 'max-content' }}
+      >
+        {rounds.map(({ ri }) => {
+          const rs = ROUND_STYLES[ri];
+          // each label is centred over its column + half of both adjacent connectors
+          const colW = ri === 0
+            ? CARD_W + CONN_W / 2
+            : ri === rounds.length - 1
+              ? CARD_W + CONN_W / 2
+              : CARD_W + CONN_W;
+          return (
+            <div key={ri} style={{ width: colW, flexShrink: 0 }} className="flex justify-center">
+              <span className={cn('text-[9px] font-bold uppercase tracking-widest px-2.5 py-1 rounded-full', rs.pill)}>
+                {rs.label}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Scrollable bracket */}
       <div className="overflow-x-auto pb-3">
         <div
           className="flex items-start"
           style={{ gap: COL_GAP, padding: '0 4px 8px', minWidth: 'max-content' }}
         >
-          {rounds.map(({ label, matchNums, ri }) => (
-            <div key={ri} className="flex flex-col flex-shrink-0">
-              {/* Round label */}
-              <p className="text-[9px] font-bold text-muted uppercase tracking-wider text-center mb-2 h-3">
-                {label}
-              </p>
-              {/* Column — fixed height, each card absolutely positioned */}
-              <div className="relative flex-shrink-0" style={{ width: CARD_W, height: TOTAL_H }}>
-                {matchNums.map((mn) => {
-                  const p = positions.get(mn);
-                  if (!p) return null;
-                  return (
-                    <div key={mn} className="absolute left-0" style={{ top: p.top }}>
-                      <MatchCard
-                        match={matchByNum.get(mn)}
-                        matchNumber={mn}
-                        roundIndex={ri}
-                        teamMap={teamMap}
-                      />
-                    </div>
-                  );
-                })}
+          {rounds.map(({ matchNums, ri }, colIdx) => {
+            return (
+              <div key={ri} className="flex items-start flex-shrink-0">
+                {/* Match column */}
+                <div className="relative flex-shrink-0" style={{ width: CARD_W, height: TOTAL_H }}>
+                  {matchNums.map((mn) => {
+                    const p = positions.get(mn);
+                    if (!p) return null;
+                    return (
+                      <div key={mn} className="absolute left-0" style={{ top: p.top }}>
+                        <MatchCard
+                          match={matchByNum.get(mn)}
+                          matchNumber={mn}
+                          roundIndex={ri}
+                          teamMap={teamMap}
+                        />
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Connector SVG to the right (except after the last column) */}
+                {colIdx < rounds.length - 1 && (
+                  <div style={{ height: TOTAL_H, paddingTop: 0 }}>
+                    <BracketConnectors
+                      roundIndex={ri + 1}
+                      positions={positions}
+                      lineColor={ROUND_STYLES[ri + 1].lineColor}
+                    />
+                  </div>
+                )}
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
 
       {/* Third-place match */}
-      <div className="mt-2 px-1">
-        <p className="text-[9px] font-bold text-muted uppercase tracking-wider mb-2">3er Puesto</p>
+      <div className="mt-3 px-1">
+        <div className="flex items-center gap-2 mb-2">
+          <span className="text-[9px] font-bold text-orange-300/70 uppercase tracking-widest px-2.5 py-1 rounded-full bg-orange-900/30">
+            3er Puesto
+          </span>
+        </div>
         <MatchCard
           match={thirdMatch}
           matchNumber={THIRD_PLACE_MATCH.matchNumber}
-          roundIndex={5}
+          roundIndex={3}
           teamMap={teamMap}
         />
       </div>
 
       {/* Legend */}
-      <div className="mt-3 px-1 flex items-center gap-4 text-[10px] text-muted">
-        <span className="flex items-center gap-1.5">
-          <span className="w-2 h-2 rounded-sm bg-accent/40 border border-accent/60" />
-          Ganador
-        </span>
-        <span className="flex items-center gap-1.5">
-          <span className="w-2 h-2 rounded-sm bg-red-500/40 border border-red-500/60" />
+      <div className="mt-4 px-1 flex items-center gap-5 flex-wrap">
+        {ROUND_STYLES.map((rs) => (
+          <span key={rs.label} className="flex items-center gap-1.5 text-[9px] text-white/40">
+            <span className="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ background: rs.accent + '80', border: `1px solid ${rs.accent}60` }} />
+            {rs.label}
+          </span>
+        ))}
+        <span className="flex items-center gap-1.5 text-[9px] text-white/40">
+          <span className="w-2.5 h-2.5 rounded-sm bg-red-500/40 border border-red-500/60 flex-shrink-0" />
           En vivo
         </span>
       </div>
