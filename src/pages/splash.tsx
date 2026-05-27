@@ -2,14 +2,19 @@ import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Logo } from '@/shared/components/logo';
+import { useAuthStore } from '@/shared/stores/auth-store';
 
 export function SplashPage() {
   const navigate = useNavigate();
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
 
   useEffect(() => {
-    const t = setTimeout(() => navigate('/login', { replace: true }), 1800);
+    // If the user already has a valid session (token persisted in localStorage),
+    // skip the login page entirely and go straight to the app.
+    const destination = isAuthenticated ? '/home' : '/login';
+    const t = setTimeout(() => navigate(destination, { replace: true }), 1200);
     return () => clearTimeout(t);
-  }, [navigate]);
+  }, [navigate, isAuthenticated]);
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center gap-6 bg-bg text-text p-6">
