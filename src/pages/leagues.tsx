@@ -94,9 +94,17 @@ export function LeaguesPage() {
                 to={`/leagues/${league.id}`}
                 className="flex items-center gap-3 p-4 rounded-lg bg-card border border-border hover:border-accent-border transition-colors"
               >
-                <div className="w-10 h-10 rounded-md bg-accent-soft flex items-center justify-center flex-shrink-0">
-                  <Trophy size={18} className="text-accent" />
-                </div>
+                {league.imageUrl ? (
+                  <img
+                    src={league.imageUrl}
+                    alt={league.name}
+                    className="w-10 h-10 rounded-md object-cover flex-shrink-0 bg-elevated"
+                  />
+                ) : (
+                  <div className="w-10 h-10 rounded-md bg-accent-soft flex items-center justify-center flex-shrink-0">
+                    <Trophy size={18} className="text-accent" />
+                  </div>
+                )}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
                     <p className="text-base-s font-semibold text-text truncate">{league.name}</p>
@@ -132,9 +140,17 @@ export function LeaguesPage() {
           {!searchLoading && searchResults.map((league, i) => (
             <motion.div key={league.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.06 }}>
               <div className="flex items-center gap-3 p-4 rounded-lg bg-card border border-border">
-                <div className="w-10 h-10 rounded-md bg-elevated flex items-center justify-center flex-shrink-0">
-                  <Globe size={18} className="text-muted" />
-                </div>
+                {league.imageUrl ? (
+                  <img
+                    src={league.imageUrl}
+                    alt={league.name}
+                    className="w-10 h-10 rounded-md object-cover flex-shrink-0 bg-elevated"
+                  />
+                ) : (
+                  <div className="w-10 h-10 rounded-md bg-elevated flex items-center justify-center flex-shrink-0">
+                    <Globe size={18} className="text-muted" />
+                  </div>
+                )}
                 <div className="flex-1 min-w-0">
                   <p className="text-base-s font-semibold text-text truncate">{league.name}</p>
                   <p className="text-sm-s text-muted mt-0.5 font-mono">{league.code}</p>

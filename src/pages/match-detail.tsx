@@ -122,9 +122,7 @@ function LeaguePredictionsSection({
   const { data, isLoading, isError } = useLeagueMatchPredictions(matchId, leagueId);
 
   return (
-    <div className="mx-4 mt-4 p-4 rounded-lg bg-card border border-border">
-      <p className="text-sm-s font-semibold text-text mb-3">Pronósticos de la liga</p>
-
+    <div className="p-4 rounded-lg bg-card border border-border">
       {isLoading && (
         <p className="text-xs-s text-muted text-center py-2">Cargando pronósticos...</p>
       )}
@@ -483,27 +481,37 @@ export function MatchDetailPage() {
         </div>
       )}
 
-      {/* League picker — only to view league-mates' predictions */}
+      {/* League picker + league-mates' predictions — surface this prominently
+          right after the save area so members know where to find each other's
+          predictions and how the visibility setting affects them. */}
       {hasLeague && (
         <div className="mx-4 mt-4">
-          <p className="text-xs-s text-muted mb-2">Ver pronósticos de tu liga</p>
-          <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
-            {myLeagueList.map((league) => (
-              <button
-                key={league.id}
-                type="button"
-                onClick={() => setSelectedLeagueId(selectedLeagueId === league.id ? null : league.id)}
-                className={cn(
-                  'flex-shrink-0 px-3 py-1.5 rounded-full text-xs-s font-semibold border transition-colors',
-                  selectedLeagueId === league.id
-                    ? 'bg-accent text-accent-on border-accent'
-                    : 'bg-elevated border-border text-text hover:border-accent-border'
-                )}
-              >
-                {league.name}
-              </button>
-            ))}
-          </div>
+          <p className="text-xs-s text-muted mb-2">Pronósticos de la liga</p>
+          {myLeagueList.length > 1 && (
+            <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar mb-2">
+              {myLeagueList.map((league) => (
+                <button
+                  key={league.id}
+                  type="button"
+                  onClick={() => setSelectedLeagueId(league.id)}
+                  className={cn(
+                    'flex-shrink-0 px-3 py-1.5 rounded-full text-xs-s font-semibold border transition-colors',
+                    selectedLeagueId === league.id
+                      ? 'bg-accent text-accent-on border-accent'
+                      : 'bg-elevated border-border text-text hover:border-accent-border'
+                  )}
+                >
+                  {league.name}
+                </button>
+              ))}
+            </div>
+          )}
+          {selectedLeagueId && (
+            <LeaguePredictionsSection
+              matchId={match.id}
+              leagueId={selectedLeagueId}
+            />
+          )}
         </div>
       )}
 
@@ -524,13 +532,6 @@ export function MatchDetailPage() {
           ))}
         </div>
       </div>
-
-      {selectedLeagueId && (
-        <LeaguePredictionsSection
-          matchId={match.id}
-          leagueId={selectedLeagueId}
-        />
-      )}
 
       <div className="h-6" />
     </div>
