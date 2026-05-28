@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { z } from 'zod';
-import { and, eq, sql } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { db } from '../../../db/index.js';
 import { predictions, matches, leagueMembers } from '../../../db/schema/index.js';
 import { AppError, NotFoundError } from '../../../lib/errors.js';
@@ -30,11 +30,10 @@ export async function upsertPredictionHandler(req: Request, res: Response) {
   }
 
   // 2. Decide target leagues.
-  //    - If leagueId provided: verify membership and target only that league.
-  //    - If omitted:
-  //        - First-ever prediction for this match → propagate to all the
-  //          user's leagues (acts like the old "global" prediction).
-  //        - Otherwise → reject; the client must specify which league to edit.
+  //    - If leagueId is provided → verify membership and target only that league.
+  //    - If omitted → apply to every league the user belongs to. This covers
+  //      both the first-ever prediction (propagation) and bulk-update intent
+  //      (the user wants the same score across all their leagues).
   const memberships = await db
     .select({ leagueId: leagueMembers.leagueId })
     .from(leagueMembers)
@@ -56,19 +55,6 @@ export async function upsertPredictionHandler(req: Request, res: Response) {
     }
     targetLeagueIds = [leagueId];
   } else {
-    const existing = await db
-      .select({ id: predictions.id })
-      .from(predictions)
-      .where(and(eq(predictions.userId, userId), eq(predictions.matchId, matchId)))
-      .limit(1)
-      .get();
-    if (existing) {
-      throw new AppError(
-        'LEAGUE_REQUIRED',
-        'leagueId is required to edit a prediction that already exists',
-        400,
-      );
-    }
     targetLeagueIds = userLeagueIds;
   }
 
