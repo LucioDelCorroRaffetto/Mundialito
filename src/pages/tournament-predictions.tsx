@@ -9,6 +9,7 @@ import { usePlayers } from '@/shared/hooks/use-players';
 import {
   useTournamentPrediction,
   useUpsertTournamentPrediction,
+  useMyTournamentPredictions,
 } from '@/shared/hooks/use-tournament-predictions';
 import { useMyLeagues } from '@/shared/hooks/use-leagues';
 import { SkeletonList } from '@/shared/components/skeleton';
@@ -352,7 +353,10 @@ export function TournamentPredictionsPage() {
   const players = playersData ?? [];
 
   const tournamentQuery = useTournamentPrediction(selectedLeagueId ?? undefined);
+  const myTournamentPredictions = useMyTournamentPredictions();
   const upsertMutation = useUpsertTournamentPrediction();
+  const hasAnyTournamentPrediction =
+    (myTournamentPredictions.data?.meta.total ?? 0) > 0;
 
   // Reset + repopulate picks when league changes
   useEffect(() => {
@@ -380,16 +384,24 @@ export function TournamentPredictionsPage() {
 
   const handleSave = async () => {
     if (!selectedLeagueId) return;
+    // First time saving across any league → propagate to all leagues (omit
+    // leagueId). Once at least one prediction exists, scope the save to the
+    // selected league so the user can override per league.
+    const propagateToAllLeagues = !hasAnyTournamentPrediction;
     try {
       await upsertMutation.mutateAsync({
-        leagueId: selectedLeagueId,
+        ...(propagateToAllLeagues ? {} : { leagueId: selectedLeagueId }),
         championTeamId: picks.championTeamId,
         runnerUpTeamId: picks.runnerUpTeamId,
         topScorerPlayerId: picks.topScorerPlayerId,
         revelationTeamId: picks.revelationTeamId,
         surpriseEliminatedTeamId: picks.surpriseEliminatedTeamId,
       });
-      toast.success('¡Pronósticos guardados!');
+      toast.success(
+        propagateToAllLeagues && myLeagues.length > 1
+          ? '¡Pronósticos guardados en todas tus ligas!'
+          : '¡Pronósticos guardados!',
+      );
     } catch {
       toast.error('Error al guardar los pronósticos');
     }
@@ -603,6 +615,17 @@ export function TournamentPredictionsPage() {
           ))}
         </div>
       </div>
+
+      {/* First-time hint */}
+      {!hasAnyTournamentPrediction && myLeagues.length > 1 && (
+        <div className="mx-4 mt-4 p-3 rounded-lg bg-accent-soft border border-accent-border flex items-start gap-2">
+          <Trophy size={14} className="text-accent flex-shrink-0 mt-0.5" />
+          <p className="text-xs-s text-text leading-snug">
+            Es tu primera vez, así que al guardar se aplica a <strong>todas tus ligas</strong>.
+            Después podés cambiarlos por liga si querés.
+          </p>
+        </div>
+      )}
 
       {/* Save button */}
       <div className="px-4 mt-4">
