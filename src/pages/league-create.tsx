@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { ArrowLeft, Globe, Lock } from 'lucide-react';
+import { ArrowLeft, Globe, Lock, Eye, EyeOff } from 'lucide-react';
 import { Button } from '@/shared/components/ui/button';
 import { Input } from '@/shared/components/ui/input';
 import { LeagueBannerPicker } from '@/shared/components/ui/image-picker';
@@ -21,6 +21,8 @@ export function LeagueCreatePage() {
   const navigate = useNavigate();
   const [isPublic, setIsPublic] = useState(false);
   const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [predictionsVisibility, setPredictionsVisibility] =
+    useState<'after_kickoff' | 'always'>('after_kickoff');
   const createLeague = useCreateLeague();
 
   const { register, handleSubmit, formState: { errors } } = useForm<FormValues>({
@@ -29,7 +31,12 @@ export function LeagueCreatePage() {
 
   const onSubmit = async (data: FormValues) => {
     try {
-      const league = await createLeague.mutateAsync({ name: data.name, isPublic, imageUrl });
+      const league = await createLeague.mutateAsync({
+        name: data.name,
+        isPublic,
+        imageUrl,
+        predictionsVisibility,
+      });
       toast.success('¡Liga creada!');
       navigate(`/leagues/${league.id}`, { replace: true });
     } catch {
@@ -79,6 +86,42 @@ export function LeagueCreatePage() {
               >
                 <Icon size={20} />
                 <span className="text-sm font-semibold">{label}</span>
+                <span className="text-xs text-center leading-tight">{desc}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-2">
+          <p className="text-sm font-semibold text-text">Pronósticos visibles</p>
+          <div className="flex gap-3">
+            {([
+              {
+                value: 'after_kickoff' as const,
+                label: 'Al inicio del partido',
+                Icon: EyeOff,
+                desc: 'Se ocultan hasta el kickoff',
+              },
+              {
+                value: 'always' as const,
+                label: 'Siempre',
+                Icon: Eye,
+                desc: 'Todos ven todo, en cualquier momento',
+              },
+            ]).map(({ value, label, Icon, desc }) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => setPredictionsVisibility(value)}
+                className={cn(
+                  'flex-1 flex flex-col items-center gap-2 p-4 rounded-lg border transition-colors',
+                  predictionsVisibility === value
+                    ? 'bg-accent-soft border-accent text-accent'
+                    : 'bg-card border-border text-muted',
+                )}
+              >
+                <Icon size={20} />
+                <span className="text-sm font-semibold text-center">{label}</span>
                 <span className="text-xs text-center leading-tight">{desc}</span>
               </button>
             ))}

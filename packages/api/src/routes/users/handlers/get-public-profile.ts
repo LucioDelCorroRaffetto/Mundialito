@@ -10,6 +10,7 @@ import {
   leagueMembers,
   fantasyTeams,
 } from '../../../db/schema/index.js';
+import { dedupeBestPerMatch } from '../../../lib/prediction-aggregates.js';
 
 // ─── Admin helpers ───────────────────────────────────────────────────────────
 function getAdminIds(): number[] {
@@ -46,8 +47,9 @@ export async function getPublicProfileHandler(req: Request, res: Response) {
   }
 
   // Stats — same logic as my-stats.ts but for any userId
-  const predRows = await db
+  const predRowsRaw = await db
     .select({
+      matchId: predictions.matchId,
       predHomeScore: predictions.homeScore,
       predAwayScore: predictions.awayScore,
       points: predictions.points,
@@ -58,6 +60,9 @@ export async function getPublicProfileHandler(req: Request, res: Response) {
     .innerJoin(matches, eq(predictions.matchId, matches.id))
     .where(and(eq(predictions.userId, userId), eq(matches.status, 'finished')));
 
+  // Dedupe: a user may have one prediction per league for the same match;
+  // keep the best one so user-level stats don't double-count.
+  const predRows = dedupeBestPerMatch(predRowsRaw);
   const totalPredictions = predRows.length;
   let exactScores = 0;
   let correctResults = 0;

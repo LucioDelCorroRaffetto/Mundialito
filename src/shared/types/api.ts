@@ -52,6 +52,7 @@ export interface League {
   adminId: number;
   stakesMeme: string | null;
   imageUrl: string | null;
+  predictionsVisibility: 'after_kickoff' | 'always';
   createdAt: string;
   // Enriched fields returned by /leagues/mine
   memberCount?: number;

@@ -202,7 +202,12 @@ export function MatchDetailPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [myLeagues]);
 
-  const { data: existingPrediction } = useMyPredictionForMatch(matchId);
+  // Scope the user's prediction lookup to the league they're currently viewing,
+  // so changing leagues swaps the on-screen score to that league's prediction.
+  const { data: existingPrediction } = useMyPredictionForMatch(matchId, selectedLeagueId);
+  // We also need to know whether ANY prediction exists across leagues — if not,
+  // saving without a leagueId propagates to all of them.
+  const { data: anyPrediction } = useMyPredictionForMatch(matchId);
 
   const [homeScore, setHomeScore] = useState(0);
   const [awayScore, setAwayScore] = useState(0);
@@ -213,14 +218,19 @@ export function MatchDetailPage() {
   const upsertMutation = useUpsertPrediction();
   const { vibrate } = useHaptic();
 
-  // Initialize scores when existing prediction loads
+  // Initialize scores when prediction loads. Prefer the league-scoped one when
+  // a league is selected; fall back to any prediction so we still show the
+  // user's last value when they haven't picked a league yet.
   useEffect(() => {
-    if (existingPrediction) {
-      setHomeScore(existingPrediction.homeScore ?? 0);
-      setAwayScore(existingPrediction.awayScore ?? 0);
+    const source = existingPrediction ?? anyPrediction;
+    if (source) {
+      setHomeScore(source.homeScore ?? 0);
+      setAwayScore(source.awayScore ?? 0);
       setSaved(true);
+    } else {
+      setSaved(false);
     }
-  }, [existingPrediction]);
+  }, [existingPrediction, anyPrediction]);
 
   const isLoading = matchLoading || teamsLoading;
 
@@ -289,7 +299,16 @@ export function MatchDetailPage() {
   const handleSave = async () => {
     setSaveError(null);
     try {
-      await upsertMutation.mutateAsync({ matchId: match.id, homeScore, awayScore });
+      // First-time prediction for this match → omit leagueId so the API
+      // propagates the result to every league the user belongs to.
+      // Editing an existing prediction → scope it to the selected league.
+      const isFirstTime = !anyPrediction;
+      await upsertMutation.mutateAsync({
+        matchId: match.id,
+        homeScore,
+        awayScore,
+        ...(isFirstTime ? {} : selectedLeagueId != null ? { leagueId: selectedLeagueId } : {}),
+      });
       setSaved(true);
       vibrate(20);
     } catch (e: unknown) {

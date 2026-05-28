@@ -11,11 +11,13 @@ export const createLeagueSchema = z.object({
   isPublic: z.boolean().default(false),
   stakesMeme: z.string().max(120).optional().nullable(),
   imageUrl: z.string().max(400_000).optional().nullable(),
+  predictionsVisibility: z.enum(['after_kickoff', 'always']).optional(),
 });
 
 export async function createLeagueHandler(req: Request, res: Response) {
   const userId = req.user!.id;
-  const { name, isPublic, stakesMeme, imageUrl } = req.body as z.infer<typeof createLeagueSchema>;
+  const { name, isPublic, stakesMeme, imageUrl, predictionsVisibility } =
+    req.body as z.infer<typeof createLeagueSchema>;
 
   // Generar código único (reintentar si colisiona)
   let code: string;
@@ -34,6 +36,7 @@ export async function createLeagueHandler(req: Request, res: Response) {
     adminId: userId,
     stakesMeme: stakesMeme ?? null,
     imageUrl: imageUrl ?? null,
+    ...(predictionsVisibility ? { predictionsVisibility } : {}),
   }).returning();
 
   // El admin se une automáticamente

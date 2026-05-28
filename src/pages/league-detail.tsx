@@ -197,11 +197,50 @@ export function LeagueDetailPage() {
             </div>
           )}
 
+          {isAdmin && (
+            <div className="p-4 rounded-lg bg-card border border-border flex flex-col gap-3">
+              <p className="text-sm-s font-semibold text-text">Pronósticos de los miembros</p>
+              <div className="flex gap-2">
+                {([
+                  { value: 'after_kickoff' as const, label: 'Al inicio del partido' },
+                  { value: 'always' as const, label: 'Siempre visibles' },
+                ]).map(({ value, label }) => (
+                  <button
+                    key={value}
+                    type="button"
+                    disabled={updateLeague.isPending}
+                    onClick={async () => {
+                      if (league.predictionsVisibility === value) return;
+                      try {
+                        await updateLeague.mutateAsync({ id: leagueId, predictionsVisibility: value });
+                        toast.success('Visibilidad actualizada');
+                      } catch {
+                        toast.error('No se pudo actualizar');
+                      }
+                    }}
+                    className={cn(
+                      'flex-1 py-2 rounded-md text-xs-s font-semibold border transition-colors',
+                      league.predictionsVisibility === value
+                        ? 'bg-accent text-accent-on border-accent'
+                        : 'bg-elevated text-text border-border',
+                    )}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <p className="text-xs-s text-muted">
+                Determina cuándo cada miembro puede ver los pronósticos de los demás en esta liga.
+              </p>
+            </div>
+          )}
+
           <div className="p-4 rounded-lg bg-card border border-border flex flex-col gap-3">
             {[
               ['Nombre', league.name],
               ['Código', league.code],
               ['Visibilidad', league.isPublic ? 'Pública' : 'Privada'],
+              ['Pronósticos', league.predictionsVisibility === 'always' ? 'Visibles siempre' : 'Al inicio del partido'],
             ].map(([label, value]) => (
               <div key={label} className="flex items-center justify-between">
                 <span className="text-sm-s text-muted">{label}</span>

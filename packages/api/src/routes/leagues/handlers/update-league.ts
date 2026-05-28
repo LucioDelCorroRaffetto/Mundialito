@@ -10,6 +10,7 @@ export const updateLeagueSchema = z.object({
   isPublic: z.boolean().optional(),
   stakesMeme: z.string().max(120).nullable().optional(),
   imageUrl: z.string().max(400_000).nullable().optional(),
+  predictionsVisibility: z.enum(['after_kickoff', 'always']).optional(),
 });
 
 export async function updateLeagueHandler(req: Request, res: Response) {

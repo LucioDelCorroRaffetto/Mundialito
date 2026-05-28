@@ -18,40 +18,46 @@ export async function globalLeaderboardHandler(req: Request, res: Response) {
   // Exclude admin/bot accounts from the leaderboard
   const hiddenIds = process.env.ADMIN_USER_IDS?.split(',').map(Number).filter(Boolean) ?? [];
 
-  // Aggregate total points per user across ALL leagues
-  // predictionCount = number of predictions with non-null points (i.e. scored matches)
-  const baseQuery = db
+  // Per-user totals: predictions are stored per (user, match, league), so for a
+  // user-level leaderboard we collapse to one row per (user, match) by taking
+  // the best score across the user's leagues. This avoids counting the same
+  // match multiple times when a user belongs to several leagues.
+  const bestPerMatch = db
     .select({
-      userId: users.id,
-      username: users.username,
-      avatarUrl: users.avatarUrl,
-      totalPoints: sql<number>`coalesce(sum(${predictions.points}), 0)`,
-      predictionCount: sql<number>`count(${predictions.id})`,
+      userId: predictions.userId,
+      matchId: predictions.matchId,
+      bestPoints: sql<number>`max(${predictions.points})`.as('best_points'),
     })
-    .from(users)
-    .leftJoin(predictions, eq(predictions.userId, users.id))
-    .groupBy(users.id, users.username, users.avatarUrl)
-    .orderBy(desc(sql`coalesce(sum(${predictions.points}), 0)`))
-    .limit(limit)
-    .offset(offset);
+    .from(predictions)
+    .groupBy(predictions.userId, predictions.matchId)
+    .as('best_per_match');
+
+  const baseSelect = {
+    userId: users.id,
+    username: users.username,
+    avatarUrl: users.avatarUrl,
+    totalPoints: sql<number>`coalesce(sum(${bestPerMatch.bestPoints}), 0)`,
+    predictionCount: sql<number>`count(${bestPerMatch.matchId})`,
+  };
 
   const rows = hiddenIds.length > 0
     ? await db
-        .select({
-          userId: users.id,
-          username: users.username,
-          avatarUrl: users.avatarUrl,
-          totalPoints: sql<number>`coalesce(sum(${predictions.points}), 0)`,
-          predictionCount: sql<number>`count(${predictions.id})`,
-        })
+        .select(baseSelect)
         .from(users)
-        .leftJoin(predictions, eq(predictions.userId, users.id))
+        .leftJoin(bestPerMatch, eq(bestPerMatch.userId, users.id))
         .where(notInArray(users.id, hiddenIds))
         .groupBy(users.id, users.username, users.avatarUrl)
-        .orderBy(desc(sql`coalesce(sum(${predictions.points}), 0)`))
+        .orderBy(desc(sql`coalesce(sum(${bestPerMatch.bestPoints}), 0)`))
         .limit(limit)
         .offset(offset)
-    : await baseQuery;
+    : await db
+        .select(baseSelect)
+        .from(users)
+        .leftJoin(bestPerMatch, eq(bestPerMatch.userId, users.id))
+        .groupBy(users.id, users.username, users.avatarUrl)
+        .orderBy(desc(sql`coalesce(sum(${bestPerMatch.bestPoints}), 0)`))
+        .limit(limit)
+        .offset(offset);
 
   // Count distinct leagues per user
   const leagueCounts = await db
@@ -81,7 +87,6 @@ export async function globalLeaderboardHandler(req: Request, res: Response) {
       .innerJoin(achievements, eq(userAchievements.achievementSlug, achievements.slug))
       .where(inArray(userAchievements.userId, userIds));
 
-    // Pick the top badge per user (highest tier priority; ties broken by slug alpha order)
     for (const row of earnedRows) {
       const current = badgesByUser.get(row.userId);
       const rowPriority = TIER_PRIORITY[row.tier] ?? 0;
@@ -92,7 +97,6 @@ export async function globalLeaderboardHandler(req: Request, res: Response) {
     }
   }
 
-  // Fetch achievement bonus points per user
   const achievementBonuses = await db
     .select({
       userId: userAchievements.userId,
@@ -103,7 +107,6 @@ export async function globalLeaderboardHandler(req: Request, res: Response) {
     .groupBy(userAchievements.userId);
   const bonusByUser = new Map(achievementBonuses.map((r) => [r.userId, Number(r.totalBonus)]));
 
-  // Build enriched rows with total = pred + achievement bonus, then sort descending
   const enriched = rows.map((row) => {
     const predPts = Number(row.totalPoints);
     const bonus = bonusByUser.get(row.userId) ?? 0;
@@ -119,10 +122,8 @@ export async function globalLeaderboardHandler(req: Request, res: Response) {
     };
   });
 
-  // Sort by total points desc (SQL sorted by pred_pts only; bonuses may change order)
   enriched.sort((a, b) => b.totalPoints - a.totalPoints);
 
-  // Assign ranks (shared rank for ties)
   let rank = 0;
   let lastPoints = -1;
   const data = enriched.map((row, idx) => {

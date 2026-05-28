@@ -10,6 +10,11 @@ export const leagues = sqliteTable('leagues', {
   adminId: integer('admin_id').notNull().references(() => users.id),
   stakesMeme: text('stakes_meme'),            // 'El último paga las birras'
   imageUrl: text('image_url'),               // optional league banner/logo (base64 or URL)
+  // 'after_kickoff' (default) hides member predictions until match is live/finished.
+  // 'always' lets all members see each other's predictions any time.
+  predictionsVisibility: text('predictions_visibility', { enum: ['after_kickoff', 'always'] })
+    .notNull()
+    .default('after_kickoff'),
   createdAt: text('created_at').notNull().default(sql`(datetime('now'))`),
 });
 

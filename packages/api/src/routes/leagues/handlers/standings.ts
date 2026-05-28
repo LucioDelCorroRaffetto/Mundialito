@@ -35,7 +35,7 @@ export async function standingsHandler(req: Request, res: Response) {
     return res.json({ data: [], meta: { total: 0 } });
   }
 
-  // Global predictions: get all predictions from league members (not filtered by leagueId on predictions)
+  // Per-league standings: only count predictions made within THIS league.
   const preds = await db
     .select({
       userId: predictions.userId,
@@ -48,7 +48,7 @@ export async function standingsHandler(req: Request, res: Response) {
     })
     .from(predictions)
     .innerJoin(matches, eq(predictions.matchId, matches.id))
-    .where(inArray(predictions.userId, memberIds));
+    .where(and(eq(predictions.leagueId, id), inArray(predictions.userId, memberIds)));
 
   // Sum points per user
   const pointsByUser = new Map<number, { total: number; matches: number }>();

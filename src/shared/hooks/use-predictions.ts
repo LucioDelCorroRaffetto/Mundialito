@@ -16,28 +16,39 @@ export interface LeagueMemberPrediction {
 
 export interface LeagueMatchPredictionsResponse {
   data: LeagueMemberPrediction[];
-  meta: { total: number; matchStatus: string; revealed: boolean };
+  meta: {
+    total: number;
+    matchStatus: string;
+    revealed: boolean;
+    visibility?: 'after_kickoff' | 'always';
+  };
 }
 
-/** All my predictions (global — one per match) */
-export function useMyPredictions() {
+/** All my predictions, optionally scoped to a league. */
+export function useMyPredictions(leagueId?: number | null) {
   return useQuery({
-    queryKey: ['predictions', 'mine'],
+    queryKey: ['predictions', 'mine', leagueId ?? null],
     queryFn: async () => {
-      const { data } = await apiClient.get<ApiList<Prediction>>('/predictions/mine');
+      const { data } = await apiClient.get<ApiList<Prediction>>('/predictions/mine', {
+        params: leagueId != null ? { leagueId } : undefined,
+      });
       return data;
     },
   });
 }
 
-/** My prediction for a specific match (global — no leagueId needed).
+/** My prediction for a specific match, scoped to a league when provided.
  *  Returns null (not an error) when no prediction exists yet. */
-export function useMyPredictionForMatch(matchId: number | undefined) {
+export function useMyPredictionForMatch(
+  matchId: number | undefined,
+  leagueId?: number | null,
+) {
   return useQuery({
-    queryKey: ['prediction', matchId],
+    queryKey: ['prediction', matchId, leagueId ?? null],
     queryFn: async (): Promise<Prediction | null> => {
       const { data } = await apiClient.get<{ data: Prediction | null }>(
         `/predictions/match/${matchId}/mine`,
+        { params: leagueId != null ? { leagueId } : undefined },
       );
       return data.data;
     },
@@ -49,6 +60,10 @@ export interface UpsertPredictionInput {
   matchId: number;
   homeScore: number;
   awayScore: number;
+  /** Optional. When omitted on the *first* prediction for a match, the API
+   *  propagates the result to every league the user belongs to. Required on
+   *  subsequent edits to disambiguate which league's prediction to update. */
+  leagueId?: number;
 }
 
 export function useUpsertPrediction() {
@@ -61,6 +76,9 @@ export function useUpsertPrediction() {
     onSuccess: (data) => {
       qc.invalidateQueries({ queryKey: ['predictions', 'mine'] });
       qc.invalidateQueries({ queryKey: ['prediction', data.matchId] });
+      qc.invalidateQueries({ queryKey: ['predictions', 'league-match', data.matchId] });
+      qc.invalidateQueries({ queryKey: ['leagues', 'mine'] });
+      qc.invalidateQueries({ queryKey: ['leagues', 'standings'] });
     },
   });
 }

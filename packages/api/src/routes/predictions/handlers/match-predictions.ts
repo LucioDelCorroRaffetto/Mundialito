@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
-import { and, eq, inArray } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { db } from '../../../db/index.js';
-import { predictions, leagueMembers, users, matches } from '../../../db/schema/index.js';
+import { predictions, leagueMembers, leagues, users, matches } from '../../../db/schema/index.js';
 import { NotFoundError, AppError } from '../../../lib/errors.js';
 
 export async function matchPredictionsHandler(req: Request, res: Response) {
@@ -13,7 +13,7 @@ export async function matchPredictionsHandler(req: Request, res: Response) {
     throw new AppError('VALIDATION', 'matchId and leagueId are required', 400);
   }
 
-  // Verify requester is a member of the league
+  // Verify requester is a member of the league.
   const membership = await db
     .select()
     .from(leagueMembers)
@@ -24,26 +24,17 @@ export async function matchPredictionsHandler(req: Request, res: Response) {
     throw new AppError('FORBIDDEN', 'Not a member of this league', 403);
   }
 
-  // Fetch match to determine reveal status
+  const league = await db.select().from(leagues).where(eq(leagues.id, leagueId)).get();
+  if (!league) throw new NotFoundError('League');
+
   const match = await db.select().from(matches).where(eq(matches.id, matchId)).get();
   if (!match) throw new NotFoundError('Match');
 
-  const isRevealed = match.status === 'live' || match.status === 'finished';
+  const matchStarted = match.status === 'live' || match.status === 'finished';
+  const isRevealed =
+    league.predictionsVisibility === 'always' ? true : matchStarted;
 
-  // Get all user IDs in this league
-  const memberRows = await db
-    .select({ userId: leagueMembers.userId })
-    .from(leagueMembers)
-    .where(eq(leagueMembers.leagueId, leagueId));
-
-  const memberIds = memberRows.map((r) => r.userId);
-
-  if (memberIds.length === 0) {
-    return res.json({ data: [], meta: { total: 0, matchStatus: match.status, revealed: isRevealed } });
-  }
-
-  // Fetch predictions for this match from all league members
-  // Global predictions: one per user per match, counted for all leagues
+  // Fetch predictions for this match scoped to this league.
   const rows = await db
     .select({
       predictionId: predictions.id,
@@ -58,20 +49,23 @@ export async function matchPredictionsHandler(req: Request, res: Response) {
     })
     .from(predictions)
     .innerJoin(users, eq(predictions.userId, users.id))
-    .where(and(eq(predictions.matchId, matchId), inArray(predictions.userId, memberIds)));
+    .where(and(eq(predictions.matchId, matchId), eq(predictions.leagueId, leagueId)));
 
-  const data = rows.map((row) => ({
-    predictionId: row.predictionId,
-    userId: row.userId,
-    username: row.username,
-    avatarUrl: row.avatarUrl,
-    // Hide scores until match starts — reveal once live or finished
-    homeScore: isRevealed ? row.homeScore : null,
-    awayScore: isRevealed ? row.awayScore : null,
-    points: isRevealed ? row.points : null,
-    createdAt: row.createdAt,
-    updatedAt: row.updatedAt,
-  }));
+  const data = rows.map((row) => {
+    // Always reveal the requester's own prediction, even before kickoff.
+    const reveal = isRevealed || row.userId === userId;
+    return {
+      predictionId: row.predictionId,
+      userId: row.userId,
+      username: row.username,
+      avatarUrl: row.avatarUrl,
+      homeScore: reveal ? row.homeScore : null,
+      awayScore: reveal ? row.awayScore : null,
+      points: reveal ? row.points : null,
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt,
+    };
+  });
 
   return res.json({
     data,
@@ -79,6 +73,7 @@ export async function matchPredictionsHandler(req: Request, res: Response) {
       total: data.length,
       matchStatus: match.status,
       revealed: isRevealed,
+      visibility: league.predictionsVisibility,
     },
   });
 }

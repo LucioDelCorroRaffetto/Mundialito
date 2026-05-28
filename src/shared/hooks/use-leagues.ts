@@ -88,6 +88,7 @@ export function useCreateLeague() {
       isPublic: boolean;
       stakesMeme?: string | null;
       imageUrl?: string | null;
+      predictionsVisibility?: 'after_kickoff' | 'always';
     }) => {
       const { data } = await apiClient.post<League>('/leagues', input);
       return data;
@@ -107,6 +108,7 @@ export function useUpdateLeague() {
       isPublic?: boolean;
       stakesMeme?: string | null;
       imageUrl?: string | null;
+      predictionsVisibility?: 'after_kickoff' | 'always';
     }) => {
       const { id, ...body } = input;
       const { data } = await apiClient.patch<League>(`/leagues/${id}`, body);

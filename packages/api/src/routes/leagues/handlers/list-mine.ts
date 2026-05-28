@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import { db } from '../../../db/index.js';
 import { leagues, leagueMembers, predictions } from '../../../db/schema/index.js';
-import { eq, sql } from 'drizzle-orm';
+import { and, eq, inArray, sql } from 'drizzle-orm';
 
 export async function listMineHandler(req: Request, res: Response) {
   const userId = req.user!.id;
@@ -37,25 +37,33 @@ export async function listMineHandler(req: Request, res: Response) {
     memberCounts.map((r) => [r.leagueId, r.count])
   );
 
-  // Global predictions: total points are the same across all leagues
-  // (one prediction per match counts for every league the user is in)
-  const [globalPoints] = await db
+  // Per-league points: aggregate the user's predictions scoped by league.
+  const perLeague = await db
     .select({
+      leagueId: predictions.leagueId,
       totalPoints: sql<number>`coalesce(sum(${predictions.points}), 0)`.as('total_points'),
       matchesPlayed: sql<number>`count(${predictions.points})`.as('matches_played'),
     })
     .from(predictions)
-    .where(eq(predictions.userId, userId));
+    .where(and(eq(predictions.userId, userId), inArray(predictions.leagueId, leagueIds)))
+    .groupBy(predictions.leagueId);
 
-  const myTotal = globalPoints?.totalPoints ?? 0;
-  const myMatchesPlayed = globalPoints?.matchesPlayed ?? 0;
+  const pointsByLeague = new Map<number, { total: number; played: number }>(
+    perLeague.map((r) => [
+      r.leagueId,
+      { total: Number(r.totalPoints), played: Number(r.matchesPlayed) },
+    ]),
+  );
 
-  const data = rows.map((r) => ({
-    ...r.league,
-    memberCount: memberCountMap.get(r.league.id) ?? 1,
-    myPoints: myTotal,
-    myMatchesPlayed,
-  }));
+  const data = rows.map((r) => {
+    const stats = pointsByLeague.get(r.league.id) ?? { total: 0, played: 0 };
+    return {
+      ...r.league,
+      memberCount: memberCountMap.get(r.league.id) ?? 1,
+      myPoints: stats.total,
+      myMatchesPlayed: stats.played,
+    };
+  });
 
   return res.json({ data, meta: { total: data.length } });
 }
