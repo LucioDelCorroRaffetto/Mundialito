@@ -5,6 +5,8 @@ import {
   matches,
   leagueMembers,
   leagues,
+  tournamentPredictions,
+  playerMatchStats,
 } from '../db/schema/index.js';
 import { eq, and, count, inArray, sql } from 'drizzle-orm';
 
@@ -75,6 +77,12 @@ export async function checkAchievements(
         await evaluateWeekendPerfect(userId, triggering, history, awarded);
         await evaluateMarathon(userId, history, awarded);
       }
+
+      // Tournament-pick logros. Cheap to evaluate on every score; the
+      // queries are bounded to ≤8 R16 matches / 1 final / N players.
+      await evaluatePerfectKnockout(userId, event.matchId, awarded);
+      await evaluateProphet(userId, event.matchId, awarded);
+      await evaluateTopScorerProphet(userId, event.matchId, awarded);
       break;
     }
 
@@ -384,15 +392,19 @@ async function evaluateMarathon(
   if (days.size >= 5) await maybeAward(userId, 'marathon', awarded);
 }
 
+/**
+ * Award perfect_group when the user got the winner right in at least 4 of
+ * the 6 matches in a group (previously: all 6). Easier bar so it stays
+ * achievable without rewarding luck.
+ */
+const PERFECT_GROUP_THRESHOLD = 4;
+
 async function evaluatePerfectGroup(
   userId: number,
   triggeringMatchId: number,
   history: ScoredRow[],
   awarded: string[],
 ): Promise<void> {
-  // Find the group of the match that just got scored. If every match in that
-  // group is finished AND the user's prediction has the correct winner for
-  // each, award perfect_group.
   const trigger = history.find((r) => r.matchId === triggeringMatchId);
   if (!trigger?.group) return;
 
@@ -407,6 +419,7 @@ async function evaluatePerfectGroup(
     .where(eq(matches.group, trigger.group));
 
   if (groupMatches.length === 0) return;
+  // All group matches must be finished so the count is final.
   if (groupMatches.some((m) => m.status !== 'finished')) return;
 
   const userPredsRaw = await db
@@ -423,17 +436,185 @@ async function evaluatePerfectGroup(
       ),
     );
 
-  // Dedupe by matchId (same score across leagues).
   const predByMatch = new Map<number, { homeScore: number; awayScore: number }>();
   for (const p of userPredsRaw) predByMatch.set(p.matchId, p);
 
+  let correct = 0;
   for (const m of groupMatches) {
     const pred = predByMatch.get(m.id);
-    if (!pred || m.homeScore == null || m.awayScore == null) return;
-    if (Math.sign(pred.homeScore - pred.awayScore) !== Math.sign(m.homeScore - m.awayScore)) return;
+    if (!pred || m.homeScore == null || m.awayScore == null) continue;
+    if (Math.sign(pred.homeScore - pred.awayScore) === Math.sign(m.homeScore - m.awayScore)) {
+      correct++;
+    }
   }
 
-  await maybeAward(userId, 'perfect_group', awarded);
+  if (correct >= PERFECT_GROUP_THRESHOLD) {
+    await maybeAward(userId, 'perfect_group', awarded);
+  }
+}
+
+/**
+ * Award perfect_knockout when the user got the winner right in at least 6 of
+ * the 8 R16 matches (previously: all 8). Same easing reasoning as
+ * perfect_group — 100% accuracy gates almost everyone.
+ */
+const PERFECT_KNOCKOUT_THRESHOLD = 6;
+
+async function evaluatePerfectKnockout(
+  userId: number,
+  triggeringMatchId: number,
+  awarded: string[],
+): Promise<void> {
+  // Quick guard: only run after a R16 match got scored.
+  const triggerMatch = await db
+    .select({ round: matches.round })
+    .from(matches)
+    .where(eq(matches.id, triggeringMatchId))
+    .get();
+  if (triggerMatch?.round !== 'r16') return;
+
+  const r16Matches = await db
+    .select({
+      id: matches.id,
+      status: matches.status,
+      homeScore: matches.homeScore,
+      awayScore: matches.awayScore,
+    })
+    .from(matches)
+    .where(eq(matches.round, 'r16'));
+
+  if (r16Matches.length === 0) return;
+  if (r16Matches.some((m) => m.status !== 'finished')) return;
+
+  const userPredsRaw = await db
+    .select({
+      matchId: predictions.matchId,
+      homeScore: predictions.homeScore,
+      awayScore: predictions.awayScore,
+    })
+    .from(predictions)
+    .where(
+      and(
+        eq(predictions.userId, userId),
+        inArray(predictions.matchId, r16Matches.map((m) => m.id)),
+      ),
+    );
+
+  const predByMatch = new Map<number, { homeScore: number; awayScore: number }>();
+  for (const p of userPredsRaw) predByMatch.set(p.matchId, p);
+
+  let correct = 0;
+  for (const m of r16Matches) {
+    const pred = predByMatch.get(m.id);
+    if (!pred || m.homeScore == null || m.awayScore == null) continue;
+    // Tie-cases in R16 don't exist in normal time → assume penalties decided.
+    // We only use the recorded match.homeScore/awayScore winner.
+    if (Math.sign(pred.homeScore - pred.awayScore) === Math.sign(m.homeScore - m.awayScore)) {
+      correct++;
+    }
+  }
+
+  if (correct >= PERFECT_KNOCKOUT_THRESHOLD) {
+    await maybeAward(userId, 'perfect_knockout', awarded);
+  }
+}
+
+/**
+ * Award prophet when the user's tournament champion pick matches the actual
+ * winner of the final match (round = 'final', match status = finished).
+ * Evaluated for every tournamentPrediction the user has across leagues —
+ * if at least one is correct, they earn it.
+ */
+async function evaluateProphet(
+  userId: number,
+  triggeringMatchId: number,
+  awarded: string[],
+): Promise<void> {
+  const finalMatch = await db
+    .select({
+      id: matches.id,
+      round: matches.round,
+      status: matches.status,
+      homeTeamId: matches.homeTeamId,
+      awayTeamId: matches.awayTeamId,
+      homeScore: matches.homeScore,
+      awayScore: matches.awayScore,
+    })
+    .from(matches)
+    .where(eq(matches.id, triggeringMatchId))
+    .get();
+
+  if (finalMatch?.round !== 'final') return;
+  if (finalMatch.status !== 'finished') return;
+  if (finalMatch.homeScore == null || finalMatch.awayScore == null) return;
+  if (finalMatch.homeScore === finalMatch.awayScore) return; // shouldn't happen in a final but guard
+
+  const winnerTeamId =
+    finalMatch.homeScore > finalMatch.awayScore ? finalMatch.homeTeamId : finalMatch.awayTeamId;
+  if (winnerTeamId == null) return;
+
+  const correctPicks = await db
+    .select({ id: tournamentPredictions.id })
+    .from(tournamentPredictions)
+    .where(
+      and(
+        eq(tournamentPredictions.userId, userId),
+        eq(tournamentPredictions.championTeamId, winnerTeamId),
+      ),
+    )
+    .limit(1)
+    .get();
+
+  if (correctPicks) await maybeAward(userId, 'prophet', awarded);
+}
+
+/**
+ * Award top_scorer_prophet when the user picked the actual top scorer of the
+ * tournament. Computed only after the final match (because earlier the
+ * "top scorer" can still change). A tie at the top is broken by lowest
+ * playerId — picking either of tied top scorers wins.
+ */
+async function evaluateTopScorerProphet(
+  userId: number,
+  triggeringMatchId: number,
+  awarded: string[],
+): Promise<void> {
+  const finalMatch = await db
+    .select({ round: matches.round, status: matches.status })
+    .from(matches)
+    .where(eq(matches.id, triggeringMatchId))
+    .get();
+  if (finalMatch?.round !== 'final' || finalMatch.status !== 'finished') return;
+
+  // Top scorer = max(sum(goals)) grouped by player, restricted to finished
+  // matches. Ties: return every tied player so any correct pick counts.
+  const rows = await db
+    .select({
+      playerId: playerMatchStats.playerId,
+      goals: sql<number>`sum(${playerMatchStats.goals})`.as('total'),
+    })
+    .from(playerMatchStats)
+    .innerJoin(matches, eq(playerMatchStats.matchId, matches.id))
+    .where(eq(matches.status, 'finished'))
+    .groupBy(playerMatchStats.playerId);
+
+  if (rows.length === 0) return;
+
+  const max = rows.reduce((m, r) => (Number(r.goals) > m ? Number(r.goals) : m), 0);
+  if (max === 0) return;
+  const topPlayerIds = new Set(rows.filter((r) => Number(r.goals) === max).map((r) => r.playerId));
+
+  const userPicks = await db
+    .select({ topScorerPlayerId: tournamentPredictions.topScorerPlayerId })
+    .from(tournamentPredictions)
+    .where(eq(tournamentPredictions.userId, userId));
+
+  for (const pick of userPicks) {
+    if (pick.topScorerPlayerId != null && topPlayerIds.has(pick.topScorerPlayerId)) {
+      await maybeAward(userId, 'top_scorer_prophet', awarded);
+      return;
+    }
+  }
 }
 
 // ─── Public re-evaluators (used by scripts & batch jobs) ────────────────────
@@ -499,11 +680,29 @@ export async function recomputeUserAchievements(userId: number): Promise<string[
     .where(and(sql`${matches.group} IS NOT NULL`, eq(matches.status, 'finished')));
   for (const g of groupsWithFinished) {
     if (!g.group) continue;
-    // pick any one of the user's predictions in that group as the triggering match
     const trig = history.find((r) => r.group === g.group);
     if (!trig) continue;
     await evaluatePerfectGroup(userId, trig.matchId, history, awarded);
   }
+
+  // Tournament-pick logros — replay using the actual final/R16 matches.
+  const finalRow = await db
+    .select({ id: matches.id })
+    .from(matches)
+    .where(and(eq(matches.round, 'final'), eq(matches.status, 'finished')))
+    .limit(1)
+    .get();
+  if (finalRow) {
+    await evaluateProphet(userId, finalRow.id, awarded);
+    await evaluateTopScorerProphet(userId, finalRow.id, awarded);
+  }
+  const aR16 = await db
+    .select({ id: matches.id })
+    .from(matches)
+    .where(and(eq(matches.round, 'r16'), eq(matches.status, 'finished')))
+    .limit(1)
+    .get();
+  if (aR16) await evaluatePerfectKnockout(userId, aR16.id, awarded);
 
   return awarded;
 }

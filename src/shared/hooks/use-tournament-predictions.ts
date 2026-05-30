@@ -6,9 +6,11 @@ export interface TournamentPredictionData {
   leagueId: number;
   championTeamId: number | null;
   runnerUpTeamId: number | null;
+  thirdPlaceTeamId: number | null;
   topScorerPlayerId: number | null;
   revelationTeamId: number | null;
   surpriseEliminatedTeamId: number | null;
+  bestDefenseTeamId: number | null;
   points?: number | null;
 }
 
@@ -42,9 +44,11 @@ export function useMyTournamentPredictions() {
 export interface UpsertTournamentPredictionInput {
   championTeamId: number | null;
   runnerUpTeamId: number | null;
+  thirdPlaceTeamId: number | null;
   topScorerPlayerId: number | null;
   revelationTeamId: number | null;
   surpriseEliminatedTeamId: number | null;
+  bestDefenseTeamId: number | null;
   /** Omit to write the same pick to every league the user belongs to. */
   leagueId?: number;
 }

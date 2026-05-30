@@ -45,6 +45,16 @@ function PresidentBadge() {
   );
 }
 
+/**
+ * Generate a stable, distinctive hue for a given userId. Used to colour the
+ * non-admin profile header so every user gets a small personal flourish
+ * instead of the generic dark banner. Multiplier 137 is the golden-angle
+ * approximation, which spreads hues evenly across the wheel.
+ */
+function userHue(userId: number): number {
+  return (userId * 137) % 360;
+}
+
 export function UserProfilePage() {
   const { userId: userIdParam } = useParams<{ userId: string }>();
   const navigate = useNavigate();
@@ -162,16 +172,31 @@ export function UserProfilePage() {
           </div>
         </div>
       ) : (
-        /* Normal header */
-        <div className="flex items-center gap-3 px-4 pt-5">
-          <button
-            onClick={() => navigate(-1)}
-            className="p-2 rounded-md bg-elevated border border-border"
-            aria-label="Volver"
-          >
-            <ArrowLeft size={18} className="text-text" />
-          </button>
-          <h1 className="text-lg-s font-display font-bold text-text">Perfil</h1>
+        /* Normal header — personalised gradient band per user. Hue is derived
+            from the userId so it's stable but distinctive between profiles. */
+        <div className="relative overflow-hidden">
+          <div
+            className="absolute inset-0 pointer-events-none"
+            style={{
+              background: `linear-gradient(to bottom, hsl(${userHue(profile.id)} 55% 45% / 0.18), transparent 80%)`,
+            }}
+          />
+          <div
+            className="absolute inset-x-0 bottom-0 h-px"
+            style={{
+              background: `linear-gradient(to right, transparent, hsl(${userHue(profile.id)} 70% 55% / 0.35), transparent)`,
+            }}
+          />
+          <div className="relative flex items-center gap-3 px-4 pt-5 pb-3">
+            <button
+              onClick={() => navigate(-1)}
+              className="p-2 rounded-md bg-elevated border border-border"
+              aria-label="Volver"
+            >
+              <ArrowLeft size={18} className="text-text" />
+            </button>
+            <h1 className="text-lg-s font-display font-bold text-text">Perfil</h1>
+          </div>
         </div>
       )}
 
@@ -180,7 +205,10 @@ export function UserProfilePage() {
         {isAdmin ? (
           <GoldRing>{avatarEl}</GoldRing>
         ) : (
-          <div className="w-[72px] h-[72px] rounded-full bg-accent flex items-center justify-center flex-shrink-0 overflow-hidden">
+          <div
+            className="w-[72px] h-[72px] rounded-full bg-accent flex items-center justify-center flex-shrink-0 overflow-hidden ring-2"
+            style={{ '--tw-ring-color': `hsl(${userHue(profile.id)} 65% 55% / 0.6)` } as React.CSSProperties}
+          >
             {avatarEl}
           </div>
         )}

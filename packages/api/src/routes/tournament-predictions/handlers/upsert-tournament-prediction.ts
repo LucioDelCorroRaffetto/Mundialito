@@ -12,9 +12,11 @@ export const upsertTournamentPredictionSchema = z.object({
   leagueId: z.number().int().positive().optional(),
   championTeamId: z.number().int().positive().nullable().optional(),
   runnerUpTeamId: z.number().int().positive().nullable().optional(),
+  thirdPlaceTeamId: z.number().int().positive().nullable().optional(),
   topScorerPlayerId: z.number().int().positive().nullable().optional(),
   revelationTeamId: z.number().int().positive().nullable().optional(),
   surpriseEliminatedTeamId: z.number().int().positive().nullable().optional(),
+  bestDefenseTeamId: z.number().int().positive().nullable().optional(),
 });
 
 export async function upsertTournamentPredictionHandler(req: Request, res: Response) {
@@ -22,9 +24,11 @@ export async function upsertTournamentPredictionHandler(req: Request, res: Respo
     leagueId,
     championTeamId,
     runnerUpTeamId,
+    thirdPlaceTeamId,
     topScorerPlayerId,
     revelationTeamId,
     surpriseEliminatedTeamId,
+    bestDefenseTeamId,
   } = req.body as z.infer<typeof upsertTournamentPredictionSchema>;
 
   const userId = req.user!.id;
@@ -60,18 +64,22 @@ export async function upsertTournamentPredictionHandler(req: Request, res: Respo
         leagueId: lid,
         championTeamId,
         runnerUpTeamId,
+        thirdPlaceTeamId,
         topScorerPlayerId,
         revelationTeamId,
         surpriseEliminatedTeamId,
+        bestDefenseTeamId,
       })
       .onConflictDoUpdate({
         target: [tournamentPredictions.userId, tournamentPredictions.leagueId],
         set: {
           championTeamId,
           runnerUpTeamId,
+          thirdPlaceTeamId,
           topScorerPlayerId,
           revelationTeamId,
           surpriseEliminatedTeamId,
+          bestDefenseTeamId,
           updatedAt: sql`(datetime('now'))`,
         },
       })

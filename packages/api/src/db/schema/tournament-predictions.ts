@@ -11,9 +11,11 @@ export const tournamentPredictions = sqliteTable('tournament_predictions', {
   leagueId: integer('league_id').notNull().references(() => leagues.id, { onDelete: 'cascade' }),
   championTeamId: integer('champion_team_id').references(() => teams.id),
   runnerUpTeamId: integer('runner_up_team_id').references(() => teams.id),
+  thirdPlaceTeamId: integer('third_place_team_id').references(() => teams.id),
   topScorerPlayerId: integer('top_scorer_player_id').references(() => players.id),
   revelationTeamId: integer('revelation_team_id').references(() => teams.id),
   surpriseEliminatedTeamId: integer('surprise_eliminated_team_id').references(() => teams.id),
+  bestDefenseTeamId: integer('best_defense_team_id').references(() => teams.id),
   points: integer('points'),
   updatedAt: text('updated_at').notNull().default(sql`(datetime('now'))`),
 }, (t) => ({

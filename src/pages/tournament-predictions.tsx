@@ -20,9 +20,11 @@ import { TeamFlag } from '@/shared/components/ui/team-flag';
 interface LocalPicks {
   championTeamId: number | null;
   runnerUpTeamId: number | null;
+  thirdPlaceTeamId: number | null;
   topScorerPlayerId: number | null;
   revelationTeamId: number | null;
   surpriseEliminatedTeamId: number | null;
+  bestDefenseTeamId: number | null;
 }
 
 interface PickCardProps {
@@ -336,9 +338,11 @@ export function TournamentPredictionsPage() {
   const [picks, setPicks] = useState<LocalPicks>({
     championTeamId: null,
     runnerUpTeamId: null,
+    thirdPlaceTeamId: null,
     topScorerPlayerId: null,
     revelationTeamId: null,
     surpriseEliminatedTeamId: null,
+    bestDefenseTeamId: null,
   });
   const [openSection, setOpenSection] = useState<string | null>(null);
   const [initialised, setInitialised] = useState(false);
@@ -361,7 +365,15 @@ export function TournamentPredictionsPage() {
   // Reset + repopulate picks when league changes
   useEffect(() => {
     setInitialised(false);
-    setPicks({ championTeamId: null, runnerUpTeamId: null, topScorerPlayerId: null, revelationTeamId: null, surpriseEliminatedTeamId: null });
+    setPicks({
+      championTeamId: null,
+      runnerUpTeamId: null,
+      thirdPlaceTeamId: null,
+      topScorerPlayerId: null,
+      revelationTeamId: null,
+      surpriseEliminatedTeamId: null,
+      bestDefenseTeamId: null,
+    });
   }, [selectedLeagueId]);
 
   // Populate picks from server data once loaded
@@ -371,9 +383,11 @@ export function TournamentPredictionsPage() {
       setPicks({
         championTeamId: d.championTeamId,
         runnerUpTeamId: d.runnerUpTeamId,
+        thirdPlaceTeamId: d.thirdPlaceTeamId,
         topScorerPlayerId: d.topScorerPlayerId,
         revelationTeamId: d.revelationTeamId,
         surpriseEliminatedTeamId: d.surpriseEliminatedTeamId,
+        bestDefenseTeamId: d.bestDefenseTeamId,
       });
       setInitialised(true);
     }
@@ -393,9 +407,11 @@ export function TournamentPredictionsPage() {
         ...(propagateToAllLeagues ? {} : { leagueId: selectedLeagueId }),
         championTeamId: picks.championTeamId,
         runnerUpTeamId: picks.runnerUpTeamId,
+        thirdPlaceTeamId: picks.thirdPlaceTeamId,
         topScorerPlayerId: picks.topScorerPlayerId,
         revelationTeamId: picks.revelationTeamId,
         surpriseEliminatedTeamId: picks.surpriseEliminatedTeamId,
+        bestDefenseTeamId: picks.bestDefenseTeamId,
       });
       toast.success(
         propagateToAllLeagues && myLeagues.length > 1
@@ -490,18 +506,30 @@ export function TournamentPredictionsPage() {
     ? {
         championTeamId: tournamentQuery.data.championTeamId,
         runnerUpTeamId: tournamentQuery.data.runnerUpTeamId,
+        thirdPlaceTeamId: tournamentQuery.data.thirdPlaceTeamId,
         topScorerPlayerId: tournamentQuery.data.topScorerPlayerId,
         revelationTeamId: tournamentQuery.data.revelationTeamId,
         surpriseEliminatedTeamId: tournamentQuery.data.surpriseEliminatedTeamId,
+        bestDefenseTeamId: tournamentQuery.data.bestDefenseTeamId,
       }
-    : { championTeamId: null, runnerUpTeamId: null, topScorerPlayerId: null, revelationTeamId: null, surpriseEliminatedTeamId: null };
+    : {
+        championTeamId: null,
+        runnerUpTeamId: null,
+        thirdPlaceTeamId: null,
+        topScorerPlayerId: null,
+        revelationTeamId: null,
+        surpriseEliminatedTeamId: null,
+        bestDefenseTeamId: null,
+      };
 
   const isDirty =
     picks.championTeamId !== savedPicks.championTeamId ||
     picks.runnerUpTeamId !== savedPicks.runnerUpTeamId ||
+    picks.thirdPlaceTeamId !== savedPicks.thirdPlaceTeamId ||
     picks.topScorerPlayerId !== savedPicks.topScorerPlayerId ||
     picks.revelationTeamId !== savedPicks.revelationTeamId ||
-    picks.surpriseEliminatedTeamId !== savedPicks.surpriseEliminatedTeamId;
+    picks.surpriseEliminatedTeamId !== savedPicks.surpriseEliminatedTeamId ||
+    picks.bestDefenseTeamId !== savedPicks.bestDefenseTeamId;
 
   // Show "saved" only when server has data AND user hasn't changed anything
   const showSaved = !isDirty && !!tournamentQuery.data && !saving;
@@ -564,6 +592,17 @@ export function TournamentPredictionsPage() {
           setOpenSection={setOpenSection}
           teams={teams}
         />
+        <PickCard
+          title="Tercer puesto"
+          subtitle="Equipo que gana el partido por el bronce"
+          points={12}
+          selectedTeamId={picks.thirdPlaceTeamId}
+          onSelect={setField('thirdPlaceTeamId')}
+          sectionId="thirdPlace"
+          openSection={openSection}
+          setOpenSection={setOpenSection}
+          teams={teams}
+        />
         <TopScorerCard
           sectionId="topScorer"
           openSection={openSection}
@@ -595,6 +634,17 @@ export function TournamentPredictionsPage() {
           setOpenSection={setOpenSection}
           teams={teams}
         />
+        <PickCard
+          title="Valla menos vencida"
+          subtitle="Equipo que termina con menos goles recibidos"
+          points={8}
+          selectedTeamId={picks.bestDefenseTeamId}
+          onSelect={setField('bestDefenseTeamId')}
+          sectionId="bestDefense"
+          openSection={openSection}
+          setOpenSection={setOpenSection}
+          teams={teams}
+        />
       </div>
 
       {/* Scoring reference */}
@@ -604,9 +654,11 @@ export function TournamentPredictionsPage() {
           {[
             ['Campeón', '50 pts'],
             ['Finalista', '20 pts'],
+            ['Tercer puesto', '12 pts'],
             ['Goleador del torneo', '15 pts'],
             ['Ceniciento del torneo', '10 pts'],
             ['Decepción del torneo', '10 pts'],
+            ['Valla menos vencida', '8 pts'],
           ].map(([label, pts]) => (
             <div key={label} className="flex items-center justify-between">
               <span className="text-sm-s text-muted">{label}</span>
