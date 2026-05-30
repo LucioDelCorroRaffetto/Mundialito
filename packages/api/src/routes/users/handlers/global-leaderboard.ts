@@ -142,5 +142,16 @@ export async function globalLeaderboardHandler(req: Request, res: Response) {
     return { rank, ...row };
   });
 
-  return res.json({ data, meta: { limit, offset, total: data.length } });
+  return res.json({
+    data,
+    meta: {
+      limit,
+      offset,
+      total: data.length,
+      // Lets the client know whether the listed totalPoints already include
+      // achievement bonuses or those will start counting once the Mundial
+      // kicks off. Used to render the pre-tournament info banner.
+      bonusesCountTowardRank: includeBonusInTotal,
+    },
+  });
 }

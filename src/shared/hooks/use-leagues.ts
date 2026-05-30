@@ -58,9 +58,10 @@ export function useLeagueStandings(id: number | undefined) {
   return useQuery({
     queryKey: ['league', id, 'standings'],
     queryFn: async () => {
-      const { data } = await apiClient.get<{ data: StandingRow[]; meta: { total: number } }>(
-        `/leagues/${id}/standings`
-      );
+      const { data } = await apiClient.get<{
+        data: StandingRow[];
+        meta: { total: number; bonusesCountTowardRank?: boolean };
+      }>(`/leagues/${id}/standings`);
       return data;
     },
     enabled: id !== undefined && Number.isInteger(id),

@@ -5,6 +5,7 @@ import { cn } from '@/shared/lib/cn';
 import { SkeletonList } from '@/shared/components/skeleton';
 import { useGlobalLeaderboard, type LeaderboardEntry, type TopBadge } from '@/shared/hooks/use-leaderboard';
 import { useAuthStore } from '@/shared/stores/auth-store';
+import { LogrosGateBanner } from '@/shared/components/logros-gate-banner';
 
 const MEDAL_COLORS = [
   { bg: 'bg-yellow-400/20', border: 'border-yellow-400/40', text: 'text-yellow-400', label: '🥇' },
@@ -155,6 +156,8 @@ export function LeaderboardPage() {
         </div>
         <p className="text-sm text-muted mt-1">Puntos acumulados en todas las ligas</p>
       </div>
+
+      <LogrosGateBanner shown={data?.meta.bonusesCountTowardRank === false} />
 
       {/* My position banner (if not in top 3) */}
       {myEntry && myEntry.rank > 3 && (

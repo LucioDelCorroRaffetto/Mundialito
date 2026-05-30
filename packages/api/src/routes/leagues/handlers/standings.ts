@@ -135,5 +135,11 @@ export async function standingsHandler(req: Request, res: Response) {
     return { ...row, position };
   });
 
-  return res.json({ data: ranked, meta: { total: ranked.length } });
+  return res.json({
+    data: ranked,
+    meta: {
+      total: ranked.length,
+      bonusesCountTowardRank: includeBonusInTotal,
+    },
+  });
 }

@@ -9,6 +9,7 @@ import { SkeletonList } from '@/shared/components/skeleton';
 import { LeagueBannerPicker } from '@/shared/components/ui/image-picker';
 import { useLeague, useLeagueStandings, useLeaveLeague, useUpdateLeague, type StandingRow } from '@/shared/hooks/use-leagues';
 import { useAuthStore } from '@/shared/stores/auth-store';
+import { LogrosGateBanner, podiumStyle } from '@/shared/components/logros-gate-banner';
 
 const TABS = ['Tabla', 'Info'] as const;
 type Tab = (typeof TABS)[number];
@@ -110,6 +111,10 @@ function LeagueDescriptionBlock({
 
 function Row({ row, isMe }: { row: StandingRow; isMe: boolean }) {
   const initials = row.username.slice(0, 1).toUpperCase();
+  // Podium spots get medal styling. The "me" highlight wins when it overlaps —
+  // people care more about finding themselves than seeing a medal anyway.
+  const podium = podiumStyle(row.position);
+
   return (
     <motion.div
       initial={{ opacity: 0, x: -8 }}
@@ -119,14 +124,35 @@ function Row({ row, isMe }: { row: StandingRow; isMe: boolean }) {
       <Link
         to={`/u/${row.userId}`}
         className={cn(
-          'flex items-center gap-3 px-4 py-3 border-b border-border last:border-0 cursor-pointer hover:bg-elevated transition-colors',
-          isMe && 'bg-accent-soft hover:bg-accent-soft/80'
+          'flex items-center gap-3 px-4 py-3 border-b last:border-0 cursor-pointer transition-colors',
+          isMe
+            ? 'bg-accent-soft hover:bg-accent-soft/80 border-border'
+            : podium
+              ? `${podium.rowBg} ${podium.rowBorder}`
+              : 'border-border hover:bg-elevated',
         )}
       >
-        <span className={cn('w-6 text-center text-sm-s font-bold', isMe ? 'text-accent' : 'text-muted')}>
-          {row.position}
-        </span>
-        <div className="w-8 h-8 rounded-full bg-elevated flex items-center justify-center flex-shrink-0 overflow-hidden">
+        {podium ? (
+          <span
+            className={cn(
+              'w-7 h-7 rounded-full border flex items-center justify-center text-xs-s font-bold flex-shrink-0',
+              podium.rankPill,
+            )}
+            title={`Puesto ${row.position}`}
+          >
+            <span aria-hidden>{podium.medal}</span>
+          </span>
+        ) : (
+          <span className={cn('w-6 text-center text-sm-s font-bold', isMe ? 'text-accent' : 'text-muted')}>
+            {row.position}
+          </span>
+        )}
+        <div
+          className={cn(
+            'w-8 h-8 rounded-full bg-elevated flex items-center justify-center flex-shrink-0 overflow-hidden',
+            podium && `ring-2 ring-offset-0 ${podium.rowBorder.replace('border-', 'ring-')}`,
+          )}
+        >
           {row.avatarUrl ? (
             <img src={row.avatarUrl} alt={row.username} className="w-full h-full object-cover" />
           ) : (
@@ -134,13 +160,25 @@ function Row({ row, isMe }: { row: StandingRow; isMe: boolean }) {
           )}
         </div>
         <div className="flex-1 min-w-0">
-          <p className={cn('text-sm-s font-semibold truncate', isMe ? 'text-accent' : 'text-text')}>
+          <p
+            className={cn(
+              'text-sm-s font-semibold truncate',
+              isMe ? 'text-accent' : podium ? podium.text : 'text-text',
+            )}
+          >
             {row.username} {isMe && '(vos)'}
           </p>
           <p className="text-xs-s text-muted">{row.matchesPlayed} jugados</p>
         </div>
         <div className="flex items-center gap-1.5">
-          <span className={cn('text-base-s font-bold', isMe ? 'text-accent' : 'text-text')}>{row.points}</span>
+          <span
+            className={cn(
+              'text-base-s font-bold',
+              isMe ? 'text-accent' : podium ? podium.text : 'text-text',
+            )}
+          >
+            {row.points}
+          </span>
           <ChevronRight size={16} className="text-muted flex-shrink-0" />
         </div>
       </Link>
@@ -247,6 +285,10 @@ export function LeagueDetailPage() {
       </div>
 
       {tab === 'Tabla' && (
+        <>
+          <div className="mt-3">
+            <LogrosGateBanner shown={standingsData?.meta.bonusesCountTowardRank === false} />
+          </div>
         <div className="mt-3 mx-4 rounded-lg bg-card border border-border overflow-hidden">
           <div className="flex items-center gap-3 px-4 py-2 border-b border-border bg-elevated">
             <span className="w-6 text-center text-xs-s text-muted">#</span>
@@ -268,6 +310,7 @@ export function LeagueDetailPage() {
             ))
           )}
         </div>
+        </>
       )}
 
       {tab === 'Info' && (
