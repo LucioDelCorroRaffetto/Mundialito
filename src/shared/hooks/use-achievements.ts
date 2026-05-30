@@ -1,11 +1,14 @@
 import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '@/shared/lib/api-client';
 
+export type AchievementTier = 'bronze' | 'silver' | 'gold' | 'platinum';
+
 export interface Achievement {
   slug: string;
   name: string;
   description: string;
   icon: string;
+  tier: AchievementTier;
   pointsBonus: number;
   earnedAt?: string;
 }

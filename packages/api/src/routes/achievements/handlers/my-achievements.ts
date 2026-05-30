@@ -12,6 +12,7 @@ export async function myAchievementsHandler(req: Request, res: Response) {
       name: achievements.name,
       description: achievements.description,
       icon: achievements.icon,
+      tier: achievements.tier,
       pointsBonus: achievements.pointsBonus,
       earnedAt: userAchievements.earnedAt,
     })

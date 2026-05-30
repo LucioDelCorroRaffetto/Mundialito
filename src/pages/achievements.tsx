@@ -1,11 +1,22 @@
+import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Lock, Zap } from 'lucide-react';
-import { useAllAchievements, useMyAchievements } from '@/shared/hooks/use-achievements';
+import { useAllAchievements, useMyAchievements, type Achievement } from '@/shared/hooks/use-achievements';
 import { SkeletonList } from '@/shared/components/skeleton';
+import { AchievementCardModal } from '@/shared/components/achievement-card-modal';
+import { cn } from '@/shared/lib/cn';
+
+const TIER_RING: Record<string, string> = {
+  bronze: 'border-amber-700/40 hover:border-amber-500/70',
+  silver: 'border-slate-400/40 hover:border-slate-300/70',
+  gold: 'border-yellow-400/40 hover:border-yellow-300/70',
+  platinum: 'border-cyan-300/40 hover:border-cyan-200/70',
+};
 
 export function AchievementsPage() {
   const { data: allData, isLoading: allLoading } = useAllAchievements();
   const { data: myData } = useMyAchievements();
+  const [selected, setSelected] = useState<{ achievement: Achievement; earned: boolean; earnedAt?: string } | null>(null);
 
   const all = allData?.data ?? [];
   const earnedSlugs = new Set((myData?.data ?? []).map(a => a.slug));
@@ -16,6 +27,14 @@ export function AchievementsPage() {
 
   const totalBonus = earned.reduce((sum, a) => sum + a.pointsBonus, 0);
 
+  function openCard(achievement: Achievement, isEarned: boolean) {
+    setSelected({
+      achievement,
+      earned: isEarned,
+      earnedAt: isEarned ? earnedMap.get(achievement.slug) : undefined,
+    });
+  }
+
   if (allLoading) return <div className="p-4"><SkeletonList count={8} /></div>;
 
   return (
@@ -23,7 +42,7 @@ export function AchievementsPage() {
       <div className="px-4 pt-6 pb-2">
         <h1 className="text-2xl-s font-display font-bold text-text">Logros</h1>
         <p className="text-sm-s text-muted mt-1">
-          {earned.length} de {all.length} desbloqueados
+          {earned.length} de {all.length} desbloqueados · tocá una carta para verla en grande
         </p>
       </div>
 
@@ -63,12 +82,17 @@ export function AchievementsPage() {
           </h2>
           <div className="grid grid-cols-2 gap-3">
             {earned.map((a, i) => (
-              <motion.div
+              <motion.button
                 key={a.slug}
+                type="button"
+                onClick={() => openCard(a, true)}
                 initial={{ opacity: 0, scale: 0.9 }}
                 animate={{ opacity: 1, scale: 1 }}
                 transition={{ delay: i * 0.05 }}
-                className="p-4 rounded-xl bg-card border border-accent/30 flex flex-col gap-2"
+                className={cn(
+                  'p-4 rounded-xl bg-card border flex flex-col gap-2 text-left transition-colors',
+                  TIER_RING[a.tier] ?? 'border-accent/30',
+                )}
               >
                 <span className="text-3xl">{a.icon}</span>
                 <div>
@@ -81,7 +105,7 @@ export function AchievementsPage() {
                 <p className="text-xs-s text-muted">
                   {earnedMap.get(a.slug) ? new Date(earnedMap.get(a.slug)!).toLocaleDateString('es-AR') : ''}
                 </p>
-              </motion.div>
+              </motion.button>
             ))}
           </div>
         </div>
@@ -95,12 +119,17 @@ export function AchievementsPage() {
           </h2>
           <div className="grid grid-cols-2 gap-3">
             {locked.map((a, i) => (
-              <motion.div
+              <motion.button
                 key={a.slug}
+                type="button"
+                onClick={() => openCard(a, false)}
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 transition={{ delay: i * 0.03 }}
-                className="p-4 rounded-xl bg-card border border-border flex flex-col gap-2 opacity-50"
+                className={cn(
+                  'p-4 rounded-xl bg-card border flex flex-col gap-2 text-left opacity-60 hover:opacity-100 transition-opacity',
+                  TIER_RING[a.tier] ?? 'border-border',
+                )}
               >
                 <div className="relative self-start">
                   <span className="text-3xl grayscale">{a.icon}</span>
@@ -113,11 +142,18 @@ export function AchievementsPage() {
                 <span className="self-start text-xs-s bg-white/5 text-muted px-2 py-0.5 rounded-full font-semibold">
                   +{a.pointsBonus} pts
                 </span>
-              </motion.div>
+              </motion.button>
             ))}
           </div>
         </div>
       )}
+
+      <AchievementCardModal
+        achievement={selected?.achievement ?? null}
+        earned={selected?.earned ?? false}
+        earnedAt={selected?.earnedAt}
+        onClose={() => setSelected(null)}
+      />
     </div>
   );
 }
