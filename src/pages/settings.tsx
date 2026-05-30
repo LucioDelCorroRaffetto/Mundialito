@@ -1,10 +1,11 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Moon, Sun, Zap, Type, Bell, BellOff, Pencil, Check, X } from 'lucide-react';
+import { ArrowLeft, Moon, Sun, Zap, Type, Bell, BellOff, Pencil, Check, X, Send } from 'lucide-react';
 import { useThemeStore } from '@/theme/theme-store';
 import { useAuthStore } from '@/shared/stores/auth-store';
 import { accentList, type ThemeMode } from '@/theme/palettes';
 import { usePushNotifications } from '@/shared/hooks/use-push';
+import { apiClient } from '@/shared/lib/api-client';
 import { useUpdateUsername, useUpdateAvatar } from '@/shared/hooks/use-auth';
 import { AvatarPicker } from '@/shared/components/ui/image-picker';
 import { toast } from 'sonner';
@@ -34,6 +35,39 @@ export function SettingsPage() {
   const updateAvatar = useUpdateAvatar();
   const [editingUsername, setEditingUsername] = useState(false);
   const [usernameInput, setUsernameInput] = useState('');
+  const [sendingTest, setSendingTest] = useState(false);
+
+  const handleSendTest = async () => {
+    setSendingTest(true);
+    try {
+      const { data } = await apiClient.post<{
+        data: { devices: number; sent: number; failed: number; removed: number };
+      }>('/push/test');
+      const { sent, failed, removed, devices } = data.data;
+      if (sent > 0) {
+        toast.success(
+          devices === 1
+            ? 'Notificación enviada — debería aparecerte en unos segundos'
+            : `Enviada a ${sent} de ${devices} dispositivo(s)`,
+        );
+      } else if (removed > 0) {
+        toast.error(
+          'La suscripción quedó vieja. Tocá "Activar notificaciones" para refrescarla.',
+        );
+      } else if (failed > 0) {
+        toast.error('No se pudo enviar a ninguno de tus dispositivos');
+      }
+    } catch (err: any) {
+      const code = err?.response?.data?.error?.code;
+      if (code === 'NO_SUBSCRIPTION') {
+        toast.error('Primero activá notificaciones arriba');
+      } else {
+        toast.error('Falló el envío de prueba');
+      }
+    } finally {
+      setSendingTest(false);
+    }
+  };
 
   const handleAvatarChange = async (newUrl: string | null) => {
     try {
@@ -232,6 +266,29 @@ export function SettingsPage() {
               )} />
             </div>
           </button>
+
+          {/* Test button — only when subscribed. Helps users verify their
+              device actually receives pushes before the cron has anything
+              real to send (i.e. before the tournament starts). */}
+          {isSubscribed && (
+            <button
+              onClick={handleSendTest}
+              disabled={sendingTest}
+              className="flex items-center gap-2 self-start px-3 py-1.5 rounded-md bg-elevated border border-border text-xs-s font-semibold text-muted hover:text-text hover:border-accent-border transition-colors disabled:opacity-50"
+            >
+              {sendingTest ? (
+                <span className="w-3 h-3 border-2 border-muted border-t-transparent rounded-full animate-spin" />
+              ) : (
+                <Send size={12} />
+              )}
+              {sendingTest ? 'Enviando…' : 'Enviar prueba a este dispositivo'}
+            </button>
+          )}
+
+          <p className="text-xs-s text-muted/80 leading-snug -mt-1">
+            Los avisos reales empiezan a llegar <span className="text-text font-semibold">30 min antes de cada partido</span> del Mundial.
+            Antes del 11/6 podés mandarte una prueba para verificar que tu celular las recibe.
+          </p>
         </section>
 
         <section className="p-4 rounded-lg bg-card border border-border">
