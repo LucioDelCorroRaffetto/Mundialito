@@ -47,7 +47,7 @@ export function AchievementsPage() {
       </div>
 
       {/* Progress bar */}
-      <div className="mx-4 h-2 rounded-full bg-white/10 overflow-hidden">
+      <div className="mx-4 h-2 rounded-full overflow-hidden bg-black/10 dark:bg-white/10">
         <motion.div
           initial={{ width: 0 }}
           animate={{ width: `${all.length ? (earned.length / all.length) * 100 : 0}%` }}
@@ -139,7 +139,7 @@ export function AchievementsPage() {
                   <p className="text-sm-s font-bold text-muted leading-tight">{a.name}</p>
                   <p className="text-xs-s text-muted/70 mt-0.5 leading-snug">{a.description}</p>
                 </div>
-                <span className="self-start text-xs-s bg-white/5 text-muted px-2 py-0.5 rounded-full font-semibold">
+                <span className="self-start text-xs-s text-muted px-2 py-0.5 rounded-full font-semibold bg-black/5 dark:bg-white/5">
                   +{a.pointsBonus} pts
                 </span>
               </motion.button>

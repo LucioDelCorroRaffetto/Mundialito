@@ -5,11 +5,13 @@ import { cn } from '@/shared/lib/cn';
 import { useAuthStore } from '@/shared/stores/auth-store';
 import { useUserProfile } from '@/shared/hooks/use-user-profile';
 
+// Tier chip colours with explicit light + dark variants. Without these the
+// chip is invisible on white (yellow/cyan/slate-300 fade into nothing).
 const TIER_COLORS: Record<string, string> = {
-  platinum: 'bg-cyan-400/20 text-cyan-300 border-cyan-400/40',
-  gold:     'bg-yellow-400/20 text-yellow-300 border-yellow-400/40',
-  silver:   'bg-slate-400/20 text-slate-300 border-slate-400/40',
-  bronze:   'bg-amber-700/20 text-amber-500 border-amber-700/40',
+  platinum: 'bg-cyan-400/25 text-cyan-700 border-cyan-500/60 dark:bg-cyan-400/20 dark:text-cyan-300 dark:border-cyan-400/40',
+  gold:     'bg-yellow-400/30 text-amber-700 border-yellow-500/60 dark:bg-yellow-400/20 dark:text-yellow-300 dark:border-yellow-400/40',
+  silver:   'bg-slate-300/40 text-slate-700 border-slate-400/60 dark:bg-slate-400/20 dark:text-slate-300 dark:border-slate-400/40',
+  bronze:   'bg-amber-600/25 text-amber-800 border-amber-600/60 dark:bg-amber-700/20 dark:text-amber-500 dark:border-amber-700/40',
 };
 
 function StatCard({ label, value }: { label: string; value: string | number }) {

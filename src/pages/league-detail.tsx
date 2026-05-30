@@ -220,8 +220,8 @@ export function LeagueDetailPage() {
             <ArrowLeft size={18} className="text-text" />
           </button>
           <div className="flex-1 min-w-0">
-            <div className="animate-pulse h-5 bg-white/10 rounded w-40 mb-1" />
-            <div className="animate-pulse h-3 bg-white/10 rounded w-24" />
+            <div className="animate-pulse h-5 bg-black/10 dark:bg-white/10 rounded w-40 mb-1" />
+            <div className="animate-pulse h-3 bg-black/10 dark:bg-white/10 rounded w-24" />
           </div>
         </div>
         <div className="px-4">

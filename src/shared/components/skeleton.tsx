@@ -1,6 +1,11 @@
+/**
+ * Theme-aware skeleton placeholder. Uses the elevated surface token so the
+ * pulse is visible in both dark mode (subtle white tint) and light mode
+ * (subtle black tint), instead of vanishing on white backgrounds.
+ */
 export function SkeletonCard() {
   return (
-    <div className="animate-pulse rounded-xl bg-white/10 h-20 w-full" />
+    <div className="animate-pulse rounded-xl h-20 w-full bg-black/10 dark:bg-white/10" />
   );
 }
 
