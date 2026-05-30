@@ -8,7 +8,8 @@ export const leagues = sqliteTable('leagues', {
   code: text('code').notNull().unique(),      // código de invitación, ej: 'ASADO42'
   isPublic: integer('is_public', { mode: 'boolean' }).notNull().default(false),
   adminId: integer('admin_id').notNull().references(() => users.id),
-  stakesMeme: text('stakes_meme'),            // 'El último paga las birras'
+  stakesMeme: text('stakes_meme'),            // short line, e.g. 'El último paga las birras' (≤120 chars)
+  description: text('description'),           // free-form long text shown on league detail (≤1000 chars)
   imageUrl: text('image_url'),               // optional league banner/logo (base64 or URL)
   // 'after_kickoff' (default) hides member predictions until match is live/finished.
   // 'always' lets all members see each other's predictions any time.

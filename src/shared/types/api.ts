@@ -51,6 +51,7 @@ export interface League {
   isPublic: boolean;
   adminId: number;
   stakesMeme: string | null;
+  description: string | null;
   imageUrl: string | null;
   predictionsVisibility: 'after_kickoff' | 'always';
   createdAt: string;

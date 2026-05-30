@@ -87,6 +87,7 @@ export function useCreateLeague() {
       name: string;
       isPublic: boolean;
       stakesMeme?: string | null;
+      description?: string | null;
       imageUrl?: string | null;
       predictionsVisibility?: 'after_kickoff' | 'always';
     }) => {
@@ -107,6 +108,7 @@ export function useUpdateLeague() {
       name?: string;
       isPublic?: boolean;
       stakesMeme?: string | null;
+      description?: string | null;
       imageUrl?: string | null;
       predictionsVisibility?: 'after_kickoff' | 'always';
     }) => {

@@ -65,7 +65,12 @@ export async function upsertPredictionHandler(req: Request, res: Response) {
     results.push(row);
   }
 
-  checkAchievements(req.user!.id, { type: 'prediction_saved', matchId }).catch(() => {});
+  // Optional hint from the client: the user's local hour (0-23). Used for the
+  // night_owl logro since the server doesn't know the user's timezone.
+  const rawHour = req.header('x-user-hour');
+  const userHour = rawHour != null && /^\d+$/.test(rawHour) ? Number(rawHour) : undefined;
+  checkAchievements(req.user!.id, { type: 'prediction_saved', matchId, userHour })
+    .catch(() => {});
 
   // Backwards-compat shape: when targeting a single league, return the row directly.
   if (results.length === 1) {

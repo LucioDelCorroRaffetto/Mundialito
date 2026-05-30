@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Share2, Users, Trophy, ChevronRight } from 'lucide-react';
+import { ArrowLeft, Share2, Users, Trophy, ChevronRight, Pencil, X, Check } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/shared/lib/cn';
 import { ShareSheet } from '@/shared/components/share-sheet';
@@ -12,6 +12,101 @@ import { useAuthStore } from '@/shared/stores/auth-store';
 
 const TABS = ['Tabla', 'Info'] as const;
 type Tab = (typeof TABS)[number];
+
+/**
+ * League description card. Read-only for members; admins get an inline
+ * editor with a 1000-char limit. Intentionally free-form so leagues can use
+ * it for prize text, house rules, in-jokes — anything.
+ */
+function LeagueDescriptionBlock({
+  description,
+  canEdit,
+  saving,
+  onSave,
+}: {
+  leagueId: number;
+  description: string | null;
+  canEdit: boolean;
+  saving: boolean;
+  onSave: (next: string | null) => Promise<void>;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(description ?? '');
+
+  useEffect(() => {
+    if (!editing) setDraft(description ?? '');
+  }, [description, editing]);
+
+  // Hide entirely when there's nothing to show and the viewer can't edit.
+  if (!description && !canEdit) return null;
+
+  return (
+    <div className="p-4 rounded-lg bg-card border border-border flex flex-col gap-2">
+      <div className="flex items-center justify-between">
+        <p className="text-sm-s font-semibold text-text">Descripción</p>
+        {canEdit && !editing && (
+          <button
+            type="button"
+            onClick={() => setEditing(true)}
+            className="flex items-center gap-1 text-xs-s text-accent font-semibold"
+          >
+            <Pencil size={12} />
+            {description ? 'Editar' : 'Agregar'}
+          </button>
+        )}
+      </div>
+
+      {!editing && (
+        description ? (
+          <p className="text-sm-s text-text whitespace-pre-wrap break-words">{description}</p>
+        ) : (
+          <p className="text-xs-s text-muted italic">
+            Sin descripción. Agregá una con reglas, premio, o lo que quieras compartir con los miembros.
+          </p>
+        )
+      )}
+
+      {editing && (
+        <>
+          <textarea
+            value={draft}
+            onChange={(e) => setDraft(e.target.value.slice(0, 1000))}
+            placeholder="Reglas internas, premio para el ganador, lo que quieras..."
+            rows={4}
+            className="w-full px-3 py-2 rounded-lg bg-elevated border border-border text-sm-s text-text placeholder:text-muted outline-none focus:border-accent resize-none"
+          />
+          <div className="flex items-center justify-between">
+            <p className="text-xs-s text-muted">{draft.length}/1000</p>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                disabled={saving}
+                onClick={() => setEditing(false)}
+                className="flex items-center gap-1 px-3 py-1.5 rounded-md bg-elevated border border-border text-xs-s font-semibold text-muted"
+              >
+                <X size={12} />
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={saving}
+                onClick={async () => {
+                  const next = draft.trim() ? draft.trim() : null;
+                  await onSave(next);
+                  setEditing(false);
+                }}
+                className="flex items-center gap-1 px-3 py-1.5 rounded-md bg-accent text-accent-on text-xs-s font-semibold disabled:opacity-50"
+              >
+                <Check size={12} />
+                Guardar
+              </button>
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
 
 function Row({ row, isMe }: { row: StandingRow; isMe: boolean }) {
   const initials = row.username.slice(0, 1).toUpperCase();
@@ -234,6 +329,21 @@ export function LeagueDetailPage() {
               </p>
             </div>
           )}
+
+          <LeagueDescriptionBlock
+            leagueId={leagueId}
+            description={league.description ?? null}
+            canEdit={isAdmin}
+            saving={updateLeague.isPending}
+            onSave={async (next) => {
+              try {
+                await updateLeague.mutateAsync({ id: leagueId, description: next });
+                toast.success(next ? 'Descripción actualizada' : 'Descripción eliminada');
+              } catch {
+                toast.error('No se pudo guardar la descripción');
+              }
+            }}
+          />
 
           <div className="p-4 rounded-lg bg-card border border-border flex flex-col gap-3">
             {[

@@ -23,6 +23,29 @@ export async function checkAchievements(
   switch (event.type) {
     case 'prediction_saved': {
       await maybeAward(userId, 'first_prediction', awarded);
+      // Cheap counters that only need to look at the user's distinct matches
+      // predicted. Computed once and reused for every rule below.
+      const distinctMatches = await loadDistinctPredictedMatchIds(userId);
+
+      // Small grindy logros — easy wins to keep newcomers engaged.
+      if (distinctMatches.length >= 10) await maybeAward(userId, 'predictor_10', awarded);
+      if (distinctMatches.length >= 30) await maybeAward(userId, 'predictor_30', awarded);
+
+      // group_completionist: 72 distinct group-stage matches predicted.
+      // early_bird: same set, but completed before the opening match kickoff.
+      await evaluateGroupCompletion(userId, distinctMatches, awarded);
+
+      // night_owl: predicted between 00:00 and 04:59 in the user's timezone.
+      // We don't store timezones server-side, so we approximate with the
+      // request's `x-user-hour` header (set by the client). Bail out silently
+      // when missing — the next save will get another chance.
+      const hourHeader = event.userHour;
+      if (typeof hourHeader === 'number' && hourHeader >= 0 && hourHeader < 5) {
+        await maybeAward(userId, 'night_owl', awarded);
+      }
+
+      // group_sampler: at least one prediction in each of the 12 groups.
+      await evaluateGroupSampler(userId, awarded);
       break;
     }
 
@@ -114,6 +137,70 @@ async function maybeAwardInviter(leagueId: number, awarded: string[]): Promise<v
     .where(eq(leagueMembers.leagueId, leagueId));
   if (memberCount >= 5) {
     await maybeAward(league.adminId, 'invite_5', awarded);
+  }
+}
+
+// ─── Save-time evaluators ────────────────────────────────────────────────────
+
+async function loadDistinctPredictedMatchIds(userId: number): Promise<number[]> {
+  const rows = await db
+    .selectDistinct({ matchId: predictions.matchId })
+    .from(predictions)
+    .where(eq(predictions.userId, userId));
+  return rows.map((r) => r.matchId);
+}
+
+/**
+ * Award group_completionist when the user has a prediction for every group
+ * stage match (round = 'group'), and early_bird when that happened before the
+ * opening match kicked off.
+ *
+ * Implementation note: we load the group matches once and intersect with the
+ * user's distinct prediction set. Cheap because there are only 72 group
+ * matches; bails out early when the user has fewer total predictions.
+ */
+async function evaluateGroupCompletion(
+  userId: number,
+  distinctMatches: number[],
+  awarded: string[],
+): Promise<void> {
+  if (distinctMatches.length < 72) return; // fast path
+
+  const groupMatches = await db
+    .select({ id: matches.id, kickoffUtc: matches.kickoffUtc })
+    .from(matches)
+    .where(eq(matches.round, 'group'));
+  if (groupMatches.length === 0) return;
+
+  const predictedSet = new Set(distinctMatches);
+  for (const m of groupMatches) {
+    if (!predictedSet.has(m.id)) return;
+  }
+
+  await maybeAward(userId, 'group_completionist', awarded);
+
+  // early_bird requires the save to happen before the opening match kickoff.
+  const opening = groupMatches.reduce(
+    (min, m) => (m.kickoffUtc < min ? m.kickoffUtc : min),
+    groupMatches[0].kickoffUtc,
+  );
+  if (new Date() < new Date(opening)) {
+    await maybeAward(userId, 'early_bird', awarded);
+  }
+}
+
+/** group_sampler: predicted at least one match in each of the 12 groups. */
+async function evaluateGroupSampler(userId: number, awarded: string[]): Promise<void> {
+  const rows = await db
+    .selectDistinct({ group: matches.group })
+    .from(predictions)
+    .innerJoin(matches, eq(predictions.matchId, matches.id))
+    .where(
+      and(eq(predictions.userId, userId), sql`${matches.group} IS NOT NULL`),
+    );
+  const distinctGroups = rows.map((r) => r.group).filter((g): g is string => g !== null);
+  if (distinctGroups.length >= 12) {
+    await maybeAward(userId, 'group_sampler', awarded);
   }
 }
 
@@ -267,12 +354,13 @@ async function evaluatePerfectGroup(
 export async function recomputeUserAchievements(userId: number): Promise<string[]> {
   const awarded: string[] = [];
 
-  // prediction_saved
-  const [{ value: predCount }] = await db
-    .select({ value: count() })
-    .from(predictions)
-    .where(eq(predictions.userId, userId));
-  if (predCount > 0) await maybeAward(userId, 'first_prediction', awarded);
+  // prediction_saved family — derive everything from distinct matches.
+  const distinctMatches = await loadDistinctPredictedMatchIds(userId);
+  if (distinctMatches.length > 0) await maybeAward(userId, 'first_prediction', awarded);
+  if (distinctMatches.length >= 10) await maybeAward(userId, 'predictor_10', awarded);
+  if (distinctMatches.length >= 30) await maybeAward(userId, 'predictor_30', awarded);
+  await evaluateGroupCompletion(userId, distinctMatches, awarded);
+  await evaluateGroupSampler(userId, awarded);
 
   // league_joined family
   const [{ value: leagueCount }] = await db
@@ -319,7 +407,7 @@ export async function recomputeUserAchievements(userId: number): Promise<string[
 }
 
 export type AchievementEvent =
-  | { type: 'prediction_saved'; matchId: number }
+  | { type: 'prediction_saved'; matchId: number; userHour?: number }
   | { type: 'prediction_scored'; matchId: number; points: number }
   | { type: 'league_joined'; leagueId: number }
   | { type: 'league_created'; leagueId: number }

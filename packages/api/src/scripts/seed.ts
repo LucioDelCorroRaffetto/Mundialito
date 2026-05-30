@@ -685,6 +685,12 @@ const ACHIEVEMENTS_DATA = [
   { slug: 'fantasy_legend', name: 'Leyenda del Fantasy', description: 'Fuiste el mejor en fantasy de tu liga', icon: '🌟', pointsBonus: 50 },
   { slug: 'perfect_knockout', name: 'Adivino de Octavos', description: 'Acertaste todos los resultados de octavos de final', icon: '🎰', pointsBonus: 60 },
   { slug: 'underdog', name: 'El Underdog', description: 'Ganaste la liga sin haber estado en top 3 antes de cuartos', icon: '🐺', pointsBonus: 80 },
+  // Small fun logros — short feedback loops to keep users engaged.
+  { slug: 'predictor_10', name: 'Tomando Confianza', description: 'Pronosticaste 10 partidos', icon: '🪙', pointsBonus: 3 },
+  { slug: 'predictor_30', name: 'Quinielero Serio', description: 'Pronosticaste 30 partidos', icon: '📝', pointsBonus: 8 },
+  { slug: 'group_completionist', name: 'No Te Falta Ninguno', description: 'Pronosticaste los 72 partidos de fase de grupos', icon: '🧩', pointsBonus: 15 },
+  { slug: 'group_sampler', name: 'Recorrido Mundial', description: 'Pronosticaste al menos un partido de cada grupo', icon: '🌍', pointsBonus: 8 },
+  { slug: 'night_owl', name: 'Hora Bruja', description: 'Guardaste un pronóstico entre las 0 y las 5 de la mañana', icon: '🌙', pointsBonus: 5 },
 ];
 
 async function seedAchievements(): Promise<void> {

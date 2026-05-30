@@ -21,6 +21,7 @@ export function LeagueCreatePage() {
   const navigate = useNavigate();
   const [isPublic, setIsPublic] = useState(false);
   const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [description, setDescription] = useState('');
   const [predictionsVisibility, setPredictionsVisibility] =
     useState<'after_kickoff' | 'always'>('after_kickoff');
   const createLeague = useCreateLeague();
@@ -35,6 +36,7 @@ export function LeagueCreatePage() {
         name: data.name,
         isPublic,
         imageUrl,
+        description: description.trim() ? description.trim() : null,
         predictionsVisibility,
       });
       toast.success('¡Liga creada!');
@@ -67,6 +69,20 @@ export function LeagueCreatePage() {
           {...register('name')}
           error={errors.name?.message}
         />
+
+        <div className="flex flex-col gap-1.5">
+          <label className="text-sm font-semibold text-text">
+            Descripción <span className="text-muted font-normal">(opcional)</span>
+          </label>
+          <textarea
+            value={description}
+            onChange={(e) => setDescription(e.target.value.slice(0, 1000))}
+            placeholder="Reglas internas, premio para el ganador, lo que quieras..."
+            rows={3}
+            className="w-full px-3 py-2 rounded-lg bg-card border border-border text-sm-s text-text placeholder:text-muted outline-none focus:border-accent resize-none"
+          />
+          <p className="text-xs-s text-muted text-right">{description.length}/1000</p>
+        </div>
 
         <div className="flex flex-col gap-2">
           <p className="text-sm font-semibold text-text">Visibilidad</p>

@@ -9,6 +9,7 @@ export const updateLeagueSchema = z.object({
   name: z.string().min(3).max(60).optional(),
   isPublic: z.boolean().optional(),
   stakesMeme: z.string().max(120).nullable().optional(),
+  description: z.string().max(1000).nullable().optional(),
   imageUrl: z.string().max(400_000).nullable().optional(),
   predictionsVisibility: z.enum(['after_kickoff', 'always']).optional(),
 });

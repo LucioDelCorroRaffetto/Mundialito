@@ -10,13 +10,14 @@ export const createLeagueSchema = z.object({
   name: z.string().min(3).max(60),
   isPublic: z.boolean().default(false),
   stakesMeme: z.string().max(120).optional().nullable(),
+  description: z.string().max(1000).optional().nullable(),
   imageUrl: z.string().max(400_000).optional().nullable(),
   predictionsVisibility: z.enum(['after_kickoff', 'always']).optional(),
 });
 
 export async function createLeagueHandler(req: Request, res: Response) {
   const userId = req.user!.id;
-  const { name, isPublic, stakesMeme, imageUrl, predictionsVisibility } =
+  const { name, isPublic, stakesMeme, description, imageUrl, predictionsVisibility } =
     req.body as z.infer<typeof createLeagueSchema>;
 
   // Generar código único (reintentar si colisiona)
@@ -35,6 +36,7 @@ export async function createLeagueHandler(req: Request, res: Response) {
     isPublic,
     adminId: userId,
     stakesMeme: stakesMeme ?? null,
+    description: description ?? null,
     imageUrl: imageUrl ?? null,
     ...(predictionsVisibility ? { predictionsVisibility } : {}),
   }).returning();
