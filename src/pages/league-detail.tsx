@@ -9,7 +9,7 @@ import { SkeletonList } from '@/shared/components/skeleton';
 import { LeagueBannerPicker } from '@/shared/components/ui/image-picker';
 import { useLeague, useLeagueStandings, useLeaveLeague, useUpdateLeague, type StandingRow } from '@/shared/hooks/use-leagues';
 import { useAuthStore } from '@/shared/stores/auth-store';
-import { LogrosGateBanner, podiumStyle } from '@/shared/components/logros-gate-banner';
+import { podiumStyle } from '@/shared/components/logros-gate-banner';
 
 const TABS = ['Tabla', 'Info'] as const;
 type Tab = (typeof TABS)[number];
@@ -285,10 +285,6 @@ export function LeagueDetailPage() {
       </div>
 
       {tab === 'Tabla' && (
-        <>
-          <div className="mt-3">
-            <LogrosGateBanner shown={standingsData?.meta.bonusesCountTowardRank === false} />
-          </div>
         <div className="mt-3 mx-4 rounded-lg bg-card border border-border overflow-hidden">
           <div className="flex items-center gap-3 px-4 py-2 border-b border-border bg-elevated">
             <span className="w-6 text-center text-xs-s text-muted">#</span>
@@ -310,7 +306,6 @@ export function LeagueDetailPage() {
             ))
           )}
         </div>
-        </>
       )}
 
       {tab === 'Info' && (
