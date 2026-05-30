@@ -37,9 +37,10 @@ function GoldRing({ children }: { children: React.ReactNode }) {
 /** The presidential badge chip shown next to the username */
 function PresidentBadge() {
   return (
-    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold
-                     bg-gradient-to-r from-yellow-500/20 to-amber-500/20
-                     border border-yellow-500/40 text-yellow-300 flex-shrink-0">
+    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold flex-shrink-0
+                     bg-gradient-to-r from-yellow-400/40 to-amber-400/40 border-amber-500 text-amber-800
+                     dark:from-yellow-500/20 dark:to-amber-500/20 dark:border-yellow-500/40 dark:text-yellow-300
+                     border">
       🏛️ FIFA
     </span>
   );
@@ -150,11 +151,12 @@ export function UserProfilePage() {
 
       {/* ── Header ─────────────────────────────────────────────────────── */}
       {isAdmin ? (
-        /* Presidential header — gold gradient banner */
+        /* Presidential header — gold gradient banner. In light mode we boost
+            the gradient density and switch the title to amber-700 because
+            yellow-300 disappears on white. */
         <div className="relative overflow-hidden">
-          {/* gradient background */}
-          <div className="absolute inset-0 bg-gradient-to-b from-yellow-500/10 via-amber-500/5 to-transparent pointer-events-none" />
-          <div className="absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-yellow-500/30 to-transparent" />
+          <div className="absolute inset-0 bg-gradient-to-b from-yellow-500/25 via-amber-500/15 to-transparent dark:from-yellow-500/10 dark:via-amber-500/5 pointer-events-none" />
+          <div className="absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-amber-600/50 dark:via-yellow-500/30 to-transparent" />
 
           <div className="relative flex items-center gap-3 px-4 pt-5 pb-3">
             <button
@@ -165,8 +167,8 @@ export function UserProfilePage() {
               <ArrowLeft size={18} className="text-text" />
             </button>
             <div className="flex-1 min-w-0">
-              <h1 className="text-lg-s font-display font-bold text-yellow-300">Perfil Oficial</h1>
-              <p className="text-xs-s text-yellow-500/70">FIFA World Cup 2026™</p>
+              <h1 className="text-lg-s font-display font-bold text-amber-700 dark:text-yellow-300">Perfil Oficial</h1>
+              <p className="text-xs-s text-amber-700/70 dark:text-yellow-500/70">FIFA World Cup 2026™</p>
             </div>
             <span className="text-2xl">🏆</span>
           </div>
@@ -217,7 +219,7 @@ export function UserProfilePage() {
           <div className="flex items-center gap-2 flex-wrap">
             <h2 className={cn(
               'text-xl-s font-display font-bold truncate',
-              isAdmin ? 'text-yellow-200' : 'text-text',
+              isAdmin ? 'text-amber-700 dark:text-yellow-200' : 'text-text',
             )}>
               {profile.username}
             </h2>
@@ -225,7 +227,7 @@ export function UserProfilePage() {
           </div>
 
           {ap && (
-            <p className="text-xs-s text-yellow-500/80 font-medium mt-0.5">{ap.role}</p>
+            <p className="text-xs-s font-medium mt-0.5 text-amber-700/80 dark:text-yellow-500/80">{ap.role}</p>
           )}
           {!ap && profile.leagueCount > 0 && (
             <p className="text-sm-s text-muted">
@@ -235,19 +237,20 @@ export function UserProfilePage() {
         </div>
       </div>
 
-      {/* ── Bio (admin only) ───────────────────────────────────────────── */}
+      {/* ── Bio (admin only) — dual mode: warm parchment in light, soft gold
+            on dark. The italic body text needs strong contrast against the
+            tinted background or the quote disappears. */}
       {ap && (
         <motion.div
           initial={{ opacity: 0, y: 6 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 }}
-          className="mx-4 p-4 rounded-xl bg-gradient-to-br from-yellow-500/10 to-amber-600/5
-                     border border-yellow-500/20"
+          className="mx-4 p-4 rounded-xl border bg-gradient-to-br from-amber-100 to-yellow-50 border-amber-400/50 dark:from-yellow-500/10 dark:to-amber-600/5 dark:border-yellow-500/20"
         >
-          <p className="text-sm-s text-yellow-100/80 leading-relaxed italic">
+          <p className="text-sm-s leading-relaxed italic text-amber-900 dark:text-yellow-100/80">
             "{ap.bio}"
           </p>
-          <p className="text-xs-s text-yellow-500/60 mt-2 text-right">— {profile.username}, {ap.role}</p>
+          <p className="text-xs-s mt-2 text-right text-amber-700/80 dark:text-yellow-500/60">— {profile.username}, {ap.role}</p>
         </motion.div>
       )}
 
@@ -295,7 +298,7 @@ export function UserProfilePage() {
                   className={cn(
                     'p-3 rounded-lg border flex items-center gap-3',
                     isPresidentBadge
-                      ? 'bg-gradient-to-r from-yellow-500/10 to-amber-600/5 border-yellow-500/30'
+                      ? 'bg-gradient-to-r from-amber-100 to-yellow-50 border-amber-400/60 dark:from-yellow-500/10 dark:to-amber-600/5 dark:border-yellow-500/30'
                       : 'bg-card border-border',
                   )}
                 >
@@ -303,17 +306,20 @@ export function UserProfilePage() {
                   <div className="flex-1 min-w-0">
                     <p className={cn(
                       'text-sm-s font-semibold',
-                      isPresidentBadge ? 'text-yellow-200' : 'text-text',
+                      isPresidentBadge ? 'text-amber-800 dark:text-yellow-200' : 'text-text',
                     )}>
                       {a.name}
                     </p>
-                    <p className="text-xs-s text-muted">{a.description}</p>
+                    <p className={cn(
+                      'text-xs-s',
+                      isPresidentBadge ? 'text-amber-700/80 dark:text-muted' : 'text-muted',
+                    )}>{a.description}</p>
                   </div>
                   <span
                     className={cn(
                       'inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold border flex-shrink-0',
                       isPresidentBadge
-                        ? 'bg-yellow-400/20 text-yellow-300 border-yellow-400/40'
+                        ? 'bg-yellow-400/40 text-amber-800 border-amber-500/60 dark:bg-yellow-400/20 dark:text-yellow-300 dark:border-yellow-400/40'
                         : (TIER_COLORS[a.tier] ?? 'bg-elevated text-muted border-border'),
                     )}
                   >

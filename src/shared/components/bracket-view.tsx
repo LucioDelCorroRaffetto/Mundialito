@@ -32,13 +32,13 @@ function slotLabel(matchNumber: number, side: 'home' | 'away', roundIndex: numbe
   return 'Por definir';
 }
 
-// ─── Round accent colours ────────────────────────────────────────────────────
+// ─── Round accent colours — dual-mode pills ──────────────────────────────────
 const ROUND_STYLES = [
-  { label: 'R32',     pill: 'bg-slate-700/60 text-slate-300',   accent: '#64748b', lineColor: 'rgba(100,116,139,0.35)' },
-  { label: 'Octavos', pill: 'bg-blue-900/60 text-blue-300',    accent: '#60a5fa', lineColor: 'rgba(96,165,250,0.35)'  },
-  { label: 'Cuartos', pill: 'bg-violet-900/60 text-violet-300', accent: '#a78bfa', lineColor: 'rgba(167,139,250,0.35)' },
-  { label: 'Semis',   pill: 'bg-orange-900/60 text-orange-300', accent: '#fb923c', lineColor: 'rgba(251,146,60,0.35)'  },
-  { label: 'Final',   pill: 'bg-yellow-900/60 text-yellow-300', accent: '#ffc857', lineColor: 'rgba(255,200,87,0.5)'   },
+  { label: 'R32',     pill: 'bg-slate-200 text-slate-700 dark:bg-slate-700/60 dark:text-slate-300',     accent: '#64748b', lineColor: 'rgba(100,116,139,0.45)' },
+  { label: 'Octavos', pill: 'bg-blue-100 text-blue-700 dark:bg-blue-900/60 dark:text-blue-300',         accent: '#3b82f6', lineColor: 'rgba(59,130,246,0.45)'  },
+  { label: 'Cuartos', pill: 'bg-violet-100 text-violet-700 dark:bg-violet-900/60 dark:text-violet-300', accent: '#8b5cf6', lineColor: 'rgba(139,92,246,0.45)'  },
+  { label: 'Semis',   pill: 'bg-orange-100 text-orange-700 dark:bg-orange-900/60 dark:text-orange-300', accent: '#f97316', lineColor: 'rgba(249,115,22,0.45)'  },
+  { label: 'Final',   pill: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/60 dark:text-yellow-300', accent: '#eab308', lineColor: 'rgba(234,179,8,0.55)'   },
 ];
 
 // ─── Layout constants ─────────────────────────────────────────────────────────
@@ -174,19 +174,19 @@ function MatchCard({ match, matchNumber, roundIndex, teamMap }: MatchCardProps) 
     <div
       className={cn(
         'flex items-center gap-1.5 px-2 min-w-0 relative',
-        isTop && 'border-b border-white/5',
-        won && 'bg-white/5',
+        isTop && 'border-b border-border',
+        won && 'bg-accent/10 dark:bg-white/5',
       )}
       style={{ height: CARD_H / 2 }}
     >
       {tbd ? (
-        <span className="text-[7px] leading-tight text-white/25 flex-1 truncate italic">{label}</span>
+        <span className="text-[7px] leading-tight text-muted/50 flex-1 truncate italic">{label}</span>
       ) : (
         <>
           <TeamFlag code={team.code} emoji={team.flag} size={16} />
           <span className={cn(
             'flex-1 text-[9px] font-bold truncate leading-tight tracking-wide',
-            won ? 'text-white' : 'text-white/50',
+            won ? 'text-text' : 'text-muted',
           )}>
             {team.code}
           </span>
@@ -195,7 +195,7 @@ function MatchCard({ match, matchNumber, roundIndex, teamMap }: MatchCardProps) 
       {showScore && score != null && (
         <span className={cn(
           'text-[11px] font-black tabular-nums flex-shrink-0 min-w-[14px] text-right',
-          isLive ? 'text-red-400' : won ? 'text-accent' : 'text-white/40',
+          isLive ? 'text-red-500 dark:text-red-400' : won ? 'text-accent' : 'text-muted/70',
         )}>
           {score}
         </span>
@@ -207,9 +207,9 @@ function MatchCard({ match, matchNumber, roundIndex, teamMap }: MatchCardProps) 
     <div
       className={cn(
         'flex flex-col overflow-hidden flex-shrink-0 relative',
-        'rounded-lg border border-white/8 bg-[#1a1f2e]',
+        'rounded-lg border border-border bg-card',
         isLive && 'border-red-500/60 shadow-[0_0_8px_rgba(239,68,68,0.3)]',
-        !isLive && 'shadow-[0_2px_8px_rgba(0,0,0,0.4)]',
+        !isLive && 'shadow-sm dark:shadow-[0_2px_8px_rgba(0,0,0,0.4)]',
       )}
       style={{
         width: CARD_W,
@@ -221,7 +221,7 @@ function MatchCard({ match, matchNumber, roundIndex, teamMap }: MatchCardProps) 
       {/* Subtle gradient overlay for depth */}
       <div
         className="absolute inset-0 pointer-events-none"
-        style={{ background: `linear-gradient(135deg, ${accentColor}08 0%, transparent 60%)` }}
+        style={{ background: `linear-gradient(135deg, ${accentColor}14 0%, transparent 60%)` }}
       />
       {row(homeTbd, homeLabel, homeTeam, homeWon, match?.homeScore, true)}
       {row(awayTbd, awayLabel, awayTeam, awayWon, match?.awayScore, false)}
@@ -332,7 +332,7 @@ export function BracketView({ matches, teamMap }: Props) {
       {/* Third-place match */}
       <div className="mt-3 px-1">
         <div className="flex items-center gap-2 mb-2">
-          <span className="text-[9px] font-bold text-orange-300/70 uppercase tracking-widest px-2.5 py-1 rounded-full bg-orange-900/30">
+          <span className="text-[9px] font-bold uppercase tracking-widest px-2.5 py-1 rounded-full bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300/70">
             3er Puesto
           </span>
         </div>
@@ -347,12 +347,12 @@ export function BracketView({ matches, teamMap }: Props) {
       {/* Legend */}
       <div className="mt-4 px-1 flex items-center gap-5 flex-wrap">
         {ROUND_STYLES.map((rs) => (
-          <span key={rs.label} className="flex items-center gap-1.5 text-[9px] text-white/40">
-            <span className="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ background: rs.accent + '80', border: `1px solid ${rs.accent}60` }} />
+          <span key={rs.label} className="flex items-center gap-1.5 text-[9px] text-muted">
+            <span className="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ background: rs.accent + '80', border: `1px solid ${rs.accent}80` }} />
             {rs.label}
           </span>
         ))}
-        <span className="flex items-center gap-1.5 text-[9px] text-white/40">
+        <span className="flex items-center gap-1.5 text-[9px] text-muted">
           <span className="w-2.5 h-2.5 rounded-sm bg-red-500/40 border border-red-500/60 flex-shrink-0" />
           En vivo
         </span>

@@ -7,6 +7,8 @@ import { accentList, type ThemeMode } from '@/theme/palettes';
 import { usePushNotifications } from '@/shared/hooks/use-push';
 import { apiClient } from '@/shared/lib/api-client';
 import { useUpdateUsername, useUpdateAvatar } from '@/shared/hooks/use-auth';
+import { useAdminProfile } from '@/shared/hooks/use-user-profile';
+import { Link } from 'react-router-dom';
 import { AvatarPicker } from '@/shared/components/ui/image-picker';
 import { toast } from 'sonner';
 
@@ -33,6 +35,7 @@ export function SettingsPage() {
   const { isSubscribed, isLoading: pushLoading, subscribe, unsubscribe } = usePushNotifications();
   const updateUsername = useUpdateUsername();
   const updateAvatar = useUpdateAvatar();
+  const { data: adminPointer } = useAdminProfile();
   const [editingUsername, setEditingUsername] = useState(false);
   const [usernameInput, setUsernameInput] = useState('');
   const [sendingTest, setSendingTest] = useState(false);
@@ -305,9 +308,25 @@ export function SettingsPage() {
           Cerrar sesión
         </button>
 
-        {/* Author credit */}
+        {/* Author credit — untouched layout. The 🏛️ in front of "Mundialito
+            2026" doubles as a discreet shortcut to the Presidente's profile
+            for anyone curious. Same line, same rhythm; the credit stays the
+            star. */}
         <div className="flex flex-col items-center gap-1.5 pt-2 pb-1">
-          <p className="text-xs-s text-muted/50">⚽ Mundialito 2026 · Hecho con ❤️ por</p>
+          <p className="text-xs-s text-muted/50">
+            {adminPointer && adminPointer.id !== user?.id ? (
+              <Link
+                to={`/u/${adminPointer.id}`}
+                aria-label="Perfil del Presidente FIFA"
+                className="hover:text-accent transition-colors"
+              >
+                🏛️
+              </Link>
+            ) : (
+              '⚽'
+            )}{' '}
+            Mundialito 2026 · Hecho con ❤️ por
+          </p>
           <p className="text-xs-s text-muted/70 font-medium">Lucio Del Corro Raffetto</p>
           <div className="flex items-center gap-3">
             <a

@@ -4,7 +4,6 @@ import { Settings, ChevronRight, Star, LogOut } from 'lucide-react';
 import { useAuthStore } from '@/shared/stores/auth-store';
 import { useMyStats } from '@/shared/hooks/use-my-stats';
 import { useMyAchievements, useAllAchievements } from '@/shared/hooks/use-achievements';
-import { useAdminProfile } from '@/shared/hooks/use-user-profile';
 
 function StatCard({ label, value }: { label: string; value: string | number }) {
   return (
@@ -22,7 +21,6 @@ export function ProfilePage() {
   const { data: stats, isLoading: statsLoading } = useMyStats();
   const { data: myAchievementsData } = useMyAchievements();
   const { data: allAchievementsData } = useAllAchievements();
-  const { data: adminPointer } = useAdminProfile();
 
   const myAchievementSlugs = new Set((myAchievementsData?.data ?? []).map((a) => a.slug));
   const allAchievements = allAchievementsData?.data ?? [];
@@ -162,17 +160,6 @@ export function ProfilePage() {
             <p className="text-base-s font-semibold text-red-400">Cerrar sesión</p>
           </div>
         </button>
-
-        {/* Tiny Easter egg — discreet link to the Presidente's profile for
-            anyone curious enough to scroll all the way down. */}
-        {adminPointer && adminPointer.id !== user.id && (
-          <Link
-            to={`/u/${adminPointer.id}`}
-            className="self-center mt-4 text-[11px] text-muted/60 hover:text-yellow-400/80 transition-colors tracking-wide"
-          >
-            🏛️ ¿quién armó todo esto?
-          </Link>
-        )}
       </div>
     </div>
   );
