@@ -59,6 +59,23 @@ export default defineConfig({
   resolve: {
     alias: { '@': path.resolve(__dirname, './src') },
   },
+  build: {
+    // Split heavy vendor libs into their own long-cacheable chunks so an
+    // update to app code doesn't bust the framer/charts cache, and so the
+    // main chunk stays trim. Anything not listed here stays in the small
+    // 'vendor' chunk.
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          react: ['react', 'react-dom', 'react-router-dom'],
+          framer: ['framer-motion'],
+          query: ['@tanstack/react-query', 'axios'],
+          forms: ['react-hook-form', '@hookform/resolvers', 'zod'],
+        },
+      },
+    },
+    chunkSizeWarningLimit: 600,
+  },
   server: {
     host: true,
     port: process.env.PORT ? Number(process.env.PORT) : 5174,
