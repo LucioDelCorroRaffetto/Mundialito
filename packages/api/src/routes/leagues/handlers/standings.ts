@@ -4,6 +4,7 @@ import { predictions, leagueMembers, users, matches, userAchievements, achieveme
 import { NotFoundError, AppError } from '../../../lib/errors.js';
 import { and, eq, inArray, sql } from 'drizzle-orm';
 import { calculatePoints } from '../../../lib/scoring.js';
+import { tournamentHasStarted } from '../../../lib/tournament-clock.js';
 
 // Tier priority for picking the "top" badge (higher = better)
 const TIER_PRIORITY: Record<string, number> = {
@@ -103,7 +104,10 @@ export async function standingsHandler(req: Request, res: Response) {
     .groupBy(userAchievements.userId);
   const bonusByUser = new Map(achievementBonuses.map((r) => [r.userId, Number(r.totalBonus)]));
 
-  // Build sorted standings (prode points + achievement bonus)
+  // Same gate as the global leaderboard: pre-tournament, ignore the
+  // achievement bonus when ranking (return it for the UI badge anyway).
+  const includeBonusInTotal = await tournamentHasStarted();
+
   const standings = members
     .map((m) => {
       const predPoints = pointsByUser.get(m.userId)?.total ?? 0;
@@ -112,7 +116,7 @@ export async function standingsHandler(req: Request, res: Response) {
         userId: m.userId,
         username: m.username,
         avatarUrl: m.avatarUrl,
-        points: predPoints + bonus,
+        points: predPoints + (includeBonusInTotal ? bonus : 0),
         achievementBonus: bonus,
         matchesPlayed: pointsByUser.get(m.userId)?.matches ?? 0,
         topBadge: badgesByUser.get(m.userId) ?? null,

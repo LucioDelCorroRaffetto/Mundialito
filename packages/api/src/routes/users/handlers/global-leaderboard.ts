@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { db } from '../../../db/index.js';
 import { predictions, users, leagueMembers, userAchievements, achievements } from '../../../db/schema/index.js';
 import { eq, sql, desc, inArray, notInArray } from 'drizzle-orm';
+import { tournamentHasStarted } from '../../../lib/tournament-clock.js';
 
 // Tier priority for picking the "top" badge (higher = better)
 const TIER_PRIORITY: Record<string, number> = {
@@ -107,6 +108,13 @@ export async function globalLeaderboardHandler(req: Request, res: Response) {
     .groupBy(userAchievements.userId);
   const bonusByUser = new Map(achievementBonuses.map((r) => [r.userId, Number(r.totalBonus)]));
 
+  // Pre-tournament: don't fold achievement bonuses into the ranked total so
+  // grindy logros (predictor_10, group_sampler, …) don't give people a head
+  // start on the leaderboard before any actual match is played. The bonus is
+  // still returned so the UI can show "+X from logros" badges, just doesn't
+  // count toward the rank.
+  const includeBonusInTotal = await tournamentHasStarted();
+
   const enriched = rows.map((row) => {
     const predPts = Number(row.totalPoints);
     const bonus = bonusByUser.get(row.userId) ?? 0;
@@ -114,7 +122,7 @@ export async function globalLeaderboardHandler(req: Request, res: Response) {
       userId: row.userId,
       username: row.username,
       avatarUrl: row.avatarUrl,
-      totalPoints: predPts + bonus,
+      totalPoints: predPts + (includeBonusInTotal ? bonus : 0),
       achievementBonus: bonus,
       leagueCount: leagueCountByUser.get(row.userId) ?? 0,
       predictionCount: Number(row.predictionCount),

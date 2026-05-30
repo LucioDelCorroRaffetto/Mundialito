@@ -64,6 +64,17 @@ export async function checkAchievements(
       await evaluateHotStreaks(userId, history, awarded);
       await evaluateTripleExact(userId, history, awarded);
       await evaluatePerfectGroup(userId, event.matchId, history, awarded);
+
+      // In-tournament feel-good logros. None of these can fire before a
+      // match is actually played, which is why they're inside this case.
+      const triggering = history.find((r) => r.matchId === event.matchId);
+      if (triggering) {
+        await evaluateBullseyeZero(userId, triggering, awarded);
+        await evaluateGoalfest(userId, triggering, awarded);
+        await evaluateSurvivor(userId, history, awarded);
+        await evaluateWeekendPerfect(userId, triggering, history, awarded);
+        await evaluateMarathon(userId, history, awarded);
+      }
       break;
     }
 
@@ -292,6 +303,87 @@ async function evaluateTripleExact(
   }
 }
 
+/** Exact prediction on a 0-0 match. Rare and satisfying. */
+async function evaluateBullseyeZero(
+  userId: number,
+  triggering: ScoredRow,
+  awarded: string[],
+): Promise<void> {
+  if (triggering.points !== 5) return;
+  if (triggering.matchHome !== 0 || triggering.matchAway !== 0) return;
+  await maybeAward(userId, 'bullseye_zero', awarded);
+}
+
+/** Exact prediction on a high-scoring match (4+ total goals). */
+async function evaluateGoalfest(
+  userId: number,
+  triggering: ScoredRow,
+  awarded: string[],
+): Promise<void> {
+  if (triggering.points !== 5) return;
+  if (triggering.matchHome == null || triggering.matchAway == null) return;
+  if (triggering.matchHome + triggering.matchAway < 4) return;
+  await maybeAward(userId, 'goalfest', awarded);
+}
+
+/** Scored after 3 consecutive zero-point predictions. Reward for the comeback. */
+async function evaluateSurvivor(
+  userId: number,
+  history: ScoredRow[],
+  awarded: string[],
+): Promise<void> {
+  if (history.length < 4) return;
+  const last4 = history.slice(-4);
+  if (last4[3].points <= 0) return;
+  if (last4[0].points !== 0 || last4[1].points !== 0 || last4[2].points !== 0) return;
+  await maybeAward(userId, 'survivor', awarded);
+}
+
+/**
+ * Scored on every match of the same calendar date (UTC) as the triggering
+ * match, provided that day had at least 3 matches finished. Keeps the bar
+ * meaningful — a single-match day doesn't count.
+ */
+async function evaluateWeekendPerfect(
+  userId: number,
+  triggering: ScoredRow,
+  history: ScoredRow[],
+  awarded: string[],
+): Promise<void> {
+  const day = triggering.kickoffUtc.slice(0, 10);
+
+  const dayMatches = await db
+    .select({ id: matches.id, status: matches.status })
+    .from(matches)
+    .where(sql`substr(${matches.kickoffUtc}, 1, 10) = ${day}`);
+
+  if (dayMatches.length < 3) return;
+  if (dayMatches.some((m) => m.status !== 'finished')) return;
+
+  const userScored = new Map<number, number>();
+  for (const r of history) {
+    if (r.kickoffUtc.slice(0, 10) === day) userScored.set(r.matchId, r.points);
+  }
+  for (const m of dayMatches) {
+    const pts = userScored.get(m.id);
+    if (pts == null || pts <= 0) return;
+  }
+  await maybeAward(userId, 'weekend_perfect', awarded);
+}
+
+/** Scored at least one prediction across 5+ different calendar days. */
+async function evaluateMarathon(
+  userId: number,
+  history: ScoredRow[],
+  awarded: string[],
+): Promise<void> {
+  const days = new Set<string>();
+  for (const r of history) {
+    if (r.points > 0) days.add(r.kickoffUtc.slice(0, 10));
+  }
+  if (days.size >= 5) await maybeAward(userId, 'marathon', awarded);
+}
+
 async function evaluatePerfectGroup(
   userId: number,
   triggeringMatchId: number,
@@ -389,6 +481,16 @@ export async function recomputeUserAchievements(userId: number): Promise<string[
   }
   await evaluateHotStreaks(userId, history, awarded);
   await evaluateTripleExact(userId, history, awarded);
+  await evaluateSurvivor(userId, history, awarded);
+  await evaluateMarathon(userId, history, awarded);
+
+  // Per-match logros: replay them across the user's whole history so the
+  // backfill grants anything they earned in the past.
+  for (const row of history) {
+    await evaluateBullseyeZero(userId, row, awarded);
+    await evaluateGoalfest(userId, row, awarded);
+    await evaluateWeekendPerfect(userId, row, history, awarded);
+  }
 
   // Perfect group: try every group with finished matches
   const groupsWithFinished = await db

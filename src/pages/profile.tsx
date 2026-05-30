@@ -141,7 +141,7 @@ export function ProfilePage() {
         {/* Hidden treat for the curious: shortcut to Infantino's profile. */}
         {adminPointer && adminPointer.id !== user.id && (
           <Link
-            to={`/users/${adminPointer.id}`}
+            to={`/u/${adminPointer.id}`}
             className="flex items-center gap-3 p-4 rounded-lg bg-yellow-500/10 border border-yellow-500/30 hover:border-yellow-500/60 transition-colors"
           >
             <div className="w-9 h-9 rounded-md bg-yellow-500/20 flex items-center justify-center">
