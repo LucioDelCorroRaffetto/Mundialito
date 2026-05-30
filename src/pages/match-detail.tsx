@@ -10,6 +10,7 @@ import { sharePredictionCard } from '@/shared/lib/generate-prediction-card';
 import { TeamFlag } from '@/shared/components/ui/team-flag';
 import { useAuthStore } from '@/shared/stores/auth-store';
 import { useUpsertPrediction, useLeagueMatchPredictions, useMyPredictionForMatch } from '@/shared/hooks/use-predictions';
+import { apiClient } from '@/shared/lib/api-client';
 import type { LeagueMemberPrediction } from '@/shared/hooks/use-predictions';
 import { useHaptic } from '@/shared/hooks/use-haptic';
 import { useMatch } from '@/shared/hooks/use-matches';
@@ -277,6 +278,9 @@ export function MatchDetailPage() {
         accentColor:
           getComputedStyle(document.documentElement).getPropertyValue('--accent')?.trim() || undefined,
       });
+      // Tell the backend so the achievement service can credit the share.
+      // Fire-and-forget — a failure here shouldn't surface to the user.
+      apiClient.post('/predictions/shared').catch(() => {});
     } catch (e) {
       console.error('Share failed', e);
     } finally {

@@ -64,8 +64,20 @@ export async function checkAchievements(
 
     case 'league_created': {
       await maybeAward(userId, 'league_founder', awarded);
-      // If admin created with seed members or this is a re-check, evaluate
-      // invite_5 immediately.
+      // Creating a league auto-joins the admin as a member, so every
+      // "joined a league" rule has to fire here too — otherwise users
+      // whose first action is to *create* a league never receive
+      // first_league/social_butterfly even though they meet the criteria.
+      await maybeAward(userId, 'first_league', awarded);
+      const [{ value: myLeagueCount }] = await db
+        .select({ value: count() })
+        .from(leagueMembers)
+        .where(eq(leagueMembers.userId, userId));
+      if (myLeagueCount >= 3) {
+        await maybeAward(userId, 'social_butterfly', awarded);
+      }
+      // The new league might already qualify for invite_5 if seeded with
+      // members, so check that as well.
       await maybeAwardInviter(event.leagueId, awarded);
       break;
     }

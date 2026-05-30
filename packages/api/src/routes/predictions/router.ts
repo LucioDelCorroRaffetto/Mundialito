@@ -6,6 +6,7 @@ import { myPredictionsHandler } from './handlers/my-predictions.js';
 import { myPredictionForMatchHandler } from './handlers/my-prediction-for-match.js';
 import { matchPredictionsHandler } from './handlers/match-predictions.js';
 import { deletePredictionHandler } from './handlers/delete-prediction.js';
+import { markPredictionSharedHandler } from './handlers/mark-shared.js';
 
 export const predictionsRouter = Router();
 
@@ -21,4 +22,5 @@ predictionsRouter.get('/match/:matchId/mine', (req, res, next) =>
 predictionsRouter.get('/match/:matchId', (req, res, next) =>
   matchPredictionsHandler(req, res).catch(next)
 );
+predictionsRouter.post('/shared', (req, res, next) => markPredictionSharedHandler(req, res).catch(next));
 predictionsRouter.delete('/:id', (req, res, next) => deletePredictionHandler(req, res).catch(next));
