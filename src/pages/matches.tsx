@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { ChevronRight, Clock, CheckCircle2 } from 'lucide-react';
 import { useMatches } from '@/shared/hooks/use-matches';
@@ -12,6 +12,7 @@ import { GroupStandings } from '@/shared/components/group-standings';
 import { BracketView } from '@/shared/components/bracket-view';
 import { R32_LABELS } from '@/shared/data/bracket';
 import { cn } from '@/shared/lib/cn';
+import { SkeletonList } from '@/shared/components/skeleton';
 
 function formatDate(utc: string) {
   const d = new Date(utc);
@@ -68,9 +69,19 @@ const MAIN_TABS = ['Partidos', 'Grupos', 'Cuadro'] as const;
 type MainTab = (typeof MAIN_TABS)[number];
 
 export function MatchesPage() {
+  const [searchParams] = useSearchParams();
   const [mainTab, setMainTab] = useState<MainTab>('Partidos');
   const [statusFilter, setStatusFilter] = useState<StatusTab>('Todos');
   const [groupFilter, setGroupFilter] = useState<string | null>(null);
+
+  // Allow deep-linking to the En vivo filter from the home banner.
+  useEffect(() => {
+    if (searchParams.get('filter') === 'live') {
+      setStatusFilter('En vivo');
+    }
+    // Only on mount — afterwards the tab is fully user-controlled.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const { data: matchesResponse, isLoading, error } = useMatches({ limit: 200 });
   const { data: teamMap } = useTeamMap();
@@ -82,12 +93,20 @@ export function MatchesPage() {
   const predictedIds = new Set((myPredictionsData?.data ?? []).map((p) => p.matchId));
 
   if (isLoading) {
-    return <div className="p-4 text-muted">Cargando partidos...</div>;
+    return (
+      <div className="flex flex-col gap-3 px-4 pt-6 pb-4 animate-fade-in">
+        <div className="h-7 w-28 bg-elevated rounded animate-pulse" />
+        <div className="h-3 w-44 bg-elevated rounded animate-pulse mb-3" />
+        <SkeletonList count={8} />
+      </div>
+    );
   }
   if (error) {
     return (
-      <div className="p-4 text-red-400">
-        Error al cargar partidos: {String((error as Error).message)}
+      <div className="p-6 m-4 rounded-lg bg-red-500/10 border border-red-500/30 flex flex-col items-center gap-2 text-center animate-fade-in">
+        <span className="text-2xl">⚠️</span>
+        <p className="text-sm font-semibold text-red-300">No pudimos cargar los partidos</p>
+        <p className="text-xs text-muted max-w-xs">{String((error as Error).message)}</p>
       </div>
     );
   }
@@ -107,12 +126,24 @@ export function MatchesPage() {
 
   const grouped = groupByDate(filtered);
   const dates = Object.keys(grouped).sort();
+  const liveCount = matches.filter((m) => m.status === 'live').length;
+  const finishedCount = matches.filter((m) => m.status === 'finished').length;
 
   return (
     <div className="flex flex-col gap-0 animate-fade-in">
       <div className="px-4 pt-6 pb-2">
-        <h1 className="text-2xl-s font-display font-bold text-text">Partidos</h1>
-        <p className="text-sm-s text-muted mt-0.5">Mundial FIFA 2026 · 104 partidos</p>
+        <div className="flex items-center gap-2">
+          <h1 className="text-2xl-s font-display font-bold text-text">Partidos</h1>
+          {liveCount > 0 && (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-red-500/15 border border-red-500/40 text-[10px] font-bold text-red-300 uppercase tracking-wider">
+              <span className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse" />
+              {liveCount} en vivo
+            </span>
+          )}
+        </div>
+        <p className="text-sm-s text-muted mt-0.5">
+          Mundial FIFA 2026 · {finishedCount}/{matches.length} jugados
+        </p>
       </div>
 
       {/* Main tabs: Partidos / Grupos */}
@@ -172,22 +203,37 @@ export function MatchesPage() {
             ))}
           </div>
 
-          {/* Status filter tabs */}
+          {/* Status filter tabs — the 'En vivo' tab gets a red pulse when
+              matches are actually live so it stands out at a glance. */}
           <div className="flex gap-1.5 px-4 py-1 pb-4 overflow-x-auto no-scrollbar">
-            {STATUS_TABS.map((tab) => (
-              <button
-                key={tab}
-                onClick={() => setStatusFilter(tab)}
-                className={cn(
-                  'flex-shrink-0 px-3 py-1.5 rounded-full text-xs-s font-semibold whitespace-nowrap transition-colors border',
-                  statusFilter === tab
-                    ? 'bg-accent text-accent-on border-accent'
-                    : 'bg-elevated border-border text-muted hover:text-text',
-                )}
-              >
-                {tab}
-              </button>
-            ))}
+            {STATUS_TABS.map((tab) => {
+              const isActive = statusFilter === tab;
+              const liveTab = tab === 'En vivo' && liveCount > 0;
+              return (
+                <button
+                  key={tab}
+                  onClick={() => setStatusFilter(tab)}
+                  className={cn(
+                    'flex-shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs-s font-semibold whitespace-nowrap transition-colors border',
+                    isActive
+                      ? liveTab
+                        ? 'bg-red-500 text-white border-red-400 shadow-[0_0_12px_rgba(239,68,68,0.45)]'
+                        : 'bg-accent text-accent-on border-accent'
+                      : liveTab
+                        ? 'bg-red-500/10 border-red-500/40 text-red-300 hover:bg-red-500/15'
+                        : 'bg-elevated border-border text-muted hover:text-text',
+                  )}
+                >
+                  {liveTab && (
+                    <span className="w-1.5 h-1.5 rounded-full bg-red-200 animate-pulse" />
+                  )}
+                  {tab}
+                  {liveTab && (
+                    <span className="text-[10px] opacity-80">({liveCount})</span>
+                  )}
+                </button>
+              );
+            })}
           </div>
 
           {/* Match list */}

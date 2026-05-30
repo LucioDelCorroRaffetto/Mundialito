@@ -81,10 +81,16 @@ export function LeaguesPage() {
           {myLeaguesLoading && <SkeletonList count={3} />}
 
           {!myLeaguesLoading && myLeagues.length === 0 && (
-            <div className="py-10 text-center">
-              <p className="text-base-s text-muted">
-                Aún no pertenecés a ninguna liga. ¡Explorá y unite!
-              </p>
+            <div className="mt-2 p-6 rounded-xl bg-card border border-border flex flex-col items-center gap-3 text-center">
+              <div className="w-12 h-12 rounded-full bg-accent/15 flex items-center justify-center">
+                <Trophy size={22} className="text-accent" />
+              </div>
+              <div>
+                <p className="text-base-s font-bold text-text">Sin ligas todavía</p>
+                <p className="text-sm-s text-muted mt-1 max-w-xs">
+                  Creá una para competir con tus amigos, o usá la pestaña <span className="text-text font-semibold">Explorar</span> para sumarte a una pública.
+                </p>
+              </div>
             </div>
           )}
 
@@ -167,14 +173,22 @@ export function LeaguesPage() {
           ))}
 
           {!searchLoading && debouncedQuery.length >= 2 && searchResults.length === 0 && (
-            <div className="py-10 text-center">
-              <p className="text-base-s text-muted">No se encontraron ligas</p>
+            <div className="mt-2 p-6 rounded-xl bg-card border border-border flex flex-col items-center gap-2 text-center">
+              <span className="text-2xl opacity-60">🔍</span>
+              <p className="text-base-s font-semibold text-text">Sin resultados</p>
+              <p className="text-sm-s text-muted max-w-xs">
+                No encontramos ligas que coincidan con "{debouncedQuery}". Probá otro nombre o pedile el código a quien la creó.
+              </p>
             </div>
           )}
 
           {debouncedQuery.length < 2 && !searchLoading && (
-            <div className="py-10 text-center">
-              <p className="text-base-s text-muted">Escribí al menos 2 caracteres para buscar</p>
+            <div className="mt-2 p-6 rounded-xl bg-card border border-border flex flex-col items-center gap-2 text-center">
+              <Search size={22} className="text-muted opacity-60" />
+              <p className="text-base-s font-semibold text-text">Buscá una liga pública</p>
+              <p className="text-sm-s text-muted max-w-xs">
+                Escribí al menos 2 caracteres del nombre para empezar.
+              </p>
             </div>
           )}
         </div>
