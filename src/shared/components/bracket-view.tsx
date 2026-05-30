@@ -257,34 +257,39 @@ export function BracketView({ matches, teamMap }: Props) {
 
   return (
     <div className="pb-6">
-      {/* Round labels row */}
-      <div
-        className="flex items-center mb-3"
-        style={{ gap: COL_GAP, paddingLeft: 4, paddingRight: 4, minWidth: 'max-content' }}
-      >
-        {rounds.map(({ ri }) => {
-          const rs = ROUND_STYLES[ri];
-          // each label is centred over its column + half of both adjacent connectors
-          const colW = ri === 0
-            ? CARD_W + CONN_W / 2
-            : ri === rounds.length - 1
-              ? CARD_W + CONN_W / 2
-              : CARD_W + CONN_W;
-          return (
-            <div key={ri} style={{ width: colW, flexShrink: 0 }} className="flex justify-center">
-              <span className={cn('text-[9px] font-bold uppercase tracking-widest px-2.5 py-1 rounded-full', rs.pill)}>
-                {rs.label}
-              </span>
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Scrollable bracket */}
+      {/* Labels + bracket share a SINGLE horizontal scroll container, so the
+          column headers stay aligned with their cards no matter how far the
+          user scrolls. Previously the labels lived outside the scroll area
+          and forced the page itself to widen, breaking the layout once the
+          bracket extended past Cuartos. */}
       <div className="overflow-x-auto pb-3">
+        <div style={{ minWidth: 'max-content' }}>
+          {/* Round labels row */}
+          <div
+            className="flex items-center mb-3"
+            style={{ gap: COL_GAP, paddingLeft: 4, paddingRight: 4 }}
+          >
+            {rounds.map(({ ri }) => {
+              const rs = ROUND_STYLES[ri];
+              // each label is centred over its column + half of both adjacent connectors
+              const colW = ri === 0
+                ? CARD_W + CONN_W / 2
+                : ri === rounds.length - 1
+                  ? CARD_W + CONN_W / 2
+                  : CARD_W + CONN_W;
+              return (
+                <div key={ri} style={{ width: colW, flexShrink: 0 }} className="flex justify-center">
+                  <span className={cn('text-[9px] font-bold uppercase tracking-widest px-2.5 py-1 rounded-full', rs.pill)}>
+                    {rs.label}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+
         <div
           className="flex items-start"
-          style={{ gap: COL_GAP, padding: '0 4px 8px', minWidth: 'max-content' }}
+          style={{ gap: COL_GAP, padding: '0 4px 8px' }}
         >
           {rounds.map(({ matchNums, ri }, colIdx) => {
             return (
@@ -320,6 +325,7 @@ export function BracketView({ matches, teamMap }: Props) {
               </div>
             );
           })}
+        </div>
         </div>
       </div>
 
