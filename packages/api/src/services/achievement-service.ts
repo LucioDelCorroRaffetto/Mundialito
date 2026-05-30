@@ -7,6 +7,9 @@ import {
   leagues,
   tournamentPredictions,
   playerMatchStats,
+  userLoginDays,
+  leaguePositionHistory,
+  fantasyTeams,
 } from '../db/schema/index.js';
 import { eq, and, count, inArray, sql } from 'drizzle-orm';
 
@@ -25,6 +28,9 @@ export async function checkAchievements(
   switch (event.type) {
     case 'prediction_saved': {
       await maybeAward(userId, 'first_prediction', awarded);
+      // Loyal can fire on any authenticated action; saving a prediction is a
+      // good trigger because it's an intentional one.
+      await evaluateLoyal(userId, awarded);
       // Cheap counters that only need to look at the user's distinct matches
       // predicted. Computed once and reused for every rule below.
       const distinctMatches = await loadDistinctPredictedMatchIds(userId);
@@ -83,6 +89,11 @@ export async function checkAchievements(
       await evaluatePerfectKnockout(userId, event.matchId, awarded);
       await evaluateProphet(userId, event.matchId, awarded);
       await evaluateTopScorerProphet(userId, event.matchId, awarded);
+
+      // Snapshot every league this user is in so we can answer "was this
+      // person ever last?" / "did they reach top 3 before quarters?". Then
+      // evaluate comeback_king for the user (cheap once the snapshot exists).
+      await snapshotAndEvaluateRankLogros(userId, event.matchId, awarded);
       break;
     }
 
@@ -392,6 +403,171 @@ async function evaluateMarathon(
   if (days.size >= 5) await maybeAward(userId, 'marathon', awarded);
 }
 
+/** Loyal: ≥7 distinct UTC days the user made an authenticated request. */
+async function evaluateLoyal(userId: number, awarded: string[]): Promise<void> {
+  const [{ value: days }] = await db
+    .select({ value: count() })
+    .from(userLoginDays)
+    .where(eq(userLoginDays.userId, userId));
+  if (days >= 7) await maybeAward(userId, 'loyal', awarded);
+}
+
+/**
+ * After a match score lands, take a snapshot of the user's position in every
+ * league they belong to and check the rank-history logros.
+ *
+ *   - comeback_king: was ever last AND is now top 3 in the same league.
+ *   - underdog: only after the final closes — currently #1 AND never reached
+ *     top 3 in any earlier snapshot whose triggering round is in {group, r16}.
+ *
+ * The snapshot itself is what makes both logros possible — the actual
+ * standings live in the predictions table and would otherwise be lost once a
+ * later match overwrites the points.
+ */
+async function snapshotAndEvaluateRankLogros(
+  userId: number,
+  matchId: number,
+  awarded: string[],
+): Promise<void> {
+  const triggerMatch = await db
+    .select({ id: matches.id, round: matches.round })
+    .from(matches)
+    .where(eq(matches.id, matchId))
+    .get();
+  if (!triggerMatch) return;
+
+  const myLeagues = await db
+    .select({ leagueId: leagueMembers.leagueId })
+    .from(leagueMembers)
+    .where(eq(leagueMembers.userId, userId));
+
+  for (const { leagueId } of myLeagues) {
+    const positions = await computeLeaguePositions(leagueId);
+    const memberCount = positions.length;
+    const me = positions.find((p) => p.userId === userId);
+    if (!me) continue;
+
+    await db
+      .insert(leaguePositionHistory)
+      .values({
+        leagueId,
+        userId,
+        position: me.position,
+        memberCount,
+        triggeringMatchId: triggerMatch.id,
+        triggeringRound: triggerMatch.round,
+      })
+      .onConflictDoNothing();
+
+    await evaluateComebackKing(userId, leagueId, me.position, memberCount, awarded);
+    if (triggerMatch.round === 'final') {
+      await evaluateUnderdog(userId, leagueId, me.position, awarded);
+    }
+  }
+}
+
+/**
+ * Computes each member's points in a league by summing predictions.points for
+ * predictions made WITHIN that league (the per-league predictions migration
+ * means every league has its own rows). Members with no predictions show up
+ * with 0 points so they still get a position.
+ */
+async function computeLeaguePositions(leagueId: number): Promise<{ userId: number; position: number }[]> {
+  const members = await db
+    .select({ userId: leagueMembers.userId })
+    .from(leagueMembers)
+    .where(eq(leagueMembers.leagueId, leagueId));
+
+  if (members.length === 0) return [];
+
+  const pointsRows = await db
+    .select({
+      userId: predictions.userId,
+      total: sql<number>`coalesce(sum(${predictions.points}), 0)`.as('total'),
+    })
+    .from(predictions)
+    .where(eq(predictions.leagueId, leagueId))
+    .groupBy(predictions.userId);
+
+  const pointsByUser = new Map<number, number>();
+  for (const r of pointsRows) pointsByUser.set(r.userId, Number(r.total));
+
+  const sorted = members
+    .map((m) => ({ userId: m.userId, total: pointsByUser.get(m.userId) ?? 0 }))
+    .sort((a, b) => b.total - a.total);
+
+  // Shared rank for ties so leaderboards line up with our existing standings.
+  let position = 0;
+  let lastTotal = Number.NaN;
+  return sorted.map((row, idx) => {
+    if (row.total !== lastTotal) {
+      position = idx + 1;
+      lastTotal = row.total;
+    }
+    return { userId: row.userId, position };
+  });
+}
+
+async function evaluateComebackKing(
+  userId: number,
+  leagueId: number,
+  currentPosition: number,
+  memberCount: number,
+  awarded: string[],
+): Promise<void> {
+  if (memberCount < 3) return;
+  if (currentPosition > 3) return;
+
+  // Was the user ever LAST in this league?
+  const everLast = await db
+    .select({ id: leaguePositionHistory.id })
+    .from(leaguePositionHistory)
+    .where(
+      and(
+        eq(leaguePositionHistory.leagueId, leagueId),
+        eq(leaguePositionHistory.userId, userId),
+        // "Last" = position equal to that snapshot's memberCount. Using the
+        // snapshot's own memberCount keeps us correct across league-size
+        // changes (someone joined mid-tournament).
+        sql`${leaguePositionHistory.position} = ${leaguePositionHistory.memberCount}`,
+      ),
+    )
+    .limit(1)
+    .get();
+
+  if (everLast) await maybeAward(userId, 'comeback_king', awarded);
+}
+
+async function evaluateUnderdog(
+  userId: number,
+  leagueId: number,
+  finalPosition: number,
+  awarded: string[],
+): Promise<void> {
+  if (finalPosition !== 1) return;
+
+  // Was the user ever top 3 in this league BEFORE quarter-finals? "Before
+  // QF" = triggering match round is 'group' or 'r16' (round of 32 is
+  // labelled 'r32' in our schema — see seed.ts — but we use the same
+  // bracket as the FIFA WC where R16 is the first knockout. We treat
+  // group + r32 as 'before QF'.).
+  const earlyTop3 = await db
+    .select({ id: leaguePositionHistory.id })
+    .from(leaguePositionHistory)
+    .where(
+      and(
+        eq(leaguePositionHistory.leagueId, leagueId),
+        eq(leaguePositionHistory.userId, userId),
+        inArray(leaguePositionHistory.triggeringRound, ['group', 'r32']),
+        sql`${leaguePositionHistory.position} <= 3`,
+      ),
+    )
+    .limit(1)
+    .get();
+
+  if (!earlyTop3) await maybeAward(userId, 'underdog', awarded);
+}
+
 /**
  * Award perfect_group when the user got the winner right in at least 4 of
  * the 6 matches in a group (previously: all 6). Easier bar so it stays
@@ -617,6 +793,51 @@ async function evaluateTopScorerProphet(
   }
 }
 
+/**
+ * Awards `fantasy_legend` to the user with the highest fantasy_teams.totalPoints
+ * within each league. Triggered explicitly (admin endpoint) when the fantasy
+ * season is over — there isn't a clean event-driven trigger.
+ *
+ * Returns the slugs/userIds it granted, for the calling endpoint to surface.
+ */
+export async function finalizeFantasyLegends(): Promise<{ userId: number; leagueId: number }[]> {
+  const allLeagues = await db.select({ id: leagues.id }).from(leagues);
+  const winners: { userId: number; leagueId: number }[] = [];
+
+  for (const l of allLeagues) {
+    const memberRows = await db
+      .select({ userId: leagueMembers.userId })
+      .from(leagueMembers)
+      .where(eq(leagueMembers.leagueId, l.id));
+    if (memberRows.length === 0) continue;
+
+    const memberIds = memberRows.map((m) => m.userId);
+    const fantasy = await db
+      .select({
+        userId: fantasyTeams.userId,
+        total: fantasyTeams.totalPoints,
+      })
+      .from(fantasyTeams)
+      .where(inArray(fantasyTeams.userId, memberIds));
+
+    if (fantasy.length === 0) continue;
+
+    const max = fantasy.reduce((m, r) => (r.total > m ? r.total : m), 0);
+    if (max <= 0) continue;
+    const top = fantasy.filter((r) => r.total === max);
+
+    for (const w of top) {
+      const dummy: string[] = [];
+      await maybeAward(w.userId, 'fantasy_legend', dummy);
+      if (dummy.includes('fantasy_legend')) {
+        winners.push({ userId: w.userId, leagueId: l.id });
+      }
+    }
+  }
+
+  return winners;
+}
+
 // ─── Public re-evaluators (used by scripts & batch jobs) ────────────────────
 
 /**
@@ -703,6 +924,25 @@ export async function recomputeUserAchievements(userId: number): Promise<string[
     .limit(1)
     .get();
   if (aR16) await evaluatePerfectKnockout(userId, aR16.id, awarded);
+
+  // Rank-history logros — replay against the existing snapshots without
+  // generating any new ones.
+  const myLeagues = await db
+    .select({ leagueId: leagueMembers.leagueId })
+    .from(leagueMembers)
+    .where(eq(leagueMembers.userId, userId));
+  for (const { leagueId } of myLeagues) {
+    const positions = await computeLeaguePositions(leagueId);
+    const me = positions.find((p) => p.userId === userId);
+    if (!me) continue;
+    await evaluateComebackKing(userId, leagueId, me.position, positions.length, awarded);
+    if (finalRow) {
+      await evaluateUnderdog(userId, leagueId, me.position, awarded);
+    }
+  }
+
+  // loyal
+  await evaluateLoyal(userId, awarded);
 
   return awarded;
 }

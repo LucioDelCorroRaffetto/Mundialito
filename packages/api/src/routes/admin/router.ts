@@ -6,6 +6,7 @@ import { updatePlayerHandler } from './handlers/update-player.js';
 import { syncScoresHandler } from './handlers/sync-scores.js';
 import { getPlayerStatsHandler } from './handlers/get-player-stats.js';
 import { updatePlayerStatsHandler } from './handlers/update-player-stats.js';
+import { finalizeFantasyHandler } from './handlers/finalize-fantasy.js';
 
 export const adminRouter = Router();
 
@@ -20,4 +21,10 @@ adminRouter.get('/matches/:matchId/player-stats', (req, res, next) =>
 );
 adminRouter.put('/matches/:matchId/player-stats', (req, res, next) =>
   updatePlayerStatsHandler(req, res).catch(next),
+);
+
+// Awards fantasy_legend to the league-winning fantasy player in each league.
+// Call once when the fantasy season closes.
+adminRouter.post('/finalize-fantasy', (req, res, next) =>
+  finalizeFantasyHandler(req, res).catch(next),
 );

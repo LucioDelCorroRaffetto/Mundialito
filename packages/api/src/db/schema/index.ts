@@ -11,3 +11,5 @@ export * from './fantasy-squad-players.js';
 export * from './player-match-stats.js';
 export * from './push-subscriptions.js';
 export * from './achievements.js';
+export * from './user-login-days.js';
+export * from './league-position-history.js';
