@@ -40,3 +40,22 @@ export function useUserProfile(userId: number | undefined) {
     enabled: !!userId,
   });
 }
+
+export interface AdminProfilePointer {
+  id: number;
+  username: string;
+  avatarUrl: string | null;
+}
+
+/** Returns the public pointer to the Presidente FIFA account so we can link
+ *  to it from anywhere without hardcoding an id. */
+export function useAdminProfile() {
+  return useQuery({
+    queryKey: ['users', 'admin'],
+    queryFn: async () => {
+      const { data } = await apiClient.get<{ data: AdminProfilePointer | null }>('/users/admin');
+      return data.data;
+    },
+    staleTime: 1000 * 60 * 60, // 1h — admin id changes basically never
+  });
+}

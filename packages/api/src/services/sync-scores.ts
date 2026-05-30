@@ -9,6 +9,7 @@ import { matches, predictions } from '../db/schema/index.js';
 import { calculatePoints } from '../lib/scoring.js';
 import { recomputeAllFantasyPoints } from './fantasy-scoring-service.js';
 import { broadcastMatchUpdate } from '../ws/broadcast.js';
+import { checkAchievements } from './achievement-service.js';
 
 // football-data.org status values
 type FdStatus =
@@ -179,6 +180,9 @@ export async function syncScores(options: SyncScoresOptions = {}): Promise<SyncS
           .from(predictions)
           .where(eq(predictions.matchId, ourMatch.id));
 
+        // Track unique users so we fire `prediction_scored` once per user per
+        // match (a user can have N rows — one per league — for the same match).
+        const scoredUsers = new Map<number, number>();
         for (const pred of matchPredictions) {
           const pts = calculatePoints(
             { homeScore: pred.homeScore, awayScore: pred.awayScore },
@@ -188,6 +192,13 @@ export async function syncScores(options: SyncScoresOptions = {}): Promise<SyncS
             .update(predictions)
             .set({ points: pts, updatedAt: sql`(datetime('now'))` })
             .where(eq(predictions.id, pred.id));
+          // Highest pts wins if duplicated across leagues (same prediction → same pts).
+          const prev = scoredUsers.get(pred.userId) ?? -1;
+          if (pts > prev) scoredUsers.set(pred.userId, pts);
+        }
+        for (const [uid, pts] of scoredUsers) {
+          checkAchievements(uid, { type: 'prediction_scored', matchId: ourMatch.id, points: pts })
+            .catch(() => {});
         }
       }
 

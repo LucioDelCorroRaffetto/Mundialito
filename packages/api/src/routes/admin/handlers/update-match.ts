@@ -7,6 +7,7 @@ import { NotFoundError } from '../../../lib/errors.js';
 import { calculatePoints } from '../../../lib/scoring.js';
 import { recomputeAllFantasyPoints } from '../../../services/fantasy-scoring-service.js';
 import { broadcastMatchUpdate } from '../../../ws/broadcast.js';
+import { checkAchievements } from '../../../services/achievement-service.js';
 
 export const updateMatchSchema = z.object({
   homeScore: z.number().int().min(0).max(30).optional(),
@@ -59,6 +60,7 @@ export async function updateMatchHandler(req: Request, res: Response) {
       .from(predictions)
       .where(eq(predictions.matchId, matchId));
 
+    const scoredUsers = new Map<number, number>();
     for (const pred of matchPredictions) {
       const pts = calculatePoints(
         { homeScore: pred.homeScore, awayScore: pred.awayScore },
@@ -68,6 +70,12 @@ export async function updateMatchHandler(req: Request, res: Response) {
         .update(predictions)
         .set({ points: pts, updatedAt: sql`(datetime('now'))` })
         .where(eq(predictions.id, pred.id));
+      const prev = scoredUsers.get(pred.userId) ?? -1;
+      if (pts > prev) scoredUsers.set(pred.userId, pts);
+    }
+    for (const [uid, pts] of scoredUsers) {
+      checkAchievements(uid, { type: 'prediction_scored', matchId, points: pts })
+        .catch(() => {});
     }
 
     // Recompute fantasy points now that this match is finished.

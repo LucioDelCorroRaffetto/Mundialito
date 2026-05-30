@@ -4,6 +4,7 @@ import { Settings, ChevronRight, Star, LogOut } from 'lucide-react';
 import { useAuthStore } from '@/shared/stores/auth-store';
 import { useMyStats } from '@/shared/hooks/use-my-stats';
 import { useMyAchievements, useAllAchievements } from '@/shared/hooks/use-achievements';
+import { useAdminProfile } from '@/shared/hooks/use-user-profile';
 
 function StatCard({ label, value }: { label: string; value: string | number }) {
   return (
@@ -21,6 +22,7 @@ export function ProfilePage() {
   const { data: stats, isLoading: statsLoading } = useMyStats();
   const { data: myAchievementsData } = useMyAchievements();
   const { data: allAchievementsData } = useAllAchievements();
+  const { data: adminPointer } = useAdminProfile();
 
   const myAchievementSlugs = new Set((myAchievementsData?.data ?? []).map((a) => a.slug));
   const allAchievements = allAchievementsData?.data ?? [];
@@ -135,6 +137,23 @@ export function ProfilePage() {
           <span className="flex-1 text-sm-s text-text">Mis Logros</span>
           <span className="text-muted">→</span>
         </Link>
+
+        {/* Hidden treat for the curious: shortcut to Infantino's profile. */}
+        {adminPointer && adminPointer.id !== user.id && (
+          <Link
+            to={`/users/${adminPointer.id}`}
+            className="flex items-center gap-3 p-4 rounded-lg bg-yellow-500/10 border border-yellow-500/30 hover:border-yellow-500/60 transition-colors"
+          >
+            <div className="w-9 h-9 rounded-md bg-yellow-500/20 flex items-center justify-center">
+              <span className="text-lg">🏛️</span>
+            </div>
+            <div className="flex-1">
+              <p className="text-base-s font-semibold text-yellow-300">Presidente de la FIFA</p>
+              <p className="text-sm-s text-muted">El que armó todo esto</p>
+            </div>
+            <ChevronRight size={16} className="text-yellow-400/70" />
+          </Link>
+        )}
         <Link
           to="/settings"
           className="flex items-center gap-3 p-4 rounded-lg bg-card border border-border hover:border-accent-border transition-colors"
