@@ -87,7 +87,14 @@ export async function getPublicProfileHandler(req: Request, res: Response) {
   const accuracy = totalPredictions > 0 ? Math.round((exactScores / totalPredictions) * 100) : 0;
 
   // Achievements
-  const achievementRows = await db
+  //
+  // The Presidente FIFA has only one symbolic logro on his profile — the
+  // 'presidente_fifa' one. We hide every other logro he might have earned
+  // (first_league, etc. from creating the seed leagues) so his public page
+  // stays purely presidential. The badge is synthesised here even if the
+  // row doesn't exist in user_achievements — admin status is the source of
+  // truth, not the awards table.
+  let achievementRows = await db
     .select({
       slug: achievements.slug,
       name: achievements.name,
@@ -99,6 +106,24 @@ export async function getPublicProfileHandler(req: Request, res: Response) {
     .from(userAchievements)
     .innerJoin(achievements, eq(userAchievements.achievementSlug, achievements.slug))
     .where(eq(userAchievements.userId, userId));
+
+  if (isAdmin) {
+    achievementRows = [
+      {
+        slug: 'presidente_fifa',
+        name: 'Presidente de la FIFA',
+        description: 'El que armó todo esto',
+        icon: '🏛️',
+        tier: 'platinum',
+        earnedAt: achievementRows.find((a) => a.slug === 'presidente_fifa')?.earnedAt
+          ?? new Date().toISOString(),
+      },
+    ];
+  } else {
+    // Defensive: the presidente_fifa logro is admin-exclusive; never expose it
+    // on a non-admin profile, even if it somehow got into the awards table.
+    achievementRows = achievementRows.filter((a) => a.slug !== 'presidente_fifa');
+  }
 
   // League count
   const [leagueCountRow] = await db

@@ -1,12 +1,19 @@
 import { Request, Response } from 'express';
 import { db } from '../../../db/index.js';
 import { achievements } from '../../../db/schema/index.js';
-import { desc } from 'drizzle-orm';
+import { desc, ne } from 'drizzle-orm';
 
-export async function listAchievementsHandler(req: Request, res: Response) {
+/**
+ * Public catalog of every regular logro. The 'presidente_fifa' badge is
+ * intentionally excluded — it's not a normal "by unlock" achievement and
+ * shouldn't appear as a locked entry in non-admin users' /achievements page.
+ * It only ever surfaces on the Presidente FIFA's own public profile.
+ */
+export async function listAchievementsHandler(_req: Request, res: Response) {
   const all = await db
     .select()
     .from(achievements)
+    .where(ne(achievements.slug, 'presidente_fifa'))
     .orderBy(desc(achievements.pointsBonus));
 
   return res.status(200).json({ data: all });

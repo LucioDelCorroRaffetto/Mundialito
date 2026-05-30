@@ -48,6 +48,10 @@ const CATALOG = [
   { slug: 'survivor', name: 'Sobreviviente', description: 'Sumaste puntos después de 3 pronósticos fallados al hilo', icon: '🩹', pointsBonus: 2, tier: 'bronze' },
   { slug: 'weekend_perfect', name: 'Día Mágico', description: 'Sumaste puntos en todos los partidos de un mismo día', icon: '🌞', pointsBonus: 6, tier: 'gold' },
   { slug: 'marathon', name: 'Maratonista', description: 'Sumaste puntos en partidos de 5 días distintos', icon: '🏃', pointsBonus: 3, tier: 'bronze' },
+  // Exclusive — only ever shown on the Presidente FIFA's profile. Not earnable
+  // by anyone else; 0 pts so it can't tilt rankings even if accidentally
+  // granted.
+  { slug: 'presidente_fifa', name: 'Presidente de la FIFA', description: 'El que armó todo esto', icon: '🏛️', pointsBonus: 0, tier: 'platinum' },
 ];
 
 async function main() {

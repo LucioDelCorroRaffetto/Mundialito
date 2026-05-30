@@ -701,6 +701,9 @@ const ACHIEVEMENTS_DATA = [
   { slug: 'survivor', name: 'Sobreviviente', description: 'Sumaste puntos después de 3 pronósticos fallados al hilo', icon: '🩹', pointsBonus: 2 },
   { slug: 'weekend_perfect', name: 'Día Mágico', description: 'Sumaste puntos en todos los partidos de un mismo día', icon: '🌞', pointsBonus: 6 },
   { slug: 'marathon', name: 'Maratonista', description: 'Sumaste puntos en partidos de 5 días distintos', icon: '🏃', pointsBonus: 3 },
+  // Exclusive — never granted to non-admin users; rendered on the Presidente
+  // FIFA's profile only.
+  { slug: 'presidente_fifa', name: 'Presidente de la FIFA', description: 'El que armó todo esto', icon: '🏛️', pointsBonus: 0 },
 ];
 
 async function seedAchievements(): Promise<void> {

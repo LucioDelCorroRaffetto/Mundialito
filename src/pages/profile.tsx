@@ -138,42 +138,6 @@ export function ProfilePage() {
           <span className="text-muted">→</span>
         </Link>
 
-        {/* Presidente FIFA shortcut — distinctive "gold leaf" card so it
-            stands out from the regular menu items, and uses the admin's
-            real avatar when available. */}
-        {adminPointer && adminPointer.id !== user.id && (
-          <Link
-            to={`/u/${adminPointer.id}`}
-            className="relative overflow-hidden flex items-center gap-3 p-4 rounded-xl border bg-gradient-to-br from-yellow-500/15 via-amber-400/8 to-yellow-700/15 border-yellow-400/40 hover:border-yellow-300/70 hover:shadow-[0_0_18px_rgba(255,215,0,0.18)] transition-all group"
-          >
-            {/* Soft sheen */}
-            <div className="absolute inset-0 pointer-events-none bg-gradient-to-r from-transparent via-yellow-200/8 to-transparent translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700" />
-
-            {adminPointer.avatarUrl ? (
-              <img
-                src={adminPointer.avatarUrl}
-                alt={adminPointer.username}
-                className="w-12 h-12 rounded-full object-cover flex-shrink-0 ring-2 ring-yellow-400/50"
-              />
-            ) : (
-              <div className="w-12 h-12 rounded-full bg-yellow-500/20 flex items-center justify-center flex-shrink-0 ring-2 ring-yellow-400/50">
-                <span className="text-lg">🏛️</span>
-              </div>
-            )}
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-1.5">
-                <p className="text-base-s font-bold text-yellow-200 truncate">
-                  {adminPointer.username}
-                </p>
-                <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-yellow-400/20 text-yellow-300 border border-yellow-400/40 whitespace-nowrap">
-                  FIFA
-                </span>
-              </div>
-              <p className="text-xs-s text-yellow-200/60">Presidente · El que armó todo esto</p>
-            </div>
-            <ChevronRight size={16} className="text-yellow-400/70" />
-          </Link>
-        )}
         <Link
           to="/settings"
           className="flex items-center gap-3 p-4 rounded-lg bg-card border border-border hover:border-accent-border transition-colors"
@@ -198,6 +162,17 @@ export function ProfilePage() {
             <p className="text-base-s font-semibold text-red-400">Cerrar sesión</p>
           </div>
         </button>
+
+        {/* Tiny Easter egg — discreet link to the Presidente's profile for
+            anyone curious enough to scroll all the way down. */}
+        {adminPointer && adminPointer.id !== user.id && (
+          <Link
+            to={`/u/${adminPointer.id}`}
+            className="self-center mt-4 text-[11px] text-muted/60 hover:text-yellow-400/80 transition-colors tracking-wide"
+          >
+            🏛️ ¿quién armó todo esto?
+          </Link>
+        )}
       </div>
     </div>
   );
