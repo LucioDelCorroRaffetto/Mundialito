@@ -4,6 +4,8 @@ import { Toaster } from 'sonner';
 import { GoogleOAuthProvider } from '@react-oauth/google';
 import { ThemeProvider } from '@/theme/theme-provider';
 import { router } from './router';
+import { useApiWakeup } from '@/shared/hooks/use-api-wakeup';
+import { ApiWakeupScreen } from '@/shared/components/api-wakeup-screen';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -21,13 +23,25 @@ const queryClient = new QueryClient({
 
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID ?? '';
 
+function AppWithWakeup() {
+  const wakeup = useApiWakeup();
+  return (
+    <>
+      <RouterProvider router={router} />
+      <Toaster position="top-center" richColors />
+      {/* The screen sits above everything via z-[9999]. It shows only when
+          the health ping takes > 2 s, then fades out once the API responds. */}
+      <ApiWakeupScreen visible={wakeup === 'waking'} />
+    </>
+  );
+}
+
 export function Providers() {
   return (
     <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
       <ThemeProvider>
         <QueryClientProvider client={queryClient}>
-          <RouterProvider router={router} />
-          <Toaster position="top-center" richColors />
+          <AppWithWakeup />
         </QueryClientProvider>
       </ThemeProvider>
     </GoogleOAuthProvider>
