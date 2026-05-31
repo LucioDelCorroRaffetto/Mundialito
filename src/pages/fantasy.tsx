@@ -998,16 +998,26 @@ function PerRoundLineupTab({ squadPlayers }: { squadPlayers: Player[] }) {
   const [draft, setDraft] = useState<LineupPlayerInput[]>([]);
   const [dirty, setDirty] = useState(false);
 
-  // Populate draft from server data when round changes.
+  // Stable key for the squad so the draft-init effect only re-fires when the
+  // squad ACTUALLY changes (15 different player ids), not on every parent
+  // re-render. Previously this was the root cause of "I unselect a player
+  // and it pops back" — every parent render reset the draft to bench.
+  const squadKey = useMemo(
+    () => [...squadPlayers.map((p) => p.id)].sort((a, b) => a - b).join(','),
+    [squadPlayers],
+  );
+
+  // Populate draft from server data when the round (or the squad itself)
+  // changes. Local edits afterwards are preserved.
   useEffect(() => {
-    if (lineupData?.data) {
+    if (lineupData?.data && lineupData.data.length > 0) {
       setDraft(lineupData.data.map((r) => ({
         playerId: r.playerId,
         isStarter: r.isStarter,
         isCaptain: r.isCaptain,
         isViceCaptain: r.isViceCaptain,
       })));
-    } else if (activeSlug) {
+    } else if (activeSlug && squadPlayers.length > 0) {
       // No lineup yet for this round — default all 15 squad players as bench.
       setDraft(squadPlayers.map((p) => ({
         playerId: p.id,
@@ -1017,7 +1027,9 @@ function PerRoundLineupTab({ squadPlayers }: { squadPlayers: Player[] }) {
       })));
     }
     setDirty(false);
-  }, [lineupData, activeSlug, squadPlayers]);
+    // squadKey (stable) deliberately replaces squadPlayers (unstable ref).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lineupData, activeSlug, squadKey]);
 
   const starterCount = draft.filter((p) => p.isStarter).length;
   const captainPicked = draft.some((p) => p.isCaptain);
@@ -1030,11 +1042,22 @@ function PerRoundLineupTab({ squadPlayers }: { squadPlayers: Player[] }) {
     setDraft((prev) => {
       const cur = prev.find((p) => p.playerId === playerId);
       if (!cur) return prev;
-      const now = !cur.isStarter;
-      // If removing from starters, also strip captain/vice if they had it.
+      const willBeStarter = !cur.isStarter;
+      const currentStarters = prev.filter((p) => p.isStarter).length;
+      // Hard cap at 11 starters so the backend never rejects on count.
+      if (willBeStarter && currentStarters >= 11) {
+        toast.error('Solo podés tener 11 titulares — sacá uno antes de agregar otro');
+        return prev;
+      }
+      // When de-starring a player, also strip captain/vice if they had it.
       return prev.map((p) =>
         p.playerId === playerId
-          ? { ...p, isStarter: now, isCaptain: now ? p.isCaptain : false, isViceCaptain: now ? p.isViceCaptain : false }
+          ? {
+              ...p,
+              isStarter: willBeStarter,
+              isCaptain: willBeStarter ? p.isCaptain : false,
+              isViceCaptain: willBeStarter ? p.isViceCaptain : false,
+            }
           : p,
       );
     });
@@ -1191,16 +1214,33 @@ function PerRoundLineupTab({ squadPlayers }: { squadPlayers: Player[] }) {
             </div>
           </div>
 
-          {/* Save */}
-          {isOpen && dirty && (
-            <div className="px-4">
-              <button
-                onClick={handleSave}
-                disabled={upsertLineup.isPending || starterCount !== 11 || !captainPicked || !vicePicked}
-                className="w-full py-3 rounded-xl bg-accent text-accent-on font-semibold text-sm-s disabled:opacity-50 transition-opacity"
-              >
-                {upsertLineup.isPending ? 'Guardando…' : `Guardar lineup de ${roundInfo?.label ?? 'esta fecha'}`}
-              </button>
+          {/* Save — sticky so it's always reachable while scrolling. Shows
+              the specific reason it's disabled so the user knows what to
+              fix instead of staring at a greyed-out button. */}
+          {isOpen && (
+            <div className="px-4 sticky bottom-4 z-10">
+              {(() => {
+                let blocker: string | null = null;
+                if (starterCount < 11) blocker = `Faltan ${11 - starterCount} titular${11 - starterCount === 1 ? '' : 'es'}`;
+                else if (starterCount > 11) blocker = `Sobran ${starterCount - 11} titular${starterCount - 11 === 1 ? '' : 'es'}`;
+                else if (!captainPicked) blocker = 'Elegí un capitán (C)';
+                else if (!vicePicked) blocker = 'Elegí un vicecapitán (V)';
+                return (
+                  <button
+                    onClick={handleSave}
+                    disabled={upsertLineup.isPending || blocker !== null || !dirty}
+                    className="w-full py-3 rounded-xl bg-accent text-accent-on font-semibold text-sm-s disabled:opacity-50 transition-opacity shadow-lg"
+                  >
+                    {upsertLineup.isPending
+                      ? 'Guardando…'
+                      : blocker
+                        ? blocker
+                        : !dirty
+                          ? 'Sin cambios para guardar'
+                          : `Guardar lineup de ${roundInfo?.label ?? 'esta fecha'}`}
+                  </button>
+                );
+              })()}
             </div>
           )}
         </>

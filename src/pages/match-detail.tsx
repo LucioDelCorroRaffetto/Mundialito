@@ -436,6 +436,21 @@ export function MatchDetailPage() {
             </>
           ) : (
             <>
+              {/* Clear feedback about WHAT the save will touch: first prediction
+                  propagates to every league the user belongs to, subsequent
+                  saves are scoped to the league currently in the chip selector
+                  above the bracket. */}
+              {myLeagueList.length > 1 && (
+                <p className="text-xs-s text-muted text-center mb-2">
+                  {!anyPrediction ? (
+                    <>📣 Tu primer pronóstico se guarda en <span className="text-accent font-semibold">todas tus ligas</span></>
+                  ) : selectedLeagueId != null ? (
+                    <>Vas a actualizar solo en <span className="text-accent font-semibold">{myLeagueList.find((l) => l.id === selectedLeagueId)?.name ?? 'esta liga'}</span></>
+                  ) : (
+                    <>Vas a actualizar en <span className="text-accent font-semibold">todas tus ligas</span></>
+                  )}
+                </p>
+              )}
               <Button fullWidth size="lg" onClick={handleSave} loading={upsertMutation.isPending}>
                 {existingPrediction ? 'Actualizar pronóstico' : 'Guardar pronóstico'}
               </Button>

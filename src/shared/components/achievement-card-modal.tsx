@@ -140,13 +140,28 @@ function AchievementCard({
         {/* Base tier gradient */}
         <div className={cn('absolute inset-0', surface.base)} />
 
-        {/* Holographic / sheen layers */}
-        {tier === 'platinum' && (
-          <PlatinumHolo pointer={pointer} dimmed={!earned} />
-        )}
+        {/* Universal chrome scratches — present on every tier, intensity
+            scales with rarity. Gives the metallic "trading card" feel. */}
+        <ChromeScratches intensity={TIER_INTENSITY[tier]} dimmed={!earned} />
+
+        {/* Universal cursor-driven rainbow refraction. Stronger on platinum
+            and gold. This is the headline "Pokémon holo" effect — a
+            rainbow band that follows the cursor across the card. */}
+        <RainbowRefraction
+          pointer={pointer}
+          intensity={TIER_INTENSITY[tier]}
+          dimmed={!earned}
+        />
+
+        {/* Tier-specific extra layers */}
+        {tier === 'platinum' && <PlatinumHolo pointer={pointer} dimmed={!earned} />}
         {tier === 'gold' && <GoldFoil pointer={pointer} dimmed={!earned} />}
         {tier === 'silver' && <SilverSheen pointer={pointer} dimmed={!earned} />}
         {tier === 'bronze' && <BronzeWarmth pointer={pointer} dimmed={!earned} />}
+
+        {/* Top-side specular highlight that tracks the cursor — fakes
+            the 3D-curve light catch you get on a real foil card. */}
+        <SpecularHighlight pointer={pointer} dimmed={!earned} />
 
         {/* Locked overlay (grayscale-ish veil) */}
         {!earned && (
@@ -288,6 +303,121 @@ const SURFACES: Record<AchievementTier, Surface> = {
 interface LayerProps {
   pointer: { x: number; y: number; active: boolean };
   dimmed?: boolean;
+}
+
+/** How aggressive the holographic effects render per tier. Drives the
+ *  RainbowRefraction band brightness, chrome-scratch opacity and the
+ *  outer glow intensity. 0 = matte, 1 = full holo. */
+const TIER_INTENSITY: Record<AchievementTier, number> = {
+  bronze: 0.35,
+  silver: 0.6,
+  gold: 0.85,
+  platinum: 1,
+};
+
+/**
+ * Rainbow refraction band — the signature Pokémon-card holo effect. A
+ * vertical rainbow stripe that tracks the cursor's x-position. On platinum
+ * the band is rendered twice (offset) for a stronger prismatic look.
+ */
+function RainbowRefraction({ pointer, intensity, dimmed }: LayerProps & { intensity: number }) {
+  const px = pointer.x * 100;
+  const py = pointer.y * 100;
+  // Even at rest the band sits diagonally across the card.
+  const restAngle = 110;
+  const angle = pointer.active ? 90 + (pointer.x - 0.5) * 60 : restAngle;
+  const baseAlpha = (dimmed ? 0.3 : 1) * intensity;
+
+  return (
+    <>
+      {/* Diagonal rainbow sweep, follows cursor angle. */}
+      <div
+        className="absolute inset-0 mix-blend-color-dodge pointer-events-none transition-opacity"
+        style={{
+          background: `linear-gradient(${angle}deg,
+            transparent 30%,
+            rgba(255, 0, 128, ${0.18 * baseAlpha}) 38%,
+            rgba(255, 200, 0, ${0.18 * baseAlpha}) 44%,
+            rgba(0, 255, 128, ${0.18 * baseAlpha}) 50%,
+            rgba(0, 200, 255, ${0.18 * baseAlpha}) 56%,
+            rgba(180, 0, 255, ${0.18 * baseAlpha}) 62%,
+            transparent 70%
+          )`,
+        }}
+      />
+      {/* Pointer-driven spotlight that REVEALS the rainbow underneath —
+          like a flashlight across a holo card. */}
+      <div
+        className="absolute inset-0 mix-blend-screen pointer-events-none"
+        style={{
+          background: `radial-gradient(
+            circle 220px at ${px}% ${py}%,
+            rgba(255, 255, 255, ${0.55 * baseAlpha * (pointer.active ? 1 : 0.35)}),
+            transparent 70%
+          )`,
+        }}
+      />
+    </>
+  );
+}
+
+/**
+ * Faint diagonal "scratch chrome" lines that give the metallic surface
+ * texture even when the cursor isn't moving. Intensity scales per tier.
+ */
+function ChromeScratches({ intensity, dimmed }: { intensity: number; dimmed?: boolean }) {
+  const a = (dimmed ? 0.4 : 1) * intensity * 0.18;
+  return (
+    <div
+      className="absolute inset-0 pointer-events-none mix-blend-overlay"
+      style={{
+        backgroundImage: `
+          repeating-linear-gradient(
+            115deg,
+            transparent 0,
+            transparent 6px,
+            rgba(255, 255, 255, ${a}) 6px,
+            rgba(255, 255, 255, ${a}) 7px,
+            transparent 7px,
+            transparent 13px
+          ),
+          repeating-linear-gradient(
+            65deg,
+            transparent 0,
+            transparent 11px,
+            rgba(255, 255, 255, ${a * 0.6}) 11px,
+            rgba(255, 255, 255, ${a * 0.6}) 12px,
+            transparent 12px,
+            transparent 22px
+          )
+        `,
+      }}
+    />
+  );
+}
+
+/**
+ * Top-side specular highlight that follows the cursor — like the way
+ * light catches on a curved glossy surface. Only renders when the
+ * cursor is over the card (active).
+ */
+function SpecularHighlight({ pointer, dimmed }: LayerProps) {
+  if (!pointer.active) return null;
+  const px = pointer.x * 100;
+  const py = pointer.y * 100;
+  const a = dimmed ? 0.25 : 0.6;
+  return (
+    <div
+      className="absolute inset-0 pointer-events-none mix-blend-screen transition-opacity duration-200"
+      style={{
+        background: `radial-gradient(
+          ellipse 140px 60px at ${px}% ${py}%,
+          rgba(255, 255, 255, ${a}),
+          transparent 70%
+        )`,
+      }}
+    />
+  );
 }
 
 /** Full rainbow holographic for platinum. */
