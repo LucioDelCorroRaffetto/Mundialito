@@ -14,7 +14,8 @@
     "setup:infantino": "tsx src/scripts/setup-infantino.ts",
     "migrate:predictions-per-league": "tsx src/scripts/migrate-predictions-per-league.ts",
     "recompute:achievements": "tsx src/scripts/recompute-achievements.ts",
-    "sync:achievements": "tsx src/scripts/sync-achievements-catalog.ts"
+    "sync:achievements": "tsx src/scripts/sync-achievements-catalog.ts",
+    "seed:fifa-rankings": "tsx src/scripts/seed-fifa-rankings.ts"
   },
   "dependencies": {
     "@libsql/client": "^0.14.0",

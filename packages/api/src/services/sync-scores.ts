@@ -9,7 +9,7 @@ import { matches, predictions } from '../db/schema/index.js';
 import { calculatePoints } from '../lib/scoring.js';
 import { recomputeAllFantasyPoints } from './fantasy-scoring-service.js';
 import { broadcastMatchUpdate } from '../ws/broadcast.js';
-import { checkAchievements } from './achievement-service.js';
+import { checkAchievements, finalizeFantasyLegends } from './achievement-service.js';
 
 // football-data.org status values
 type FdStatus =
@@ -215,6 +215,25 @@ export async function syncScores(options: SyncScoresOptions = {}): Promise<SyncS
       await recomputeAllFantasyPoints();
     } catch (err) {
       errors.push(`Fantasy recompute failed: ${String(err)}`);
+    }
+
+    // When the Final just finished, auto-award fantasy_legend — no admin
+    // action needed. We check the DB directly so this is idempotent.
+    try {
+      const finalMatch = await db
+        .select({ id: matches.id, round: matches.round, status: matches.status })
+        .from(matches)
+        .where(eq(matches.round, 'final'))
+        .limit(1)
+        .get();
+      if (finalMatch?.status === 'finished') {
+        const winners = await finalizeFantasyLegends();
+        if (winners.length > 0) {
+          console.log(`[sync-scores] fantasy_legend awarded to ${winners.length} user(s):`, winners);
+        }
+      }
+    } catch (err) {
+      errors.push(`Fantasy legend finalize failed: ${String(err)}`);
     }
   }
 

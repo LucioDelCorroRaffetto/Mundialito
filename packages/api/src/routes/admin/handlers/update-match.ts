@@ -7,7 +7,7 @@ import { NotFoundError } from '../../../lib/errors.js';
 import { calculatePoints } from '../../../lib/scoring.js';
 import { recomputeAllFantasyPoints } from '../../../services/fantasy-scoring-service.js';
 import { broadcastMatchUpdate } from '../../../ws/broadcast.js';
-import { checkAchievements } from '../../../services/achievement-service.js';
+import { checkAchievements, finalizeFantasyLegends } from '../../../services/achievement-service.js';
 
 export const updateMatchSchema = z.object({
   homeScore: z.number().int().min(0).max(30).optional(),
@@ -80,6 +80,13 @@ export async function updateMatchHandler(req: Request, res: Response) {
 
     // Recompute fantasy points now that this match is finished.
     await recomputeAllFantasyPoints();
+
+    // Auto-award fantasy_legend when the Final closes.
+    if (updatedMatch.round === 'final') {
+      finalizeFantasyLegends().catch((err) => {
+        console.error('[update-match] fantasy_legend finalize failed:', err);
+      });
+    }
   }
 
   // Broadcast match update to all connected WS clients

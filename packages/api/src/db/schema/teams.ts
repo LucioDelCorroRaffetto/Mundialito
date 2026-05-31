@@ -7,6 +7,7 @@ export const teams = sqliteTable('teams', {
   flag: text('flag').notNull(),               // emoji de bandera
   group: text('group'),                       // 'A'–'H', null en eliminatorias
   confederation: text('confederation'),       // 'CONMEBOL', 'UEFA', etc.
+  fifaRank: integer('fifa_rank'),             // FIFA World Ranking (lower = better); null for placeholders
 });
 
 export type Team = typeof teams.$inferSelect;

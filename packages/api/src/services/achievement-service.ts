@@ -10,6 +10,7 @@ import {
   userLoginDays,
   leaguePositionHistory,
   fantasyTeams,
+  teams,
 } from '../db/schema/index.js';
 import { eq, and, count, inArray, sql } from 'drizzle-orm';
 
@@ -89,6 +90,10 @@ export async function checkAchievements(
       await evaluatePerfectKnockout(userId, event.matchId, awarded);
       await evaluateProphet(userId, event.matchId, awarded);
       await evaluateTopScorerProphet(userId, event.matchId, awarded);
+
+      // upset_hunter: count how many finished matches this user correctly
+      // predicted where the lower-ranked team won.
+      await evaluateUpsetHunter(userId, awarded);
 
       // Snapshot every league this user is in so we can answer "was this
       // person ever last?" / "did they reach top 3 before quarters?". Then
@@ -401,6 +406,82 @@ async function evaluateMarathon(
     if (r.points > 0) days.add(r.kickoffUtc.slice(0, 10));
   }
   if (days.size >= 5) await maybeAward(userId, 'marathon', awarded);
+}
+
+/**
+ * upset_hunter: the user correctly predicted the winner in at least 3
+ * matches where the "underdog" (higher-ranked number = lower-ranked team)
+ * won. Uses the fifa_rank stored on the teams table.
+ *
+ * An "upset" is defined as: the team with the worse FIFA rank (higher number)
+ * won, OR a team with no rank beat one with a rank.
+ */
+async function evaluateUpsetHunter(userId: number, awarded: string[]): Promise<void> {
+  // Load all finished matches with both team ranks.
+  const finishedMatches = await db
+    .select({
+      id: matches.id,
+      homeTeamId: matches.homeTeamId,
+      awayTeamId: matches.awayTeamId,
+      homeScore: matches.homeScore,
+      awayScore: matches.awayScore,
+      status: matches.status,
+    })
+    .from(matches)
+    .where(eq(matches.status, 'finished'));
+
+  if (finishedMatches.length === 0) return;
+
+  const teamIds = new Set<number>();
+  for (const m of finishedMatches) {
+    if (m.homeTeamId != null) teamIds.add(m.homeTeamId);
+    if (m.awayTeamId != null) teamIds.add(m.awayTeamId);
+  }
+  const teamRankRows = await db
+    .select({ id: teams.id, fifaRank: teams.fifaRank })
+    .from(teams)
+    .where(inArray(teams.id, [...teamIds]));
+  const rankById = new Map<number, number | null>(teamRankRows.map((r) => [r.id, r.fifaRank]));
+
+  // Determine which finished matches were upsets (lower-ranked won).
+  const upsetMatchIds: number[] = [];
+  for (const m of finishedMatches) {
+    if (m.homeScore == null || m.awayScore == null) continue;
+    if (m.homeTeamId == null || m.awayTeamId == null) continue;
+    if (m.homeScore === m.awayScore) continue; // draws aren't upsets
+    const homeRank = rankById.get(m.homeTeamId) ?? 999;
+    const awayRank = rankById.get(m.awayTeamId) ?? 999;
+    if (homeRank === awayRank) continue; // same rank, skip
+    const homeWon = (m.homeScore as number) > (m.awayScore as number);
+    const homeFavoured = homeRank < awayRank; // lower rank = better team
+    const isUpset = homeWon !== homeFavoured; // underdog won
+    if (isUpset) upsetMatchIds.push(m.id);
+  }
+
+  if (upsetMatchIds.length === 0) return;
+
+  // How many of those upsets did this user predict correctly?
+  const userPreds = await db
+    .select({ matchId: predictions.matchId, homeScore: predictions.homeScore, awayScore: predictions.awayScore })
+    .from(predictions)
+    .where(and(eq(predictions.userId, userId), inArray(predictions.matchId, upsetMatchIds)));
+
+  // Dedupe by matchId (user has N rows per league).
+  const predByMatch = new Map<number, { homeScore: number; awayScore: number }>();
+  for (const p of userPreds) predByMatch.set(p.matchId, p);
+
+  let upsetsPredicted = 0;
+  for (const matchId of upsetMatchIds) {
+    const match = finishedMatches.find((m) => m.id === matchId);
+    const pred = predByMatch.get(matchId);
+    if (!match || !pred || match.homeScore == null || match.awayScore == null) continue;
+    // Did the user correctly predict the winner (same sign of goal difference)?
+    if (Math.sign(pred.homeScore - pred.awayScore) === Math.sign((match.homeScore as number) - (match.awayScore as number))) {
+      upsetsPredicted++;
+    }
+  }
+
+  if (upsetsPredicted >= 3) await maybeAward(userId, 'upset_hunter', awarded);
 }
 
 /** Loyal: ≥7 distinct UTC days the user made an authenticated request. */
@@ -943,6 +1024,9 @@ export async function recomputeUserAchievements(userId: number): Promise<string[
 
   // loyal
   await evaluateLoyal(userId, awarded);
+
+  // upset_hunter
+  await evaluateUpsetHunter(userId, awarded);
 
   return awarded;
 }

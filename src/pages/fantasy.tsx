@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { ChevronDown, Check, Clock, Trophy, LayoutList, Layers, Star, Crown, BarChart2, BookOpen, ChevronRight } from 'lucide-react';
+import { ChevronDown, Check, Clock, Trophy, LayoutList, Layers, Star, Crown, BarChart2, BookOpen, ChevronRight, Lock, CheckCircle2 } from 'lucide-react';
 import { cn } from '@/shared/lib/cn';
 import { useTeams } from '@/shared/hooks/use-teams';
 import { usePlayers } from '@/shared/hooks/use-players';
@@ -10,6 +10,8 @@ import { useAuthStore } from '@/shared/stores/auth-store';
 import { SkeletonList } from '@/shared/components/skeleton';
 import { toast } from 'sonner';
 import { TeamFlag } from '@/shared/components/ui/team-flag';
+import { useFantasyRounds, useFantasyLineup, useUpsertLineup } from '@/shared/hooks/use-fantasy-lineups';
+import type { LineupPlayerInput } from '@/shared/hooks/use-fantasy-lineups';
 import type { Player } from '@/shared/types/api';
 
 const POSITION_COLORS: Record<string, string> = {
@@ -348,10 +350,14 @@ export function FantasyPage() {
     setCaptainId((prev) => (prev === id ? null : prev));
   };
 
-  const handleToggleStarter = (id: number) => {
+  // NOTE: starterIds / captainId / these handlers belong to the legacy
+  // "fixed starters per tournament" model. They still feed the squad save
+  // payload for backwards-compat but the user-facing toggling lives in
+  // PerRoundLineupTab. We keep the helpers exported with underscore prefix
+  // so the linter doesn't complain while preserving them as documentation.
+  const _handleToggleStarter = (id: number) => {
     setStarterIds((prev) => {
       if (prev.includes(id)) {
-        // removing a starter — if it was the captain, clear captain
         if (captainId === id) setCaptainId(null);
         return prev.filter((p) => p !== id);
       }
@@ -363,13 +369,15 @@ export function FantasyPage() {
     });
   };
 
-  const handleSetCaptain = (id: number) => {
+  const _handleSetCaptain = (id: number) => {
     if (!starterIds.includes(id)) {
       toast.error('El capitán tiene que ser titular');
       return;
     }
     setCaptainId((prev) => (prev === id ? null : id));
   };
+  void _handleToggleStarter;
+  void _handleSetCaptain;
 
   const handleSave = async () => {
     if (selectedPlayerIds.length < 11) {
@@ -492,14 +500,7 @@ export function FantasyPage() {
       {tab === 'standings' && <FantasyStandings />}
 
       {tab === 'lineup' && (
-        <LineupTab
-          squadPlayers={squadPlayers}
-          starterIds={starterIds}
-          captainId={captainId}
-          fantasyPointsById={fantasyPointsById}
-          onToggleStarter={handleToggleStarter}
-          onSetCaptain={handleSetCaptain}
-        />
+        <PerRoundLineupTab squadPlayers={squadPlayers} />
       )}
 
       {tab === 'squad' && (
@@ -973,6 +974,308 @@ function FantasyGuide() {
 }
 
 // ─── Lineup tab — pick 11 starters + captain ─────────────────────────────────
+
+// ─── Per-round lineup tab (NEW) ──────────────────────────────────────────────
+
+function PerRoundLineupTab({ squadPlayers }: { squadPlayers: Player[] }) {
+  const { data: roundsData, isLoading: roundsLoading } = useFantasyRounds();
+  const rounds = roundsData?.data ?? [];
+  const currentRound = rounds.find((r) => r.isCurrent) ?? rounds.find((r) => r.isOpen) ?? null;
+  const [selectedRound, setSelectedRound] = useState<string | null>(null);
+
+  // Auto-select the current open round on load.
+  useEffect(() => {
+    if (selectedRound === null && currentRound) {
+      setSelectedRound(currentRound.slug);
+    }
+  }, [currentRound, selectedRound]);
+
+  const activeSlug = selectedRound ?? currentRound?.slug ?? null;
+  const { data: lineupData, isLoading: lineupLoading } = useFantasyLineup(activeSlug);
+  const upsertLineup = useUpsertLineup();
+
+  // Local draft: playerIds with flags.
+  const [draft, setDraft] = useState<LineupPlayerInput[]>([]);
+  const [dirty, setDirty] = useState(false);
+
+  // Populate draft from server data when round changes.
+  useEffect(() => {
+    if (lineupData?.data) {
+      setDraft(lineupData.data.map((r) => ({
+        playerId: r.playerId,
+        isStarter: r.isStarter,
+        isCaptain: r.isCaptain,
+        isViceCaptain: r.isViceCaptain,
+      })));
+    } else if (activeSlug) {
+      // No lineup yet for this round — default all 15 squad players as bench.
+      setDraft(squadPlayers.map((p) => ({
+        playerId: p.id,
+        isStarter: false,
+        isCaptain: false,
+        isViceCaptain: false,
+      })));
+    }
+    setDirty(false);
+  }, [lineupData, activeSlug, squadPlayers]);
+
+  const starterCount = draft.filter((p) => p.isStarter).length;
+  const captainPicked = draft.some((p) => p.isCaptain);
+  const vicePicked = draft.some((p) => p.isViceCaptain);
+  const roundInfo = rounds.find((r) => r.slug === activeSlug);
+  const isOpen = roundInfo?.isOpen ?? false;
+
+  function toggle(playerId: number) {
+    if (!isOpen) return;
+    setDraft((prev) => {
+      const cur = prev.find((p) => p.playerId === playerId);
+      if (!cur) return prev;
+      const now = !cur.isStarter;
+      // If removing from starters, also strip captain/vice if they had it.
+      return prev.map((p) =>
+        p.playerId === playerId
+          ? { ...p, isStarter: now, isCaptain: now ? p.isCaptain : false, isViceCaptain: now ? p.isViceCaptain : false }
+          : p,
+      );
+    });
+    setDirty(true);
+  }
+
+  function setCaptain(playerId: number) {
+    if (!isOpen) return;
+    setDraft((prev) => prev.map((p) => ({
+      ...p,
+      isCaptain: p.playerId === playerId,
+      isViceCaptain: p.isViceCaptain && p.playerId !== playerId,
+    })));
+    setDirty(true);
+  }
+
+  function setVice(playerId: number) {
+    if (!isOpen) return;
+    setDraft((prev) => prev.map((p) => ({
+      ...p,
+      isViceCaptain: p.playerId === playerId,
+      isCaptain: p.isCaptain && p.playerId !== playerId,
+    })));
+    setDirty(true);
+  }
+
+  async function handleSave() {
+    if (!activeSlug) return;
+    try {
+      await upsertLineup.mutateAsync({ round: activeSlug, players: draft });
+      toast.success('¡Lineup guardado!');
+      setDirty(false);
+    } catch (e: any) {
+      const msg = e?.response?.data?.error?.message ?? 'Error al guardar';
+      toast.error(msg);
+    }
+  }
+
+  const squadById = useMemo(() => new Map(squadPlayers.map((p) => [p.id, p])), [squadPlayers]);
+  const starters = draft.filter((p) => p.isStarter).sort((a, b) => {
+    const pa = squadById.get(a.playerId);
+    const pb = squadById.get(b.playerId);
+    const order = ['GK', 'DEF', 'MID', 'FWD'];
+    return order.indexOf(pa?.position ?? '') - order.indexOf(pb?.position ?? '');
+  });
+  const bench = draft.filter((p) => !p.isStarter);
+
+  if (roundsLoading) return <div className="px-4 mt-4"><SkeletonList count={5} /></div>;
+  if (squadPlayers.length < 15) {
+    return (
+      <div className="mx-4 mt-4 p-4 rounded-xl bg-card border border-border text-center flex flex-col items-center gap-3">
+        <span className="text-2xl">🧩</span>
+        <p className="text-sm-s font-semibold text-text">Primero armá tu plantel de 15</p>
+        <p className="text-xs-s text-muted">Elegí 15 jugadores en la pestaña Plantel antes de configurar el lineup por fecha.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-4 pb-6">
+      {/* Round selector */}
+      <div className="px-4">
+        <p className="text-xs-s text-muted mb-2 font-semibold uppercase tracking-wider">Fecha</p>
+        <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
+          {rounds.map((r) => (
+            <button
+              key={r.slug}
+              onClick={() => setSelectedRound(r.slug)}
+              className={cn(
+                'flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs-s font-semibold border transition-colors',
+                activeSlug === r.slug ? 'bg-accent text-accent-on border-accent' : 'bg-elevated border-border text-muted',
+                !r.isOpen && activeSlug !== r.slug && 'opacity-60',
+              )}
+            >
+              {!r.isOpen && <Lock size={10} />}
+              {r.label.replace('Grupos — ', '')}
+              {r.isCurrent && <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Deadline info */}
+      {roundInfo && (
+        <div className={cn(
+          'mx-4 flex items-center gap-2 px-3 py-2 rounded-lg border text-xs-s',
+          isOpen
+            ? 'bg-green-500/10 border-green-500/30 text-green-300'
+            : 'bg-elevated border-border text-muted',
+        )}>
+          {isOpen ? <CheckCircle2 size={14} /> : <Lock size={14} />}
+          {isOpen
+            ? `Deadline: ${new Date(roundInfo.deadline).toLocaleString('es-AR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'America/Argentina/Buenos_Aires' })}`
+            : `Cerrado · ${lineupData?.meta.points ?? 0} pts en esta fecha`
+          }
+        </div>
+      )}
+
+      {lineupLoading ? (
+        <div className="px-4"><SkeletonList count={11} /></div>
+      ) : (
+        <>
+          {/* Starters */}
+          <div className="px-4">
+            <p className="text-xs-s text-muted mb-2 font-semibold uppercase tracking-wider">
+              Titulares ({starterCount}/11)
+              {!captainPicked && starterCount > 0 && isOpen && <span className="text-orange-400 ml-2">· Elegí capitán</span>}
+              {!vicePicked && starterCount > 0 && isOpen && <span className="text-orange-400 ml-1">y vicecapitán</span>}
+            </p>
+            <div className="flex flex-col gap-1.5">
+              {starters.map((row) => {
+                const p = squadById.get(row.playerId);
+                if (!p) return null;
+                return (
+                  <LineupRow
+                    key={row.playerId}
+                    player={p}
+                    isStarter
+                    isCaptain={row.isCaptain}
+                    isViceCaptain={row.isViceCaptain}
+                    isOpen={isOpen}
+                    onToggle={() => toggle(row.playerId)}
+                    onCaptain={() => setCaptain(row.playerId)}
+                    onVice={() => setVice(row.playerId)}
+                  />
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Bench */}
+          <div className="px-4">
+            <p className="text-xs-s text-muted mb-2 font-semibold uppercase tracking-wider">
+              Suplentes ({bench.length})
+            </p>
+            <div className="flex flex-col gap-1.5 opacity-60">
+              {bench.map((row) => {
+                const p = squadById.get(row.playerId);
+                if (!p) return null;
+                return (
+                  <LineupRow
+                    key={row.playerId}
+                    player={p}
+                    isStarter={false}
+                    isCaptain={false}
+                    isViceCaptain={false}
+                    isOpen={isOpen}
+                    onToggle={() => toggle(row.playerId)}
+                    onCaptain={undefined}
+                    onVice={undefined}
+                  />
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Save */}
+          {isOpen && dirty && (
+            <div className="px-4">
+              <button
+                onClick={handleSave}
+                disabled={upsertLineup.isPending || starterCount !== 11 || !captainPicked || !vicePicked}
+                className="w-full py-3 rounded-xl bg-accent text-accent-on font-semibold text-sm-s disabled:opacity-50 transition-opacity"
+              >
+                {upsertLineup.isPending ? 'Guardando…' : `Guardar lineup de ${roundInfo?.label ?? 'esta fecha'}`}
+              </button>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+function LineupRow({
+  player,
+  isStarter,
+  isCaptain,
+  isViceCaptain,
+  isOpen,
+  onToggle,
+  onCaptain,
+  onVice,
+}: {
+  player: Player;
+  isStarter: boolean;
+  isCaptain: boolean;
+  isViceCaptain: boolean;
+  isOpen: boolean;
+  onToggle: () => void;
+  onCaptain: (() => void) | undefined;
+  onVice: (() => void) | undefined;
+}) {
+  return (
+    <div className={cn(
+      'flex items-center gap-2 p-2.5 rounded-lg border bg-card transition-colors',
+      isStarter ? 'border-accent/30' : 'border-border',
+    )}>
+      <button
+        type="button"
+        disabled={!isOpen}
+        onClick={onToggle}
+        className={cn(
+          'w-5 h-5 rounded border flex items-center justify-center flex-shrink-0 transition-colors',
+          isStarter ? 'bg-accent border-accent text-accent-on' : 'bg-elevated border-border',
+        )}
+      >
+        {isStarter && <Check size={11} strokeWidth={3} />}
+      </button>
+      <span className={cn('text-[10px] font-bold px-1.5 py-0.5 rounded-full flex-shrink-0', POSITION_COLORS[player.position])}>
+        {player.position}
+      </span>
+      <span className="flex-1 text-sm-s font-semibold text-text truncate">{player.name}</span>
+      {isStarter && onCaptain && (
+        <button
+          type="button"
+          onClick={onCaptain}
+          className={cn(
+            'w-6 h-6 rounded-full text-[10px] font-bold flex items-center justify-center flex-shrink-0 transition-colors',
+            isCaptain ? 'bg-yellow-400 text-black' : 'bg-elevated border border-border text-muted',
+          )}
+          title="Capitán"
+        >C</button>
+      )}
+      {isStarter && onVice && (
+        <button
+          type="button"
+          onClick={onVice}
+          className={cn(
+            'w-6 h-6 rounded-full text-[10px] font-bold flex items-center justify-center flex-shrink-0 transition-colors',
+            isViceCaptain ? 'bg-slate-400 text-black' : 'bg-elevated border border-border text-muted',
+          )}
+          title="Vicecapitán"
+        >V</button>
+      )}
+    </div>
+  );
+}
+
+// ─── Old lineup tab (kept for now but no longer shown on per-round tab) ───────
+// @ts-expect-error legacy component preserved as reference, no longer rendered
 
 function LineupTab({
   squadPlayers,
