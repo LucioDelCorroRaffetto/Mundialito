@@ -9,15 +9,31 @@
  */
 import 'dotenv/config';
 import { db } from '../db/index.js';
-import { users } from '../db/schema/index.js';
+import { users, userAchievements } from '../db/schema/index.js';
+import { eq } from 'drizzle-orm';
 import { recomputeUserAchievements } from '../services/achievement-service.js';
+import { isHiddenUser } from '../lib/hidden-users.js';
 
 async function main() {
   const allUsers = await db.select({ id: users.id, username: users.username }).from(users);
   console.log(`[achievements] recomputing for ${allUsers.length} users`);
 
   let granted = 0;
+  let skipped = 0;
   for (const u of allUsers) {
+    if (isHiddenUser(u.id)) {
+      // Owners / hidden users don't accumulate logros. Wipe any that snuck
+      // in (e.g. from earlier runs) so they truly never appear on rankings.
+      const deleted = await db
+        .delete(userAchievements)
+        .where(eq(userAchievements.userId, u.id))
+        .returning({ id: userAchievements.id });
+      if (deleted.length > 0) {
+        console.log(`  ${u.username} (#${u.id}): hidden — purged ${deleted.length} logro(s)`);
+      }
+      skipped++;
+      continue;
+    }
     try {
       const awarded = await recomputeUserAchievements(u.id);
       if (awarded.length > 0) {
@@ -29,7 +45,7 @@ async function main() {
     }
   }
 
-  console.log(`[achievements] done — ${granted} new awards across ${allUsers.length} users`);
+  console.log(`[achievements] done — ${granted} new awards across ${allUsers.length - skipped} users (${skipped} hidden)`);
 }
 
 main().catch((err) => {

@@ -32,16 +32,21 @@ const CATALOG = [
   { slug: 'perfect_group', name: 'Grupo Perfecto', description: 'Acertaste todos los resultados (ganador) de un grupo', icon: '✨', pointsBonus: 12, tier: 'gold' },
   { slug: 'upset_hunter', name: 'Cazador de Sorpresas', description: 'Acertaste 3 sorpresas (favorito perdió)', icon: '🐉', pointsBonus: 6, tier: 'silver' },
   { slug: 'loyal', name: 'Fiel Seguidor', description: 'Ingresaste a la app 7 días durante el torneo', icon: '💎', pointsBonus: 3, tier: 'silver' },
-  { slug: 'share_master', name: 'Influencer', description: 'Compartiste 5 pronósticos como imagen', icon: '📸', pointsBonus: 3, tier: 'silver' },
+  // share_master removed by request — no longer in the catalog.
   { slug: 'fantasy_legend', name: 'Leyenda del Fantasy', description: 'Fuiste el mejor en fantasy de tu liga', icon: '🌟', pointsBonus: 15, tier: 'gold' },
-  { slug: 'perfect_knockout', name: 'Adivino de Octavos', description: 'Acertaste todos los resultados de octavos de final', icon: '🎰', pointsBonus: 20, tier: 'gold' },
+  { slug: 'perfect_knockout', name: 'Adivino de Octavos', description: 'Acertaste al menos 4 de los 8 ganadores de octavos', icon: '🎰', pointsBonus: 20, tier: 'gold' },
   { slug: 'underdog', name: 'El Underdog', description: 'Ganaste la liga sin haber estado en top 3 antes de cuartos', icon: '🐺', pointsBonus: 25, tier: 'platinum' },
   // Small fun logros — pre-tournament & engagement
   { slug: 'predictor_10', name: 'Tomando Confianza', description: 'Pronosticaste 10 partidos', icon: '🪙', pointsBonus: 1, tier: 'bronze' },
   { slug: 'predictor_30', name: 'Quinielero Serio', description: 'Pronosticaste 30 partidos', icon: '📝', pointsBonus: 3, tier: 'bronze' },
   { slug: 'group_completionist', name: 'No Te Falta Ninguno', description: 'Pronosticaste los 72 partidos de fase de grupos', icon: '🧩', pointsBonus: 5, tier: 'silver' },
   { slug: 'group_sampler', name: 'Recorrido Mundial', description: 'Pronosticaste al menos un partido de cada grupo', icon: '🌍', pointsBonus: 3, tier: 'bronze' },
-  { slug: 'night_owl', name: 'Hora Bruja', description: 'Guardaste un pronóstico entre las 0 y las 5 de la mañana', icon: '🌙', pointsBonus: 2, tier: 'bronze' },
+  // night_owl removed by request — no longer in the catalog.
+  // New small logros — easier wins based on data we already have.
+  { slug: 'predictor_5', name: 'Primeros Pasos', description: 'Pronosticaste 5 partidos', icon: '🐣', pointsBonus: 1, tier: 'bronze' },
+  { slug: 'predictor_50', name: 'Quinielero Top', description: 'Pronosticaste 50 partidos', icon: '🏅', pointsBonus: 5, tier: 'silver' },
+  { slug: 'confederation_explorer', name: 'Vuelta al Mundo', description: 'Pronosticaste un partido de cada confederación (6/6)', icon: '🧭', pointsBonus: 4, tier: 'bronze' },
+  { slug: 'big_game_hunter', name: 'Choque de Titanes', description: 'Pronosticaste un partido entre dos top 10 del ranking FIFA', icon: '⚔️', pointsBonus: 3, tier: 'bronze' },
   // In-tournament chiquitos — fire only after matches are scored.
   { slug: 'bullseye_zero', name: 'Cero a Cero', description: 'Acertaste el resultado exacto en un 0-0', icon: '🎯', pointsBonus: 4, tier: 'silver' },
   { slug: 'goalfest', name: 'Festival de Goles', description: 'Acertaste un partido con 4 o más goles totales', icon: '🎆', pointsBonus: 5, tier: 'silver' },

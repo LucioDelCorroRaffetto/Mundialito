@@ -99,9 +99,9 @@ function PitchSlot({
 
   if (!player) {
     return (
-      <div className="flex flex-col items-center gap-1 w-[52px]">
-        <div className="w-9 h-9 opacity-20">
-          <Shirt color="#ffffff" textColor="#ffffff" />
+      <div className="flex flex-col items-center gap-1 w-[68px]">
+        <div className="w-14 h-14 opacity-20 rounded-full border-2 border-dashed border-white/40 flex items-center justify-center">
+          <span className="text-[9px] text-white/40 font-bold">{pos}</span>
         </div>
         <span className="text-[8px] text-white/20 text-center leading-tight">{pos}</span>
       </div>
@@ -114,28 +114,45 @@ function PitchSlot({
   return (
     <button
       onClick={() => onRemove?.(player.id)}
-      className={cn('flex flex-col items-center gap-0.5 group w-[52px]', isBench && 'opacity-40')}
+      className={cn('flex flex-col items-center gap-0.5 group w-[68px]', isBench && 'opacity-50')}
       title={`Quitar ${player.name}`}
     >
-      <div className="relative w-9 h-9">
-        {/* Shirt */}
-        <div className={cn('w-full h-full drop-shadow-md transition-transform group-hover:scale-110', isBench && 'grayscale')}>
-          <Shirt color={shirt.bg} textColor={shirt.text} number={player.shirtNumber} />
-        </div>
-        {/* Photo overlay — circular, top-right */}
-        {player.photoUrl && (
-          <div className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full border border-white/40 overflow-hidden bg-black/40 flex-shrink-0">
-            <img src={player.photoUrl} alt="" className="w-full h-full object-cover object-top" />
+      {/* Photo-first design: big circular photo (or shirt fallback) so the
+          user can actually recognise the player on the pitch. */}
+      <div className={cn(
+        'relative w-14 h-14 rounded-full overflow-hidden ring-2 transition-transform group-hover:scale-110 drop-shadow-lg',
+        isCaptain ? 'ring-accent' : 'ring-white/40',
+        isBench && 'grayscale',
+      )} style={{ background: shirt.bg }}>
+        {player.photoUrl ? (
+          <img
+            src={player.photoUrl}
+            alt={player.name}
+            className="absolute inset-0 w-full h-full object-cover object-top"
+            loading="lazy"
+          />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center">
+            <Shirt color={shirt.bg} textColor={shirt.text} number={player.shirtNumber} />
           </div>
         )}
-        {/* Captain badge */}
+        {/* Shirt number badge — bottom right, semi-circle on the photo */}
+        {player.photoUrl && player.shirtNumber != null && (
+          <span
+            className="absolute -bottom-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 rounded-full border-2 border-black/40 flex items-center justify-center text-[10px] font-black tabular-nums"
+            style={{ background: shirt.bg, color: shirt.text }}
+          >
+            {player.shirtNumber}
+          </span>
+        )}
+        {/* Captain crown — top left over the photo */}
         {isCaptain && (
-          <span className="absolute -top-1 -left-1 w-4 h-4 rounded-full bg-accent flex items-center justify-center shadow-md">
-            <Crown size={9} className="text-accent-on" />
+          <span className="absolute -top-1 -left-1 w-5 h-5 rounded-full bg-accent flex items-center justify-center shadow-md ring-2 ring-black/30">
+            <Crown size={11} className="text-accent-on" />
           </span>
         )}
       </div>
-      <span className="text-[9px] text-white font-semibold truncate max-w-[52px] text-center leading-tight group-hover:text-white/70 transition-colors drop-shadow-sm">
+      <span className="text-[10px] text-white font-bold truncate max-w-[68px] text-center leading-tight drop-shadow-md">
         {lastName}
       </span>
     </button>
@@ -514,24 +531,12 @@ export function FantasyPage() {
               </p>
             </div>
           ) : (
-            <div className="mx-4 flex items-center gap-3 p-3 rounded-xl bg-card border border-border">
-              <Trophy size={16} className="text-accent flex-shrink-0" />
-              <p className="text-xs-s text-muted flex-1">
-                Tu equipo cuenta para <span className="font-semibold text-text">todas tus ligas</span> automáticamente
-              </p>
-              <div className="flex gap-1 overflow-x-auto no-scrollbar">
-                {myLeagues.map((l) => (
-                  <span key={l.id} className="flex-shrink-0 flex items-center gap-1.5 px-2 py-1 rounded-lg bg-elevated border border-border text-xs-s text-text font-medium">
-                    {l.imageUrl ? (
-                      <img src={l.imageUrl} alt={l.name} className="w-3.5 h-3.5 rounded object-cover flex-shrink-0" />
-                    ) : (
-                      <Trophy size={10} className="text-muted flex-shrink-0" />
-                    )}
-                    {l.name}
-                  </span>
-                ))}
-              </div>
-            </div>
+            // Quieter single-line note instead of the previous chip-list banner
+            // (which collided with the team list and stole vertical space).
+            <p className="mx-4 text-xs-s text-muted/70 flex items-center gap-1.5">
+              <Trophy size={11} className="text-accent flex-shrink-0" />
+              Tu equipo cuenta en {myLeagues.length === 1 ? 'tu liga' : `tus ${myLeagues.length} ligas`} automáticamente.
+            </p>
           )}
 
           {/* Position filter — list mode only */}

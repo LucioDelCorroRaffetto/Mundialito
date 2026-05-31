@@ -13,6 +13,7 @@ import {
   teams,
 } from '../db/schema/index.js';
 import { eq, and, count, inArray, sql } from 'drizzle-orm';
+import { isHiddenUser } from '../lib/hidden-users.js';
 
 /**
  * Checks and awards achievements based on an event.
@@ -26,6 +27,10 @@ export async function checkAchievements(
 ): Promise<string[]> {
   const awarded: string[] = [];
 
+  // Hidden users (e.g. the app owner) opt out of every logro so they
+  // don't artificially sit at the top of any ranking.
+  if (isHiddenUser(userId)) return awarded;
+
   switch (event.type) {
     case 'prediction_saved': {
       await maybeAward(userId, 'first_prediction', awarded);
@@ -37,8 +42,15 @@ export async function checkAchievements(
       const distinctMatches = await loadDistinctPredictedMatchIds(userId);
 
       // Small grindy logros — easy wins to keep newcomers engaged.
+      if (distinctMatches.length >= 5) await maybeAward(userId, 'predictor_5', awarded);
       if (distinctMatches.length >= 10) await maybeAward(userId, 'predictor_10', awarded);
       if (distinctMatches.length >= 30) await maybeAward(userId, 'predictor_30', awarded);
+      if (distinctMatches.length >= 50) await maybeAward(userId, 'predictor_50', awarded);
+
+      // Confederation explorer: predicted a match from each of the 6 confederations.
+      await evaluateConfederationExplorer(userId, awarded);
+      // Big-game hunter: predicted a match between two top-10 FIFA-ranked teams.
+      await evaluateBigGameHunter(userId, awarded);
 
       // group_completionist: 72 distinct group-stage matches predicted.
       // early_bird: same set, but completed before the opening match kickoff.
@@ -221,6 +233,73 @@ async function evaluateGroupCompletion(
   );
   if (new Date() < new Date(opening)) {
     await maybeAward(userId, 'early_bird', awarded);
+  }
+}
+
+/**
+ * Confederation explorer: predicted a match involving each of the 6 FIFA
+ * confederations (CONMEBOL, UEFA, CONCACAF, CAF, AFC, OFC).
+ */
+async function evaluateConfederationExplorer(userId: number, awarded: string[]): Promise<void> {
+  const rows = await db
+    .selectDistinct({ confederation: teams.confederation })
+    .from(predictions)
+    .innerJoin(matches, eq(predictions.matchId, matches.id))
+    .innerJoin(teams, sql`${teams.id} = ${matches.homeTeamId} OR ${teams.id} = ${matches.awayTeamId}`)
+    .where(
+      and(
+        eq(predictions.userId, userId),
+        sql`${teams.confederation} IS NOT NULL`,
+      ),
+    );
+  const confeds = new Set(
+    rows.map((r) => r.confederation).filter((c): c is string =>
+      typeof c === 'string' && c !== 'PLAYOFF',
+    ),
+  );
+  if (confeds.size >= 6) {
+    await maybeAward(userId, 'confederation_explorer', awarded);
+  }
+}
+
+/**
+ * Big-game hunter: predicted any match between two teams both ranked in the
+ * top 10 of the FIFA ranking. Bona fide flex pick — proves you cared about
+ * the marquee fixtures.
+ */
+async function evaluateBigGameHunter(userId: number, awarded: string[]): Promise<void> {
+  const rows = await db
+    .select({ matchId: predictions.matchId })
+    .from(predictions)
+    .innerJoin(matches, eq(predictions.matchId, matches.id))
+    .innerJoin(teams, eq(teams.id, matches.homeTeamId))
+    .where(
+      and(
+        eq(predictions.userId, userId),
+        sql`${teams.fifaRank} <= 10`,
+      ),
+    );
+  if (rows.length === 0) return;
+
+  // Re-query with awayTeam side and intersect by matchId.
+  const matchIdsHomeTop10 = new Set(rows.map((r) => r.matchId));
+  const rowsAway = await db
+    .select({ matchId: predictions.matchId })
+    .from(predictions)
+    .innerJoin(matches, eq(predictions.matchId, matches.id))
+    .innerJoin(teams, eq(teams.id, matches.awayTeamId))
+    .where(
+      and(
+        eq(predictions.userId, userId),
+        sql`${teams.fifaRank} <= 10`,
+      ),
+    );
+
+  for (const r of rowsAway) {
+    if (matchIdsHomeTop10.has(r.matchId)) {
+      await maybeAward(userId, 'big_game_hunter', awarded);
+      return;
+    }
   }
 }
 
@@ -711,11 +790,11 @@ async function evaluatePerfectGroup(
 }
 
 /**
- * Award perfect_knockout when the user got the winner right in at least 6 of
- * the 8 R16 matches (previously: all 8). Same easing reasoning as
- * perfect_group — 100% accuracy gates almost everyone.
+ * Award perfect_knockout when the user got the winner right in at least 4 of
+ * the 8 R16 matches (50%). Eased again after feedback — full 8/8 is
+ * essentially a luck check.
  */
-const PERFECT_KNOCKOUT_THRESHOLD = 6;
+const PERFECT_KNOCKOUT_THRESHOLD = 4;
 
 async function evaluatePerfectKnockout(
   userId: number,

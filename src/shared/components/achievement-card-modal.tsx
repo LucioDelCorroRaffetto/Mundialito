@@ -305,54 +305,65 @@ interface LayerProps {
   dimmed?: boolean;
 }
 
-/** How aggressive the holographic effects render per tier. Drives the
- *  RainbowRefraction band brightness, chrome-scratch opacity and the
- *  outer glow intensity. 0 = matte, 1 = full holo. */
+/** How aggressive the holographic effects render per tier. Softer than the
+ *  first pass — feedback was "too harsh". 0 = matte, 1 = full holo. */
 const TIER_INTENSITY: Record<AchievementTier, number> = {
-  bronze: 0.35,
-  silver: 0.6,
-  gold: 0.85,
-  platinum: 1,
+  bronze: 0.25,
+  silver: 0.4,
+  gold: 0.6,
+  platinum: 0.85,
 };
 
 /**
- * Rainbow refraction band — the signature Pokémon-card holo effect. A
- * vertical rainbow stripe that tracks the cursor's x-position. On platinum
- * the band is rendered twice (offset) for a stronger prismatic look.
+ * Rainbow refraction — a soft prismatic band that only reveals where the
+ * cursor passes. Rest state is invisible; the rainbow only "exists" inside
+ * the spotlight. This is closer to how real holo cards behave: the
+ * rainbow is dormant until light hits it.
  */
 function RainbowRefraction({ pointer, intensity, dimmed }: LayerProps & { intensity: number }) {
   const px = pointer.x * 100;
   const py = pointer.y * 100;
-  // Even at rest the band sits diagonally across the card.
-  const restAngle = 110;
-  const angle = pointer.active ? 90 + (pointer.x - 0.5) * 60 : restAngle;
-  const baseAlpha = (dimmed ? 0.3 : 1) * intensity;
+  const baseAlpha = (dimmed ? 0.4 : 1) * intensity;
+  // Spotlight strength: 0 when cursor is gone, full when over the card.
+  const spotlight = pointer.active ? 1 : 0.18;
 
   return (
     <>
-      {/* Diagonal rainbow sweep, follows cursor angle. */}
+      {/* Latent rainbow band — only visible inside the spotlight. Combined
+          via a single radial mask so we don't have to layer twice. The
+          rainbow gradient sits underneath a circular alpha mask centered on
+          the cursor; outside the mask it fades to transparent. */}
       <div
-        className="absolute inset-0 mix-blend-color-dodge pointer-events-none transition-opacity"
+        className="absolute inset-0 pointer-events-none mix-blend-soft-light transition-opacity duration-500"
         style={{
-          background: `linear-gradient(${angle}deg,
-            transparent 30%,
-            rgba(255, 0, 128, ${0.18 * baseAlpha}) 38%,
-            rgba(255, 200, 0, ${0.18 * baseAlpha}) 44%,
-            rgba(0, 255, 128, ${0.18 * baseAlpha}) 50%,
-            rgba(0, 200, 255, ${0.18 * baseAlpha}) 56%,
-            rgba(180, 0, 255, ${0.18 * baseAlpha}) 62%,
-            transparent 70%
-          )`,
+          backgroundImage: `
+            radial-gradient(
+              circle 280px at ${px}% ${py}%,
+              rgba(255, 255, 255, ${baseAlpha}) 0%,
+              rgba(255, 255, 255, ${baseAlpha * 0.5}) 30%,
+              transparent 65%
+            ),
+            linear-gradient(115deg,
+              rgba(255, 90, 170, 0.55) 0%,
+              rgba(255, 220, 100, 0.55) 20%,
+              rgba(120, 255, 180, 0.55) 40%,
+              rgba(90, 200, 255, 0.55) 60%,
+              rgba(190, 130, 255, 0.55) 80%,
+              rgba(255, 90, 170, 0.55) 100%
+            )
+          `,
+          backgroundBlendMode: 'multiply',
+          opacity: spotlight,
         }}
       />
-      {/* Pointer-driven spotlight that REVEALS the rainbow underneath —
-          like a flashlight across a holo card. */}
+      {/* Soft white highlight under the cursor — gives the card a glassy
+          surface feel without the previous "spotlight" intensity. */}
       <div
-        className="absolute inset-0 mix-blend-screen pointer-events-none"
+        className="absolute inset-0 mix-blend-screen pointer-events-none transition-opacity duration-300"
         style={{
           background: `radial-gradient(
-            circle 220px at ${px}% ${py}%,
-            rgba(255, 255, 255, ${0.55 * baseAlpha * (pointer.active ? 1 : 0.35)}),
+            circle 200px at ${px}% ${py}%,
+            rgba(255, 255, 255, ${0.2 * baseAlpha * spotlight}),
             transparent 70%
           )`,
         }}
@@ -362,11 +373,10 @@ function RainbowRefraction({ pointer, intensity, dimmed }: LayerProps & { intens
 }
 
 /**
- * Faint diagonal "scratch chrome" lines that give the metallic surface
- * texture even when the cursor isn't moving. Intensity scales per tier.
- */
+ * Very faint diagonal scratch texture — half the opacity of the previous
+ * pass, gives a hint of brushed-metal without screaming. */
 function ChromeScratches({ intensity, dimmed }: { intensity: number; dimmed?: boolean }) {
-  const a = (dimmed ? 0.4 : 1) * intensity * 0.18;
+  const a = (dimmed ? 0.4 : 1) * intensity * 0.08;
   return (
     <div
       className="absolute inset-0 pointer-events-none mix-blend-overlay"
@@ -375,20 +385,11 @@ function ChromeScratches({ intensity, dimmed }: { intensity: number; dimmed?: bo
           repeating-linear-gradient(
             115deg,
             transparent 0,
-            transparent 6px,
-            rgba(255, 255, 255, ${a}) 6px,
-            rgba(255, 255, 255, ${a}) 7px,
-            transparent 7px,
-            transparent 13px
-          ),
-          repeating-linear-gradient(
-            65deg,
-            transparent 0,
-            transparent 11px,
-            rgba(255, 255, 255, ${a * 0.6}) 11px,
-            rgba(255, 255, 255, ${a * 0.6}) 12px,
-            transparent 12px,
-            transparent 22px
+            transparent 9px,
+            rgba(255, 255, 255, ${a}) 9px,
+            rgba(255, 255, 255, ${a}) 10px,
+            transparent 10px,
+            transparent 18px
           )
         `,
       }}
@@ -397,23 +398,22 @@ function ChromeScratches({ intensity, dimmed }: { intensity: number; dimmed?: bo
 }
 
 /**
- * Top-side specular highlight that follows the cursor — like the way
- * light catches on a curved glossy surface. Only renders when the
- * cursor is over the card (active).
+ * Gentle elliptical specular highlight under the cursor. Lower alpha so
+ * it reads as glassy rather than blinding.
  */
 function SpecularHighlight({ pointer, dimmed }: LayerProps) {
   if (!pointer.active) return null;
   const px = pointer.x * 100;
   const py = pointer.y * 100;
-  const a = dimmed ? 0.25 : 0.6;
+  const a = dimmed ? 0.15 : 0.35;
   return (
     <div
-      className="absolute inset-0 pointer-events-none mix-blend-screen transition-opacity duration-200"
+      className="absolute inset-0 pointer-events-none mix-blend-screen transition-opacity duration-300"
       style={{
         background: `radial-gradient(
-          ellipse 140px 60px at ${px}% ${py}%,
+          ellipse 180px 90px at ${px}% ${py}%,
           rgba(255, 255, 255, ${a}),
-          transparent 70%
+          transparent 75%
         )`,
       }}
     />

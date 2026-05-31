@@ -16,7 +16,11 @@ export async function globalLeaderboardHandler(req: Request, res: Response) {
   const offset = Number(req.query.offset) || 0;
 
   // Exclude admin/bot accounts from the leaderboard
-  const hiddenIds = process.env.ADMIN_USER_IDS?.split(',').map(Number).filter(Boolean) ?? [];
+  const adminIds = process.env.ADMIN_USER_IDS?.split(',').map(Number).filter(Boolean) ?? [];
+  // Merge ADMIN_USER_IDS with the hidden-users list (e.g. the app owner)
+  // so neither shows up in the global leaderboard.
+  const { HIDDEN_USER_IDS } = await import('../../../lib/hidden-users.js');
+  const hiddenIds = [...new Set([...adminIds, ...HIDDEN_USER_IDS])];
 
   // Per-user totals: predictions are stored per (user, match, league), so for a
   // user-level leaderboard we collapse to one row per (user, match) by taking
