@@ -259,7 +259,11 @@ export function MatchDetailPage() {
   const teamsAreTbd = homeTeamDisplay.code === 'TBD' || homeTeamDisplay.code === '?'
     || awayTeamDisplay.code === 'TBD' || awayTeamDisplay.code === '?';
 
-  const myLeagueList = myLeagues?.data ?? [];
+  // Hide personal/auto-created leagues from the chip selector — the user
+  // doesn't think of them as "leagues" and the chip would just confuse the
+  // per-league override UX. Predictions still propagate there in the
+  // background; it just isn't surfaced in the chips.
+  const myLeagueList = (myLeagues?.data ?? []).filter((l) => !l.isPersonal);
   const hasLeague = myLeagueList.length > 0;
 
   const handleShare = async () => {

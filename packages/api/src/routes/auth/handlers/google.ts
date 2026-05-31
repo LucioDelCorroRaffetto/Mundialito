@@ -6,6 +6,7 @@ import { eq, or } from 'drizzle-orm';
 import { signAccess, signRefresh } from '../../../lib/jwt.js';
 import { z } from 'zod';
 import { GOOGLE_CLIENT_ID } from '../../../constants.js';
+import { ensurePersonalLeague } from '../../../lib/personal-league.js';
 
 // Singleton — shares the internal certificate cache across requests
 const googleClient = new OAuth2Client(GOOGLE_CLIENT_ID);
@@ -76,6 +77,11 @@ export async function googleAuthHandler(req: Request, res: Response) {
       .where(eq(users.id, user.id))
       .returning();
   }
+
+  // Every signed-in user gets a personal league (fire-and-forget).
+  ensurePersonalLeague(user.id).catch((err) =>
+    console.error('[google-auth] ensurePersonalLeague failed:', err),
+  );
 
   const adminIds = process.env.ADMIN_USER_IDS?.split(',').map(Number).filter(Boolean) ?? [];
   const tokenPayload = { sub: user.id, username: user.username };

@@ -16,6 +16,10 @@ export const leagues = sqliteTable('leagues', {
   predictionsVisibility: text('predictions_visibility', { enum: ['after_kickoff', 'always'] })
     .notNull()
     .default('after_kickoff'),
+  // Auto-created hidden league for each user so they can predict without
+  // joining anything. Filtered out of public listings, leaderboards and
+  // multi-league pickers; appears in the user's own UI as 'Mis pronósticos'.
+  isPersonal: integer('is_personal', { mode: 'boolean' }).notNull().default(false),
   createdAt: text('created_at').notNull().default(sql`(datetime('now'))`),
 });
 

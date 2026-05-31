@@ -6,6 +6,7 @@ import { hashPassword } from '../../../lib/password.js';
 import { signAccess, signRefresh } from '../../../lib/jwt.js';
 import { ConflictError } from '../../../lib/errors.js';
 import { eq, or } from 'drizzle-orm';
+import { ensurePersonalLeague } from '../../../lib/personal-league.js';
 
 export const registerSchema = z.object({
   email: z.string().email('Email inválido'),
@@ -31,6 +32,13 @@ export async function registerHandler(req: Request, res: Response) {
 
   const passwordHash = await hashPassword(password);
   const [user] = await db.insert(users).values({ email, username, passwordHash }).returning();
+
+  // Give the user a personal league straight away so they can predict
+  // before joining anything. Fire-and-forget: a failure here shouldn't
+  // block the signup response — the next authenticated call also ensures it.
+  ensurePersonalLeague(user.id).catch((err) =>
+    console.error('[register] ensurePersonalLeague failed:', err),
+  );
 
   const adminIds = process.env.ADMIN_USER_IDS?.split(',').map(Number).filter(Boolean) ?? [];
   const payload = { sub: user.id, username: user.username };

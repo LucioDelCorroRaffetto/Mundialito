@@ -321,7 +321,9 @@ export function TournamentPredictionsPage() {
   const leagueIdParam = searchParams.get('leagueId');
 
   const { data: myLeaguesData, isLoading: leaguesLoading } = useMyLeagues();
-  const myLeagues = myLeaguesData?.data ?? [];
+  // Personal leagues are hidden containers — don't surface them in the
+  // league picker chips here either. Saves still propagate behind the scenes.
+  const myLeagues = (myLeaguesData?.data ?? []).filter((l) => !l.isPersonal);
 
   // selectedLeagueId: URL param → first league → null
   const [selectedLeagueId, setSelectedLeagueId] = useState<number | null>(

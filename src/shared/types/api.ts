@@ -54,6 +54,10 @@ export interface League {
   description: string | null;
   imageUrl: string | null;
   predictionsVisibility: 'after_kickoff' | 'always';
+  // Auto-created hidden league so the user can predict without joining
+  // anything. Filtered out of public listings; shown to the owner as
+  // 'Mis pronósticos'.
+  isPersonal?: boolean;
   createdAt: string;
   // Enriched fields returned by /leagues/mine
   memberCount?: number;

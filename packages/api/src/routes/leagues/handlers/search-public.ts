@@ -16,7 +16,9 @@ export async function searchPublicHandler(req: Request, res: Response) {
   }
   const { q, limit } = parsed.data;
 
-  const conditions = [eq(leagues.isPublic, true)];
+  // Exclude personal leagues from the public explore — they're per-user
+  // hidden containers, not joinable communities.
+  const conditions = [eq(leagues.isPublic, true), eq(leagues.isPersonal, false)];
   if (q) conditions.push(like(leagues.name, `%${q}%`));
 
   // Contar miembros con subquery

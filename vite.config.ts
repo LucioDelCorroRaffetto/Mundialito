@@ -8,24 +8,59 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.svg', 'apple-touch-icon.png', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-maskable.png'],
+      includeAssets: [
+        'favicon.svg',
+        'apple-touch-icon.png',
+        'icons/icon-192.png',
+        'icons/icon-512.png',
+        'icons/icon-maskable.png',
+        'screenshot-home.png',
+        'sc-leagues.png',
+      ],
       manifest: {
-        name: 'Mundialito',
+        // Stable id so newer Chrome / Edge keep the install across
+        // scope changes (avoids "another version is already installed").
+        id: '/',
+        name: 'Mundialito · Prode + Fantasy del Mundial',
         short_name: 'Mundialito',
         description: 'El prode + fantasy del Mundial entre amigos',
         theme_color: '#0a0e1a',
         background_color: '#0a0e1a',
         display: 'standalone',
+        // display_override prefers window-controls-overlay on desktop but
+        // falls back to standalone on Android/iOS (where wco is ignored).
+        display_override: ['standalone', 'minimal-ui'],
         orientation: 'portrait',
         scope: '/',
-        start_url: '/',
+        start_url: '/?source=pwa',
         lang: 'es-AR',
+        dir: 'ltr',
         icons: [
+          // Both purposes on the SAME 512 file so Android picks one without
+          // a separate file. iOS uses apple-touch-icon.png (180×180).
           { src: '/icons/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
           { src: '/icons/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
           { src: '/icons/icon-maskable.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
         ],
-        categories: ['sports', 'games'],
+        categories: ['sports', 'games', 'entertainment'],
+        // Screenshots improve the install dialog on Android Chrome (since
+        // Chrome 92). Two ratios so the prompt has both phone + wide samples.
+        screenshots: [
+          {
+            src: '/screenshot-home.png',
+            sizes: '1080x1920',
+            type: 'image/png',
+            form_factor: 'narrow',
+            label: 'Pantalla principal con el countdown del Mundial',
+          },
+          {
+            src: '/sc-leagues.png',
+            sizes: '1080x1920',
+            type: 'image/png',
+            form_factor: 'narrow',
+            label: 'Tus ligas y la tabla de posiciones',
+          },
+        ],
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,svg,png,woff2}'],

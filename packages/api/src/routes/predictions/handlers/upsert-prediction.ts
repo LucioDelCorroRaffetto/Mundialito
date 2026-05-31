@@ -6,6 +6,7 @@ import { predictions, matches, leagueMembers } from '../../../db/schema/index.js
 import { AppError, NotFoundError } from '../../../lib/errors.js';
 import { isLocked } from '../../../lib/match-helpers.js';
 import { checkAchievements } from '../../../services/achievement-service.js';
+import { ensurePersonalLeague } from '../../../lib/personal-league.js';
 
 export const upsertPredictionSchema = z.object({
   matchId: z.number().int().positive(),
@@ -34,18 +35,19 @@ export async function upsertPredictionHandler(req: Request, res: Response) {
   //    - If omitted → apply to every league the user belongs to. This covers
   //      both the first-ever prediction (propagation) and bulk-update intent
   //      (the user wants the same score across all their leagues).
-  const memberships = await db
+  let memberships = await db
     .select({ leagueId: leagueMembers.leagueId })
     .from(leagueMembers)
     .where(eq(leagueMembers.userId, userId));
-  const userLeagueIds = memberships.map((m) => m.leagueId);
+  let userLeagueIds = memberships.map((m) => m.leagueId);
 
+  // Self-heal: if the user somehow ended up with zero memberships (legacy
+  // account from before personal leagues, or a backfill miss), provision
+  // their personal league on the fly so the save can proceed instead of
+  // throwing NO_LEAGUE.
   if (userLeagueIds.length === 0) {
-    throw new AppError(
-      'NO_LEAGUE',
-      'You must belong to at least one league to predict',
-      400,
-    );
+    const personalId = await ensurePersonalLeague(userId);
+    userLeagueIds = [personalId];
   }
 
   let targetLeagueIds: number[];

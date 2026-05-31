@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { db } from '../../../db/index.js';
-import { predictions, users, leagueMembers, userAchievements, achievements } from '../../../db/schema/index.js';
+import { predictions, users, leagueMembers, userAchievements, achievements, leagues } from '../../../db/schema/index.js';
 import { eq, sql, desc, inArray, notInArray } from 'drizzle-orm';
 
 // Tier priority for picking the "top" badge (higher = better)
@@ -63,13 +63,17 @@ export async function globalLeaderboardHandler(req: Request, res: Response) {
         .limit(limit)
         .offset(offset);
 
-  // Count distinct leagues per user
+  // Count distinct leagues per user — but NOT counting the auto-created
+  // personal league, otherwise every new user appears to be "in 1 league"
+  // when they haven't joined anything.
   const leagueCounts = await db
     .select({
       userId: leagueMembers.userId,
       leagueCount: sql<number>`count(distinct ${leagueMembers.leagueId})`,
     })
     .from(leagueMembers)
+    .innerJoin(leagues, eq(leagues.id, leagueMembers.leagueId))
+    .where(eq(leagues.isPersonal, false))
     .groupBy(leagueMembers.userId);
 
   const leagueCountByUser = new Map(leagueCounts.map((r) => [r.userId, r.leagueCount]));
