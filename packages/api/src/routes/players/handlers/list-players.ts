@@ -7,7 +7,11 @@ import { players } from '../../../db/schema/index.js';
 const querySchema = z.object({
   teamId: z.coerce.number().int().positive().optional(),
   position: z.enum(['GK', 'DEF', 'MID', 'FWD']).optional(),
-  limit: z.coerce.number().int().min(1).max(600).default(50),
+  // Default is now high enough to return every player in a single request
+  // (48 teams × 26 = 1248 + provisional spillover). The previous default
+  // of 50 + max of 600 silently truncated the roster — the fantasy picker
+  // was missing entire teams.
+  limit: z.coerce.number().int().min(1).max(2000).default(2000),
   offset: z.coerce.number().int().min(0).default(0),
 });
 

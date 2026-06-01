@@ -3,16 +3,19 @@ import { apiClient } from '@/shared/lib/api-client';
 import type { ApiList, Player } from '@/shared/types/api';
 
 /**
- * Fetches all players from GET /api/v1/players.
- * Requests up to 400 records (48 teams x up to ~8 players each) in one shot.
- * Players data is stable for the duration of the tournament.
+ * Fetches every player in the tournament from GET /api/v1/players. 48 teams
+ * × 26 = 1248 players, plus a handful of provisional rosters >26 → ~1280.
+ *
+ * The previous version asked for `limit=400` which silently truncated the
+ * response — most teams ended up missing from the fantasy picker. Now we
+ * ask for everything in one shot.
  */
 export function usePlayers() {
   return useQuery({
     queryKey: ['players'],
     queryFn: async () => {
       const { data } = await apiClient.get<ApiList<Player>>('/players', {
-        params: { limit: 400, offset: 0 },
+        params: { limit: 2000, offset: 0 },
       });
       return data.data;
     },
