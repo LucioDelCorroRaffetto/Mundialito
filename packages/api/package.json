@@ -17,7 +17,9 @@
     "sync:achievements": "tsx src/scripts/sync-achievements-catalog.ts",
     "seed:fifa-rankings": "tsx src/scripts/seed-fifa-rankings.ts",
     "sync:photos": "tsx src/scripts/sync-player-photos.ts",
-    "complete:squads": "tsx src/scripts/complete-squads.ts"
+    "complete:squads": "tsx src/scripts/complete-squads.ts",
+    "verify:squads": "tsx src/scripts/verify-squads-vs-wikipedia.ts",
+    "fix:squads": "tsx src/scripts/fix-squads-from-wikipedia.ts"
   },
   "dependencies": {
     "@libsql/client": "^0.14.0",

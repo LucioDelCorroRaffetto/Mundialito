@@ -1311,21 +1311,43 @@ function LineupRow({
 }) {
   return (
     <div className={cn(
-      'flex items-center gap-2 p-2.5 rounded-lg border bg-card transition-colors',
-      isStarter ? 'border-accent/30' : 'border-border',
+      'flex items-center gap-2.5 p-2.5 rounded-xl border bg-card transition-colors',
+      // Accent border + faint glow so a row reads as "starter" at a glance
+      // even before checking the checkbox state. Captain/Vice get a stronger
+      // ring on top of that.
+      isStarter
+        ? isCaptain
+          ? 'border-yellow-400/60 ring-1 ring-yellow-400/30 bg-yellow-400/[0.04]'
+          : isViceCaptain
+            ? 'border-slate-300/60 ring-1 ring-slate-300/30'
+            : 'border-accent/40'
+        : 'border-border',
     )}>
       <button
         type="button"
         disabled={!isOpen}
         onClick={onToggle}
+        aria-label={isStarter ? 'Quitar de titulares' : 'Marcar titular'}
         className={cn(
-          'w-5 h-5 rounded border flex items-center justify-center flex-shrink-0 transition-colors',
+          'w-6 h-6 rounded-md border flex items-center justify-center flex-shrink-0 transition-colors',
           isStarter ? 'bg-accent border-accent text-accent-on' : 'bg-elevated border-border',
         )}
       >
-        {isStarter && <Check size={11} strokeWidth={3} />}
+        {isStarter && <Check size={13} strokeWidth={3} />}
       </button>
-      <span className={cn('text-[10px] font-bold px-1.5 py-0.5 rounded-full flex-shrink-0', POSITION_COLORS[player.position])}>
+      {/* Player avatar — photo when available, position-coloured shirt as
+          fallback. Same component the pitch view uses for visual consistency. */}
+      <PlayerAvatar
+        photoUrl={player.photoUrl ?? null}
+        name={player.name}
+        position={player.position}
+      />
+      <span
+        className={cn(
+          'text-[10px] font-bold px-1.5 py-0.5 rounded-full flex-shrink-0',
+          POSITION_COLORS[player.position],
+        )}
+      >
         {player.position}
       </span>
       <span className="flex-1 text-sm-s font-semibold text-text truncate">{player.name}</span>
@@ -1333,22 +1355,28 @@ function LineupRow({
         <button
           type="button"
           onClick={onCaptain}
+          aria-label={isCaptain ? 'Capitán' : 'Marcar capitán'}
           className={cn(
-            'w-6 h-6 rounded-full text-[10px] font-bold flex items-center justify-center flex-shrink-0 transition-colors',
-            isCaptain ? 'bg-yellow-400 text-black' : 'bg-elevated border border-border text-muted',
+            'w-8 h-8 rounded-full text-xs font-black flex items-center justify-center flex-shrink-0 transition-all',
+            isCaptain
+              ? 'bg-yellow-400 text-black shadow-md shadow-yellow-400/40 scale-105'
+              : 'bg-elevated border border-border text-muted hover:border-yellow-400/60',
           )}
-          title="Capitán"
+          title="Capitán (x2 puntos)"
         >C</button>
       )}
       {isStarter && onVice && (
         <button
           type="button"
           onClick={onVice}
+          aria-label={isViceCaptain ? 'Vicecapitán' : 'Marcar vicecapitán'}
           className={cn(
-            'w-6 h-6 rounded-full text-[10px] font-bold flex items-center justify-center flex-shrink-0 transition-colors',
-            isViceCaptain ? 'bg-slate-400 text-black' : 'bg-elevated border border-border text-muted',
+            'w-8 h-8 rounded-full text-xs font-black flex items-center justify-center flex-shrink-0 transition-all',
+            isViceCaptain
+              ? 'bg-slate-300 text-black shadow-md shadow-slate-400/40 scale-105'
+              : 'bg-elevated border border-border text-muted hover:border-slate-300/60',
           )}
-          title="Vicecapitán"
+          title="Vicecapitán (x1.5 puntos)"
         >V</button>
       )}
     </div>
