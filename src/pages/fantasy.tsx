@@ -163,17 +163,17 @@ function PitchView({
   selectedPlayerIds,
   players,
   onRemove,
-  starterIds,
-  captainId,
 }: {
   selectedPlayerIds: number[];
   players: PitchPlayer[];
   onRemove: (id: number) => void;
-  starterIds: number[];
-  captainId: number | null;
 }) {
+  // The pitch view used to grey out "bench" players based on the legacy
+  // starter/captain flags. Now that the 11 + captain + vice are picked
+  // per-round on the Titulares tab, this view is just the universe of
+  // 15 — every player is rendered equally. The starter highlight lives
+  // on the Titulares tab where it actually reflects the user's choice.
   const selectedSet = new Set(selectedPlayerIds);
-  const starterSet = new Set(starterIds);
   const selectedPlayers = players.filter((p) => selectedSet.has(p.id));
 
   const byPosition: Record<Position, PitchPlayer[]> = { GK: [], DEF: [], MID: [], FWD: [] };
@@ -225,8 +225,10 @@ function PitchView({
                   player={player}
                   pos={pos}
                   onRemove={onRemove}
-                  isStarter={player ? starterSet.has(player.id) : undefined}
-                  isCaptain={player ? player.id === captainId : undefined}
+                  // All squad members render identically here — starter /
+                  // captain belong on the Titulares tab.
+                  isStarter={undefined}
+                  isCaptain={undefined}
                 />
               ))}
             </div>
@@ -451,7 +453,7 @@ export function FantasyPage() {
     .filter((p): p is Player => p != null);
 
   return (
-    <div className="flex flex-col gap-4 pb-24 animate-fade-in">
+    <div className="flex flex-col gap-4 pb-36 md:pb-24 animate-fade-in">
       <div className="px-4 pt-6 pb-2 flex items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl-s font-display font-bold text-text">Fantasy</h1>
@@ -605,8 +607,6 @@ export function FantasyPage() {
               selectedPlayerIds={selectedPlayerIds}
               players={players as PitchPlayer[]}
               onRemove={handleRemoveFromPitch}
-              starterIds={starterIds}
-              captainId={captainId}
             />
           )}
 
@@ -753,14 +753,21 @@ export function FantasyPage() {
       )}
 
       {/* Save button — only on squad & lineup tabs */}
-      {(tab === 'squad' || tab === 'lineup') && selectedPlayerIds.length > 0 && (
-        <>
-          {/*
-            Single fixed button for both mobile and desktop.
-            - Mobile: bottom-20 (above the 56px tab bar), full-width centered
-            - Desktop: bottom-6, offset left by sidebar width (w-56 / xl:w-64)
-              so it floats inside the main content area, not behind the sidebar.
-          */}
+      {/* Floating save for the squad. Hidden on the Titulares tab (which
+          has its own per-round save) and only renders when the local pick
+          differs from what's saved on the server. Without the dirty check
+          the bar sat there permanently asking to save a no-op, even after
+          a fresh load. */}
+      {tab === 'squad' && (() => {
+        const serverIds = fantasyData?.squad?.map((p) => p.id) ?? [];
+        const serverSet = new Set(serverIds);
+        const localSet = new Set(selectedPlayerIds);
+        const isDirty =
+          serverIds.length !== selectedPlayerIds.length ||
+          serverIds.some((id) => !localSet.has(id)) ||
+          selectedPlayerIds.some((id) => !serverSet.has(id));
+        if (!isDirty || selectedPlayerIds.length === 0) return null;
+        return (
           <motion.div
             initial={{ y: 80 }}
             animate={{ y: 0 }}
@@ -776,8 +783,8 @@ export function FantasyPage() {
                 : `Guardar plantel (${selectedPlayerIds.length}/15)`}
             </button>
           </motion.div>
-        </>
-      )}
+        );
+      })()}
     </div>
   );
 }
@@ -1243,35 +1250,40 @@ function PerRoundLineupTab({ squadPlayers }: { squadPlayers: Player[] }) {
           </div>
 
           {/* Save — sticky above the mobile tab bar (bottom-24 on mobile,
-              regular on desktop). Shows the specific reason it's disabled
-              so the user knows what to fix instead of staring at a greyed
-              button. */}
-          {isOpen && (
-            <div className="px-4 sticky z-10 bottom-24 md:bottom-4">
-              {(() => {
-                let blocker: string | null = null;
-                if (starterCount < 11) blocker = `Faltan ${11 - starterCount} titular${11 - starterCount === 1 ? '' : 'es'}`;
-                else if (starterCount > 11) blocker = `Sobran ${starterCount - 11} titular${starterCount - 11 === 1 ? '' : 'es'}`;
-                else if (!captainPicked) blocker = 'Elegí un capitán (C)';
-                else if (!vicePicked) blocker = 'Elegí un vicecapitán (V)';
-                return (
-                  <button
-                    onClick={handleSave}
-                    disabled={upsertLineup.isPending || blocker !== null || !dirty}
-                    className="w-full py-3 rounded-xl bg-accent text-accent-on font-semibold text-sm-s disabled:opacity-50 transition-opacity shadow-lg"
-                  >
-                    {upsertLineup.isPending
-                      ? 'Guardando…'
-                      : blocker
-                        ? blocker
-                        : !dirty
-                          ? 'Sin cambios para guardar'
-                          : `Guardar lineup de ${roundInfo?.label ?? 'esta fecha'}`}
-                  </button>
-                );
-              })()}
-            </div>
-          )}
+              regular on desktop). Only renders when there's actually
+              something to do: either the user has unsaved changes OR the
+              current draft is invalid (wrong starter count, missing
+              captain, etc.). When everything matches the server, the
+              button hides completely so it doesn't sit there asking to
+              save a no-op. */}
+          {(() => {
+            if (!isOpen) return null;
+            let blocker: string | null = null;
+            if (starterCount < 11) blocker = `Faltan ${11 - starterCount} titular${11 - starterCount === 1 ? '' : 'es'}`;
+            else if (starterCount > 11) blocker = `Sobran ${starterCount - 11} titular${starterCount - 11 === 1 ? '' : 'es'}`;
+            else if (!captainPicked) blocker = 'Elegí un capitán (C)';
+            else if (!vicePicked) blocker = 'Elegí un vicecapitán (V)';
+
+            // Nothing pending → don't render anything at all. This is the
+            // fix for 'el cartel aparece siempre aunque no haga cambios'.
+            if (!dirty && blocker === null) return null;
+
+            return (
+              <div className="px-4 sticky z-10 bottom-24 md:bottom-4">
+                <button
+                  onClick={handleSave}
+                  disabled={upsertLineup.isPending || blocker !== null}
+                  className="w-full py-3 rounded-xl bg-accent text-accent-on font-semibold text-sm-s disabled:opacity-50 transition-opacity shadow-lg"
+                >
+                  {upsertLineup.isPending
+                    ? 'Guardando…'
+                    : blocker
+                      ? blocker
+                      : `Guardar lineup de ${roundInfo?.label ?? 'esta fecha'}`}
+                </button>
+              </div>
+            );
+          })()}
         </>
       )}
     </div>
