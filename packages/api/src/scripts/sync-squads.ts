@@ -169,14 +169,29 @@ async function run() {
       continue;
     }
 
+    // Snapshot existing photo URLs keyed by normalised player name so we
+    // can preserve them after the delete-and-reinsert. Without this we
+    // wipe every photo every time we re-sync a roster — happened once
+    // already and cost us ~825 Wikipedia thumbnails that had to be
+    // re-fetched. The key strips accents + lowercases so 'Lionel Messi'
+    // and 'lionel messi' from a slightly different feed still match.
+    const norm = (s: string) =>
+      s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim();
+    const existingByName = new Map<string, string>();
+    const existingRows = await db
+      .select({ id: players.id, name: players.name, photoUrl: players.photoUrl })
+      .from(players)
+      .where(eq(players.teamId, dbTeam.id));
+    for (const row of existingRows) {
+      if (row.photoUrl) existingByName.set(norm(row.name), row.photoUrl);
+    }
+
     // Replace players for this team. Before we delete, null out any
     // tournament_predictions.top_scorer_player_id that points at one of
     // our players — that FK doesn't have ON DELETE CASCADE, so the
     // delete would otherwise abort with a constraint violation. Users
     // whose pick gets nulled can re-select once the roster lands.
-    const oldPlayerIds = (
-      await db.select({ id: players.id }).from(players).where(eq(players.teamId, dbTeam.id))
-    ).map((p) => p.id);
+    const oldPlayerIds = existingRows.map((p) => p.id);
     if (oldPlayerIds.length > 0) {
       await db
         .update(tournamentPredictions)
@@ -185,18 +200,26 @@ async function run() {
     }
     await db.delete(players).where(eq(players.teamId, dbTeam.id));
 
+    let preservedPhotos = 0;
     const newPlayers = squad
       .filter(p => p.name?.trim())
-      .map(p => ({
-        teamId:      dbTeam.id,
-        name:        p.name.trim(),
-        position:    (p.position ? POSITION_MAP[p.position] : undefined) ?? 'MID',
-        shirtNumber: p.shirtNumber ?? null,
-        photoUrl:    null,
-      }));
+      .map(p => {
+        const photo = existingByName.get(norm(p.name)) ?? null;
+        if (photo) preservedPhotos++;
+        return {
+          teamId:      dbTeam.id,
+          name:        p.name.trim(),
+          position:    (p.position ? POSITION_MAP[p.position] : undefined) ?? 'MID',
+          shirtNumber: p.shirtNumber ?? null,
+          photoUrl:    photo,
+        };
+      });
 
     if (newPlayers.length > 0) {
       await db.insert(players).values(newPlayers);
+    }
+    if (preservedPhotos > 0) {
+      console.log(`   ↳ preserved ${preservedPhotos} photo(s) by matching player names`);
     }
 
     console.log(`✅  ${dbTeam.name.padEnd(24)} ${newPlayers.length} jugadores`);
