@@ -300,13 +300,27 @@ export function FantasyPage() {
     return map;
   }, [players]);
 
-  // Group players by teamId
+  // Group players by teamId — sort each team's roster GK → DEF → MID → FWD,
+  // then by shirt number within position so the picker matches how the
+  // actual squad sheets are printed (GK 1, DEF 2-5, etc.). Players with
+  // no shirt number sort last alphabetically.
   const playersByTeam = useMemo(() => {
+    const POS_ORDER: Record<string, number> = { GK: 0, DEF: 1, MID: 2, FWD: 3 };
     const map = new Map<number, Player[]>();
     for (const player of players) {
       const existing = map.get(player.teamId) ?? [];
       existing.push(player);
       map.set(player.teamId, existing);
+    }
+    for (const list of map.values()) {
+      list.sort((a, b) => {
+        const dp = (POS_ORDER[a.position] ?? 99) - (POS_ORDER[b.position] ?? 99);
+        if (dp !== 0) return dp;
+        const sa = a.shirtNumber ?? 999;
+        const sb = b.shirtNumber ?? 999;
+        if (sa !== sb) return sa - sb;
+        return a.name.localeCompare(b.name);
+      });
     }
     return map;
   }, [players]);
@@ -1102,13 +1116,22 @@ function PerRoundLineupTab({ squadPlayers }: { squadPlayers: Player[] }) {
   }
 
   const squadById = useMemo(() => new Map(squadPlayers.map((p) => [p.id, p])), [squadPlayers]);
-  const starters = draft.filter((p) => p.isStarter).sort((a, b) => {
+  const ORDER = ['GK', 'DEF', 'MID', 'FWD'];
+  // Both starters and bench are sorted by position then shirt number so the
+  // list rhythm matches an actual team sheet (GK on top, FWDs at the bottom)
+  // instead of insertion order from the squad.
+  const sortByPositionThenShirt = (a: LineupPlayerInput, b: LineupPlayerInput) => {
     const pa = squadById.get(a.playerId);
     const pb = squadById.get(b.playerId);
-    const order = ['GK', 'DEF', 'MID', 'FWD'];
-    return order.indexOf(pa?.position ?? '') - order.indexOf(pb?.position ?? '');
-  });
-  const bench = draft.filter((p) => !p.isStarter);
+    const dp = ORDER.indexOf(pa?.position ?? '') - ORDER.indexOf(pb?.position ?? '');
+    if (dp !== 0) return dp;
+    const sa = pa?.shirtNumber ?? 999;
+    const sb = pb?.shirtNumber ?? 999;
+    if (sa !== sb) return sa - sb;
+    return (pa?.name ?? '').localeCompare(pb?.name ?? '');
+  };
+  const starters = draft.filter((p) => p.isStarter).sort(sortByPositionThenShirt);
+  const bench = draft.filter((p) => !p.isStarter).sort(sortByPositionThenShirt);
 
   if (roundsLoading) return <div className="px-4 mt-4"><SkeletonList count={5} /></div>;
   if (squadPlayers.length < 15) {

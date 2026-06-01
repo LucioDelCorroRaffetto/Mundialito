@@ -639,7 +639,7 @@ export function TournamentPredictionsPage() {
         />
         <PickCard
           title="Valla menos vencida"
-          subtitle="Equipo que termina con menos goles recibidos"
+          subtitle="Menor promedio de goles recibidos por partido. Tiene que haber jugado al menos octavos para clasificar."
           points={8}
           selectedTeamId={picks.bestDefenseTeamId}
           onSelect={setField('bestDefenseTeamId')}
@@ -669,6 +669,17 @@ export function TournamentPredictionsPage() {
             </div>
           ))}
         </div>
+
+        {/* Plain-language explanation of how Valla Menos Vencida is judged.
+            Without this users were rightly confused when a group-stage
+            team had a better goals-conceded record than a finalist. */}
+        <p className="text-xs-s text-muted mt-3 leading-relaxed">
+          <span className="text-text font-semibold">Cómo se decide la valla menos vencida:</span>{' '}
+          el equipo con <span className="text-text font-semibold">menor promedio de goles recibidos por partido</span>,
+          contando todos los partidos jugados en el torneo. Para que cuente, el equipo
+          tiene que haber clasificado <span className="text-text font-semibold">al menos a octavos</span> —
+          así, los que quedan afuera en grupos no ganan por jugar menos partidos.
+        </p>
       </div>
 
       {/* First-time hint */}

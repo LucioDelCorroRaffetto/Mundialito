@@ -11,7 +11,9 @@
  * production env doesn't need an extra var.
  */
 const ENV_LIST = process.env.HIDDEN_USER_IDS?.split(',').map(Number).filter(Boolean);
-const DEFAULT_HIDDEN = [2]; // Luchi
+// Default is now empty — the owner asked to compete normally. Set
+// HIDDEN_USER_IDS=2,… in the API env if you want to hide accounts again.
+const DEFAULT_HIDDEN: number[] = [];
 
 export const HIDDEN_USER_IDS: number[] =
   ENV_LIST && ENV_LIST.length > 0 ? ENV_LIST : DEFAULT_HIDDEN;
