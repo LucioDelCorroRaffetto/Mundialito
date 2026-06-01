@@ -25,14 +25,44 @@ const db = drizzle(client);
 const API_KEY = process.env.FOOTBALL_DATA_API_KEY;
 const BASE_URL = 'https://api.football-data.org/v4';
 
-// football-data.org position → our DB enum
+// football-data.org position → our DB enum.
+//
+// The API mixes generic terms (Defence/Midfield/Offence) with granular
+// ones (Centre-Back, Left Winger, Attacking Midfield…). The original
+// version only had the generics, so every centre-back ended up tagged
+// as MID because the script silently fell back to it.
 const POSITION_MAP: Record<string, 'GK' | 'DEF' | 'MID' | 'FWD'> = {
+  // Goalkeepers
   Goalkeeper: 'GK',
-  Defence:    'DEF',
-  Midfield:   'MID',
-  Offence:    'FWD',
-  Forward:    'FWD',
-  Attacker:   'FWD',
+
+  // Generic
+  Defence: 'DEF',
+  Midfield: 'MID',
+  Offence: 'FWD',
+  Forward: 'FWD',
+  Attacker: 'FWD',
+
+  // Defenders (granular)
+  'Centre-Back': 'DEF',
+  'Center-Back': 'DEF',
+  'Left-Back': 'DEF',
+  'Right-Back': 'DEF',
+  'Left Wing-Back': 'DEF',
+  'Right Wing-Back': 'DEF',
+
+  // Midfielders (granular)
+  'Central Midfield': 'MID',
+  'Defensive Midfield': 'MID',
+  'Attacking Midfield': 'MID',
+  'Left Midfield': 'MID',
+  'Right Midfield': 'MID',
+
+  // Forwards (granular)
+  'Centre-Forward': 'FWD',
+  'Center-Forward': 'FWD',
+  'Second Striker': 'FWD',
+  'Left Winger': 'FWD',
+  'Right Winger': 'FWD',
 };
 
 // TLA differences between football-data.org and our seed codes.
