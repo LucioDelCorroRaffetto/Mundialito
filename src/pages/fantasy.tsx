@@ -411,25 +411,25 @@ export function FantasyPage() {
   void _handleSetCaptain;
 
   const handleSave = async () => {
-    if (selectedPlayerIds.length < 11) {
-      toast.error(`Necesitás al menos 11 jugadores (tenés ${selectedPlayerIds.length})`);
+    // The Plantel tab only chooses the universe of 15 — starters / captain
+    // are picked per round in the Titulares tab now. We keep the legacy
+    // payload happy by sending the first 11 as starters and the first one
+    // as captain; the backend treats these as defaults that the per-round
+    // lineup overrides. Without this, the save was blocked with 'marcá
+    // 11 titulares' even though there's no UI to do that any more.
+    if (selectedPlayerIds.length < 15) {
+      toast.error(`Tenés que armar un plantel de 15 (tenés ${selectedPlayerIds.length})`);
       return;
     }
-    if (starterIds.length !== STARTERS_COUNT) {
-      toast.error(`Tenés que marcar exactamente ${STARTERS_COUNT} titulares (tenés ${starterIds.length})`);
-      return;
-    }
-    if (captainId == null) {
-      toast.error('Elegí un capitán');
-      return;
-    }
-    if (!starterIds.includes(captainId)) {
-      toast.error('El capitán tiene que ser titular');
-      return;
-    }
+    const defaultStarters = selectedPlayerIds.slice(0, 11);
+    const defaultCaptain = defaultStarters[0];
     try {
-      await updateSquad.mutateAsync({ playerIds: selectedPlayerIds, starterIds, captainId });
-      toast.success('¡Equipo guardado!');
+      await updateSquad.mutateAsync({
+        playerIds: selectedPlayerIds,
+        starterIds: defaultStarters,
+        captainId: defaultCaptain,
+      });
+      toast.success('¡Equipo guardado! Elegí tu 11 inicial en la pestaña Titulares.');
     } catch (e: unknown) {
       const err = e as { response?: { data?: { error?: { message?: string } } } };
       toast.error(err?.response?.data?.error?.message ?? 'Error al guardar el equipo');
@@ -456,7 +456,7 @@ export function FantasyPage() {
         <div>
           <h1 className="text-2xl-s font-display font-bold text-text">Fantasy</h1>
           <p className="text-sm-s text-muted mt-1">
-            Armá tu equipo, elegí 11 titulares y tu capitán
+            Armá tu plantel de 15. El 11 titular y capitán se eligen por fecha.
           </p>
         </div>
         {/* View toggle — only relevant on the squad tab */}
@@ -773,7 +773,7 @@ export function FantasyPage() {
             >
               {updateSquad.isPending
                 ? 'Guardando...'
-                : `Guardar equipo (${selectedPlayerIds.length} · ${starterIds.length}/${STARTERS_COUNT} titulares)`}
+                : `Guardar plantel (${selectedPlayerIds.length}/15)`}
             </button>
           </motion.div>
         </>
@@ -866,22 +866,22 @@ function FantasyGuide() {
         <p>En la pestaña <span className="text-text font-semibold">Plantel</span> expandís cada selección y tocás los jugadores para agregarlos. Podés ver el plantel en lista o en formato cancha.</p>
       </GuideSection>
 
-      <GuideSection emoji="⭐" title="Paso 2 — Elegí tus 11 titulares">
-        <p>De tus 15 jugadores, tenés que marcar <span className="text-text font-semibold">11 como titulares</span> y 4 quedan en el banco de suplentes.</p>
+      <GuideSection emoji="⭐" title="Paso 2 — Elegí tu 11 inicial por fecha">
+        <p>De tus 15 jugadores, en cada <span className="text-text font-semibold">fecha del torneo</span> tenés que marcar <span className="text-text font-semibold">11 como titulares</span> y 4 quedan en el banco.</p>
         <div className="p-3 rounded-lg bg-elevated border border-border">
           <p className="text-xs-s font-semibold text-text mb-1">⚠️ Importante</p>
-          <p className="text-xs-s">Solo los <span className="text-text font-semibold">titulares</span> suman puntos. Los suplentes no acumulan puntos por más goles que hagan.</p>
+          <p className="text-xs-s">Solo los <span className="text-text font-semibold">titulares</span> de esa fecha suman puntos. Los suplentes no acumulan puntos por más goles que hagan.</p>
         </div>
-        <p>Usá la pestaña <span className="text-text font-semibold">Titulares</span> para marcar quiénes arrancan y quiénes se quedan en el banco.</p>
+        <p>Usá la pestaña <span className="text-text font-semibold">Titulares</span> para configurar el 11 inicial de cada fecha — podés cambiarlo entre rondas para apostar a los jugadores que tienen partido.</p>
       </GuideSection>
 
-      <GuideSection emoji="👑" title="Paso 3 — Elegí tu capitán">
-        <p>Entre los 11 titulares, elegí <span className="text-text font-semibold">1 capitán</span>. El capitán es tu jugador clave:</p>
+      <GuideSection emoji="👑" title="Paso 3 — Elegí tu capitán y vicecapitán">
+        <p>Entre los 11 titulares, elegí <span className="text-text font-semibold">1 capitán</span> y <span className="text-text font-semibold">1 vicecapitán</span> por fecha:</p>
         <div className="p-3 rounded-lg bg-accent/10 border border-accent/30">
-          <p className="text-sm-s font-bold text-accent text-center">El capitán suma el DOBLE de puntos</p>
-          <p className="text-xs-s text-muted text-center mt-0.5">Si tu capitán hace un gol y suma 6 pts, vos recibís 12 pts</p>
+          <p className="text-sm-s font-bold text-accent text-center">Capitán suma DOBLE · Vicecapitán x1.5</p>
+          <p className="text-xs-s text-muted text-center mt-0.5">Si tu capitán hace 6 pts vos recibís 12; tu vicecapitán los multiplica por 1.5.</p>
         </div>
-        <p>Elegí como capitán al jugador que esperes que tenga más participación en el torneo — los goleadores y asistidores son buenas opciones.</p>
+        <p>Igual que el 11 inicial, el capitán y vice se eligen por fecha — apostá fuerte a quienes esperás que jueguen.</p>
       </GuideSection>
 
       <GuideSection emoji="📊" title="Sistema de puntuación por partido">
