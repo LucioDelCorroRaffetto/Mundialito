@@ -110,9 +110,10 @@ function PickCard({
   );
 }
 
-// Goleador unlock: all squads published by June 2
-const SCORER_UNLOCK = new Date('2026-06-02T00:00:00-03:00');
-const scorerLocked = new Date() < SCORER_UNLOCK;
+// Goleador unlock: 48/48 squads landed in the DB on June 1 (one day
+// ahead of FIFA's official confirmation date). Flag now permanently
+// resolved at module-load — kept as a constant for clarity.
+const scorerLocked = false;
 
 interface TopScorerCardProps {
   sectionId: string;

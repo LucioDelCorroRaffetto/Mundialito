@@ -13,7 +13,8 @@ import 'dotenv/config';
 import { createClient } from '@libsql/client';
 import { drizzle } from 'drizzle-orm/libsql';
 import { eq } from 'drizzle-orm';
-import { teams, players } from '../db/schema/index.js';
+import { teams, players, tournamentPredictions } from '../db/schema/index.js';
+import { inArray } from 'drizzle-orm';
 
 const client = createClient({
   url: process.env.TURSO_DATABASE_URL!,
@@ -43,6 +44,9 @@ const TLA_REMAP: Record<string, string> = {
   TTO: 'TRI', // Trinidad & Tobago
   IRK: 'IRQ', // Iraq (sometimes)
   MAD: 'MLI', // Mali fallback
+  URY: 'URU', // Uruguay — ISO uses URY, FIFA/our DB uses URU
+  GRM: 'GER', // safety: some feeds use GRM
+  NLD: 'NED', // Netherlands — football-data sometimes returns NLD
 };
 
 interface FdPlayer {
@@ -135,7 +139,20 @@ async function run() {
       continue;
     }
 
-    // Replace players for this team
+    // Replace players for this team. Before we delete, null out any
+    // tournament_predictions.top_scorer_player_id that points at one of
+    // our players — that FK doesn't have ON DELETE CASCADE, so the
+    // delete would otherwise abort with a constraint violation. Users
+    // whose pick gets nulled can re-select once the roster lands.
+    const oldPlayerIds = (
+      await db.select({ id: players.id }).from(players).where(eq(players.teamId, dbTeam.id))
+    ).map((p) => p.id);
+    if (oldPlayerIds.length > 0) {
+      await db
+        .update(tournamentPredictions)
+        .set({ topScorerPlayerId: null })
+        .where(inArray(tournamentPredictions.topScorerPlayerId, oldPlayerIds));
+    }
     await db.delete(players).where(eq(players.teamId, dbTeam.id));
 
     const newPlayers = squad

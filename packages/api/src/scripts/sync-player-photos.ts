@@ -77,11 +77,16 @@ async function main() {
   let found = 0;
   let missing = 0;
   for (const p of targets) {
-    // Try the most specific query first, fall back to a looser one.
+    // Try the loosest query first — Wikipedia search is good enough at
+    // disambiguating a player's name on its own (e.g. "Erling Haaland" hits
+    // his article on the first result). Tighter queries that include the
+    // team name actually hurt accuracy because our team names are in
+    // Spanish ("Noruega", "Países Bajos") while Wikipedia is in English.
     const queries = [
-      `${p.name} ${p.teamName} footballer`,
       `${p.name} footballer`,
       `${p.name}`,
+      // Last-ditch — try the team in case the player is too generic.
+      `${p.name} ${p.teamName} football`,
     ];
 
     let url: string | null = null;

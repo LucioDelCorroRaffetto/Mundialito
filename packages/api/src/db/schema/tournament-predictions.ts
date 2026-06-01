@@ -12,7 +12,10 @@ export const tournamentPredictions = sqliteTable('tournament_predictions', {
   championTeamId: integer('champion_team_id').references(() => teams.id),
   runnerUpTeamId: integer('runner_up_team_id').references(() => teams.id),
   thirdPlaceTeamId: integer('third_place_team_id').references(() => teams.id),
-  topScorerPlayerId: integer('top_scorer_player_id').references(() => players.id),
+  // ON DELETE SET NULL so re-syncing rosters doesn't blow up tournament
+  // predictions with a FK violation — the user simply re-picks their
+  // goleador once the new player list lands.
+  topScorerPlayerId: integer('top_scorer_player_id').references(() => players.id, { onDelete: 'set null' }),
   revelationTeamId: integer('revelation_team_id').references(() => teams.id),
   surpriseEliminatedTeamId: integer('surprise_eliminated_team_id').references(() => teams.id),
   bestDefenseTeamId: integer('best_defense_team_id').references(() => teams.id),
