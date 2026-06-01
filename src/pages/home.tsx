@@ -17,9 +17,46 @@ const WORLD_CUP_START = '2026-06-11T19:00:00Z';
 function useCountdown(targetUtc: string) {
   const [diff, setDiff] = useState(() => new Date(targetUtc).getTime() - Date.now());
   useEffect(() => {
-    const update = () => setDiff(new Date(targetUtc).getTime() - Date.now());
-    const id = setInterval(update, 1000);
-    return () => clearInterval(id);
+    // If the countdown has already ended, don't burn CPU re-rendering every
+    // second forever. Also pause when the tab is hidden — there's nothing
+    // to look at and Render's free tier gets thrashed by background tabs.
+    if (diff <= 0) return;
+
+    let id: ReturnType<typeof setInterval> | null = null;
+    const start = () => {
+      if (id != null) return;
+      id = setInterval(() => {
+        const next = new Date(targetUtc).getTime() - Date.now();
+        setDiff(next);
+        if (next <= 0 && id != null) {
+          clearInterval(id);
+          id = null;
+        }
+      }, 1000);
+    };
+    const stop = () => {
+      if (id != null) {
+        clearInterval(id);
+        id = null;
+      }
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        setDiff(new Date(targetUtc).getTime() - Date.now());
+        start();
+      } else {
+        stop();
+      }
+    };
+    start();
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      stop();
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+    // diff in deps would restart the interval every tick; we intentionally
+    // only react to a fresh target.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [targetUtc]);
   const total = Math.max(0, diff);
   const days = Math.floor(total / 86400000);

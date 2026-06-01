@@ -1219,11 +1219,12 @@ function PerRoundLineupTab({ squadPlayers }: { squadPlayers: Player[] }) {
             </div>
           </div>
 
-          {/* Save — sticky so it's always reachable while scrolling. Shows
-              the specific reason it's disabled so the user knows what to
-              fix instead of staring at a greyed-out button. */}
+          {/* Save — sticky above the mobile tab bar (bottom-24 on mobile,
+              regular on desktop). Shows the specific reason it's disabled
+              so the user knows what to fix instead of staring at a greyed
+              button. */}
           {isOpen && (
-            <div className="px-4 sticky bottom-4 z-10">
+            <div className="px-4 sticky z-10 bottom-24 md:bottom-4">
               {(() => {
                 let blocker: string | null = null;
                 if (starterCount < 11) blocker = `Faltan ${11 - starterCount} titular${11 - starterCount === 1 ? '' : 'es'}`;

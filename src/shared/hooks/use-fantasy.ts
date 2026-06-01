@@ -51,6 +51,10 @@ export function useUpdateFantasySquad() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['fantasy', 'team'] });
       qc.invalidateQueries({ queryKey: ['fantasy', 'standings'] });
+      // Squad changes affect which players are eligible for each round's
+      // lineup. Without this invalidate, the lineup tab keeps showing
+      // already-removed players until manual refresh.
+      qc.invalidateQueries({ queryKey: ['fantasy', 'lineup'] });
     },
   });
 }

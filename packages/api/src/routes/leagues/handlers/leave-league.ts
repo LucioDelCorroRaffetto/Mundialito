@@ -11,8 +11,21 @@ export async function leaveLeagueHandler(req: Request, res: Response) {
 
   const league = await db.select().from(leagues).where(eq(leagues.id, id)).get();
   if (!league) throw new NotFoundError('League');
+  // Personal leagues are auto-provisioned containers; leaving would be the
+  // same as deleting them and dropping all the user's predictions.
+  if (league.isPersonal) {
+    throw new AppError(
+      'FORBIDDEN',
+      'No podés salir de tu liga personal — ahí quedan guardados tus pronósticos.',
+      403,
+    );
+  }
   if (league.adminId === userId) {
-    throw new AppError('FORBIDDEN', 'Admin cannot leave the league. Transfer admin or delete the league.', 403);
+    throw new AppError(
+      'FORBIDDEN',
+      'Como admin no podés salir de la liga. Transferí el rol o eliminala.',
+      403,
+    );
   }
 
   await db.delete(leagueMembers).where(

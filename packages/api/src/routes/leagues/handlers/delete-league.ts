@@ -12,6 +12,15 @@ export async function deleteLeagueHandler(req: Request, res: Response) {
   const league = await db.select().from(leagues).where(eq(leagues.id, id)).get();
   if (!league) throw new NotFoundError('League');
   if (league.adminId !== userId) throw new AppError('FORBIDDEN', 'Only admin can delete', 403);
+  // Personal leagues are infra, not user-owned content. Deleting one would
+  // cascade-drop every prediction the user ever made.
+  if (league.isPersonal) {
+    throw new AppError(
+      'NOT_DELETABLE',
+      'No podés borrar tu liga personal — es donde quedan guardados tus pronósticos.',
+      403,
+    );
+  }
 
   await db.delete(leagues).where(eq(leagues.id, id));
   return res.status(204).send();

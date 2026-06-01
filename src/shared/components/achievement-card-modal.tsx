@@ -25,14 +25,21 @@ interface Props {
  * but greyed out with a lock badge.
  */
 export function AchievementCardModal({ achievement, earned, earnedAt, onClose }: Props) {
-  // Close on Escape.
+  // Close on Escape + lock body scroll while open. Without the body lock,
+  // scrolling on the underlying page bleeds through the backdrop on mobile
+  // (especially Safari which doesn't respect the dialog scroll containment).
   useEffect(() => {
     if (!achievement) return;
     function onKey(e: KeyboardEvent) {
       if (e.key === 'Escape') onClose();
     }
     document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      document.body.style.overflow = prevOverflow;
+    };
   }, [achievement, onClose]);
 
   return (

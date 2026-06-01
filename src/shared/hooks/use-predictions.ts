@@ -70,13 +70,23 @@ export function useUpsertPrediction() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (input: UpsertPredictionInput) => {
-      const { data } = await apiClient.post<Prediction>('/predictions', input);
-      return data;
+      // The API returns either a single Prediction row when targeting one
+      // league, or `{ data: Prediction[] }` when propagating to multiple
+      // leagues. We normalise to an array so the invalidation logic is
+      // the same regardless of how many rows came back.
+      const { data } = await apiClient.post<Prediction | { data: Prediction[] }>(
+        '/predictions',
+        input,
+      );
+      const rows: Prediction[] = Array.isArray((data as any).data)
+        ? (data as { data: Prediction[] }).data
+        : [data as Prediction];
+      return { rows, matchId: rows[0]?.matchId ?? input.matchId };
     },
-    onSuccess: (data) => {
+    onSuccess: ({ matchId }) => {
       qc.invalidateQueries({ queryKey: ['predictions', 'mine'] });
-      qc.invalidateQueries({ queryKey: ['prediction', data.matchId] });
-      qc.invalidateQueries({ queryKey: ['predictions', 'league-match', data.matchId] });
+      qc.invalidateQueries({ queryKey: ['prediction', matchId] });
+      qc.invalidateQueries({ queryKey: ['predictions', 'league-match', matchId] });
       qc.invalidateQueries({ queryKey: ['leagues', 'mine'] });
       qc.invalidateQueries({ queryKey: ['leagues', 'standings'] });
     },

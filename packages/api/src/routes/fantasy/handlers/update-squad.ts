@@ -1,8 +1,8 @@
 import { Request, Response } from 'express';
 import { z } from 'zod';
-import { eq, inArray } from 'drizzle-orm';
+import { eq, inArray, and, notInArray } from 'drizzle-orm';
 import { db } from '../../../db/index.js';
-import { fantasyTeams, fantasySquadPlayers, players } from '../../../db/schema/index.js';
+import { fantasyTeams, fantasySquadPlayers, players, fantasyLineups } from '../../../db/schema/index.js';
 import { AppError } from '../../../lib/errors.js';
 
 export const updateSquadSchema = z.object({
@@ -79,6 +79,18 @@ export async function updateSquadHandler(req: Request, res: Response) {
     await tx
       .delete(fantasySquadPlayers)
       .where(eq(fantasySquadPlayers.fantasyTeamId, team.id));
+
+    // Drop any per-round lineup rows referencing players no longer in the
+    // squad. Without this, the next /fantasy/lineup/:round save fails
+    // validation because the lineup still points at a dropped player.
+    await tx
+      .delete(fantasyLineups)
+      .where(
+        and(
+          eq(fantasyLineups.userId, userId),
+          notInArray(fantasyLineups.playerId, playerIds),
+        ),
+      );
 
     await tx.insert(fantasySquadPlayers).values(
       playerIds.map((playerId) => ({
