@@ -1,73 +1,127 @@
 /**
  * Fetches a thumbnail photo for every player from Wikipedia (free, no API key).
- * Tries the player's name + team + 'footballer' as the search term, takes the
- * top hit's thumbnail (pithumbsize=240).
  *
- * Skips players that already have a photo. Players without a usable
- * Wikipedia match keep their photoUrl null and the UI falls back to the
- * coloured shirt + number SVG already in place.
+ * Strategy: search the player's name on Wikipedia + verify the resulting
+ * page actually belongs to the right national team before committing the
+ * thumbnail. The verification step is what differentiates "Cristian
+ * Romero, Argentina defender" (correct) from "Cristián Romero,
+ * Paraguayan midfielder" (homonym).
+ *
+ * Verification works by inspecting the page's categories. Wikipedia
+ * categorises every international footballer with things like
+ * "Argentina men's international footballers" or
+ * "Argentine men's footballers". If neither the country name nor its
+ * demonym appears in any category, the page is rejected and we try the
+ * next search hit / language pass. Only verified pages get their
+ * thumbnail saved.
  *
  *   pnpm --filter @mundialito/api exec tsx src/scripts/sync-player-photos.ts
+ *   pnpm --filter @mundialito/api exec tsx src/scripts/sync-player-photos.ts -- --force
  *
- * Honors WIKIPEDIA_LIMIT env (max players per run, default 999) so you can
- * test small batches before committing to the full set.
+ * Flags:
+ *   --force            re-sync every player (not just those missing a photo)
+ *   --only=CODE[,…]    restrict to certain team codes
+ *   WIKIPEDIA_LIMIT=N  cap players per run (default 9999)
  */
 import 'dotenv/config';
 import { db } from '../db/index.js';
 import { players, teams } from '../db/schema/index.js';
-import { eq, isNull, and } from 'drizzle-orm';
+import { eq, isNull, and, inArray } from 'drizzle-orm';
 
-const LIMIT = Number(process.env.WIKIPEDIA_LIMIT ?? 999);
+const LIMIT = Number(process.env.WIKIPEDIA_LIMIT ?? 9999);
+const FORCE = process.argv.includes('--force');
+const onlyArg = process.argv.find((a) => a.startsWith('--only='));
+const ONLY = onlyArg ? onlyArg.replace('--only=', '').split(',') : null;
 
 // Polite User-Agent — Wikipedia asks for one identifying the app + contact.
 const HEADERS = {
   'User-Agent': 'MundialitoApp/1.0 (https://mundialito-pi.vercel.app; delcorroraffetto@gmail.com)',
-  'Accept': 'application/json',
+  Accept: 'application/json',
 };
 
 /**
- * Fetches a thumbnail from a specific Wikipedia language edition. Used to
- * try EN first (broadest coverage), then ES (much better for Latin
- * American and Spanish-speaking national-team players), then the player's
- * own native language as a last resort.
+ * Country → English country name + adjective(s) used in Wikipedia category
+ * strings. Both are checked because some categories use the noun
+ * ("Argentina men's footballers") and others the demonym ("Argentine
+ * international footballers"). At least one match in the page's categories
+ * is required to accept a candidate.
  */
-async function fetchWikipediaThumbnail(query: string, lang: string): Promise<string | null> {
-  const searchUrl =
-    `https://${lang}.wikipedia.org/w/api.php?action=query&format=json&list=search&origin=*` +
-    `&srsearch=${encodeURIComponent(query)}&srlimit=1`;
-  let pageId: number | null = null;
-  try {
-    const res = await fetch(searchUrl, { headers: HEADERS });
-    if (!res.ok) return null;
-    const data = await res.json();
-    const hit = data?.query?.search?.[0];
-    if (!hit?.pageid) return null;
-    pageId = hit.pageid;
-  } catch {
-    return null;
-  }
-
-  const thumbUrl =
-    `https://${lang}.wikipedia.org/w/api.php?action=query&format=json&origin=*` +
-    `&pageids=${pageId}&prop=pageimages&piprop=thumbnail&pithumbsize=240`;
-  try {
-    const res = await fetch(thumbUrl, { headers: HEADERS });
-    if (!res.ok) return null;
-    const data = await res.json();
-    const page = data?.query?.pages?.[pageId!];
-    const src = page?.thumbnail?.source;
-    return typeof src === 'string' ? src : null;
-  } catch {
-    return null;
-  }
-}
+const COUNTRY_HINTS_EN: Record<string, string[]> = {
+  Argentina: ['Argentina', 'Argentine'],
+  Brasil: ['Brazil', 'Brazilian'],
+  Uruguay: ['Uruguay', 'Uruguayan'],
+  Colombia: ['Colombia', 'Colombian'],
+  Paraguay: ['Paraguay', 'Paraguayan'],
+  Ecuador: ['Ecuador', 'Ecuadorian'],
+  México: ['Mexico', 'Mexican'],
+  'Estados Unidos': ['United States', 'American', 'U.S.'],
+  Canadá: ['Canada', 'Canadian'],
+  Panamá: ['Panama', 'Panamanian'],
+  Haití: ['Haiti', 'Haitian'],
+  Curazao: ['Curaçao', 'Curacao'],
+  España: ['Spain', 'Spanish'],
+  Inglaterra: ['England', 'English'],
+  Francia: ['France', 'French'],
+  Alemania: ['Germany', 'German'],
+  Portugal: ['Portugal', 'Portuguese'],
+  'Países Bajos': ['Netherlands', 'Dutch'],
+  Bélgica: ['Belgium', 'Belgian'],
+  Croacia: ['Croatia', 'Croatian'],
+  Suiza: ['Switzerland', 'Swiss'],
+  Austria: ['Austria', 'Austrian'],
+  Noruega: ['Norway', 'Norwegian'],
+  Suecia: ['Sweden', 'Swedish'],
+  Escocia: ['Scotland', 'Scottish'],
+  Turquía: ['Turkey', 'Turkish'],
+  Chequia: ['Czech Republic', 'Czech'],
+  'Bosnia-Herzegovina': ['Bosnia', 'Bosnian', 'Herzegovina'],
+  Japón: ['Japan', 'Japanese'],
+  'Corea del Sur': ['South Korea', 'Korean'],
+  Australia: ['Australia', 'Australian'],
+  Irán: ['Iran', 'Iranian'],
+  'Arabia Saudita': ['Saudi Arabia', 'Saudi'],
+  Qatar: ['Qatar', 'Qatari'],
+  Uzbekistán: ['Uzbekistan', 'Uzbek', 'Uzbekistani'],
+  Jordania: ['Jordan', 'Jordanian'],
+  Iraq: ['Iraq', 'Iraqi'],
+  Marruecos: ['Morocco', 'Moroccan'],
+  Senegal: ['Senegal', 'Senegalese'],
+  Egipto: ['Egypt', 'Egyptian'],
+  Nigeria: ['Nigeria', 'Nigerian'],
+  Argelia: ['Algeria', 'Algerian'],
+  Túnez: ['Tunisia', 'Tunisian'],
+  Camerún: ['Cameroon', 'Cameroonian'],
+  'Costa de Marfil': ['Ivory Coast', 'Ivorian', "Côte d'Ivoire"],
+  Ghana: ['Ghana', 'Ghanaian'],
+  Sudáfrica: ['South Africa', 'South African'],
+  'Cabo Verde': ['Cape Verde', 'Cape Verdean'],
+  'Congo RD': ['DR Congo', 'Congolese', 'Democratic Republic'],
+  'Nueva Zelanda': ['New Zealand'],
+};
 
 /**
- * Country code → preferred Wikipedia language edition as a tertiary fallback.
- * EN and ES are always tried first; this adds the player's native language
- * for cases where neither covers them (Arabic for Saudi, Portuguese for
- * Brazilian, etc).
+ * Country → Spanish hints for verifying pages on ES Wikipedia, where
+ * categories use Spanish ('Futbolistas de la selección de fútbol de
+ * Argentina'). Falls back to the EN hints when not present here.
  */
+const COUNTRY_HINTS_ES: Record<string, string[]> = {
+  Argentina: ['Argentina', 'argentino'],
+  Brasil: ['Brasil', 'brasileño'],
+  Uruguay: ['Uruguay', 'uruguayo'],
+  Colombia: ['Colombia', 'colombiano'],
+  Paraguay: ['Paraguay', 'paraguayo'],
+  Ecuador: ['Ecuador', 'ecuatoriano'],
+  México: ['México', 'mexicano'],
+  'Estados Unidos': ['Estados Unidos', 'estadounidense'],
+  Canadá: ['Canadá', 'canadiense'],
+  España: ['España', 'español'],
+  Francia: ['Francia', 'francés'],
+  Alemania: ['Alemania', 'alemán'],
+  Portugal: ['Portugal', 'portugués'],
+  Marruecos: ['Marruecos', 'marroquí'],
+  Senegal: ['Senegal', 'senegalés'],
+};
+
 const NATIVE_WIKI_LANG: Record<string, string> = {
   Marruecos: 'fr',
   Argelia: 'fr',
@@ -99,67 +153,217 @@ const NATIVE_WIKI_LANG: Record<string, string> = {
   Uzbekistán: 'uz',
 };
 
+interface Candidate {
+  pageId: number;
+  title: string;
+  thumbnail: string | null;
+  categories: string[];
+  extract: string;
+}
+
+/**
+ * One round-trip: search + pageimages + categories + intro extract for the
+ * top N hits. We pull more than one so that if the first hit is a homonym
+ * we can still salvage a verified second hit without doubling the API
+ * cost.
+ */
+async function searchAndFetch(
+  query: string,
+  lang: string,
+  limit = 3,
+): Promise<Candidate[]> {
+  // Step 1: search to get pageIds.
+  const searchUrl =
+    `https://${lang}.wikipedia.org/w/api.php?action=query&format=json&list=search&origin=*` +
+    `&srsearch=${encodeURIComponent(query)}&srlimit=${limit}`;
+  let pageIds: number[] = [];
+  let titlesByPageId: Record<number, string> = {};
+  try {
+    const res = await fetch(searchUrl, { headers: HEADERS });
+    if (!res.ok) return [];
+    const data = await res.json();
+    const hits = (data?.query?.search ?? []) as Array<{ pageid: number; title: string }>;
+    pageIds = hits.map((h) => h.pageid).filter(Boolean);
+    titlesByPageId = Object.fromEntries(hits.map((h) => [h.pageid, h.title]));
+  } catch {
+    return [];
+  }
+  if (pageIds.length === 0) return [];
+
+  // Step 2: batch fetch thumbnails + categories + extract for those pages.
+  const detailsUrl =
+    `https://${lang}.wikipedia.org/w/api.php?action=query&format=json&origin=*` +
+    `&pageids=${pageIds.join('|')}` +
+    `&prop=pageimages|categories|extracts` +
+    `&piprop=thumbnail&pithumbsize=240&cllimit=50&exintro=1&explaintext=1&exsentences=2`;
+  try {
+    const res = await fetch(detailsUrl, { headers: HEADERS });
+    if (!res.ok) return [];
+    const data = await res.json();
+    const pages = data?.query?.pages ?? {};
+    return pageIds
+      .map((id) => {
+        const p = pages[id];
+        if (!p) return null;
+        const categories = (p.categories ?? []).map((c: { title: string }) => c.title);
+        const extract = typeof p.extract === 'string' ? p.extract : '';
+        const thumbnail = typeof p.thumbnail?.source === 'string' ? p.thumbnail.source : null;
+        return {
+          pageId: id,
+          title: titlesByPageId[id] ?? p.title ?? '',
+          thumbnail,
+          categories,
+          extract,
+        } as Candidate;
+      })
+      .filter((c): c is Candidate => c !== null);
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Page belongs to the right country iff any of its categories or
+ * intro-extract mention a country hint AND it looks like a footballer
+ * page (categories mention "footballer" / "futbolista" / equivalent).
+ *
+ * Rejecting non-footballer pages avoids the "wrong-Cristian Romero"
+ * problem where the search returns a politician or musician.
+ */
+function verifyCandidate(c: Candidate, hints: string[]): boolean {
+  if (hints.length === 0) return true; // no hints available → accept any
+  const haystack = (c.categories.join(' | ') + ' || ' + c.extract).toLowerCase();
+  const looksLikeFootballer =
+    /footballer|football player|futbolista|joueur de football|fußballspieler|サッカー選手|축구 선수|jogador de futebol/.test(
+      haystack,
+    );
+  if (!looksLikeFootballer) return false;
+  return hints.some((h) => haystack.includes(h.toLowerCase()));
+}
+
+async function pickPhotoFor(
+  name: string,
+  teamName: string,
+): Promise<{ url: string; via: string } | null> {
+  const enHints = COUNTRY_HINTS_EN[teamName] ?? [teamName];
+  const esHints = COUNTRY_HINTS_ES[teamName] ?? enHints;
+  const nativeLang = NATIVE_WIKI_LANG[teamName];
+
+  // Each pass tries multiple query phrasings on a single Wikipedia
+  // language edition, and verifies every candidate against the country
+  // hints. We prefer EN (broadest article coverage) then ES (best for
+  // Hispanic teams) then native.
+  const passes: Array<{ lang: string; hints: string[]; queries: string[] }> = [
+    {
+      lang: 'en',
+      hints: enHints,
+      queries: [
+        `${name} ${enHints[0]} footballer`,
+        `${name} ${enHints[1] ?? enHints[0]} footballer`,
+        `${name} footballer`,
+        name,
+      ],
+    },
+    {
+      lang: 'es',
+      hints: esHints,
+      queries: [
+        `${name} ${esHints[0]} futbolista`,
+        `${name} futbolista`,
+        name,
+      ],
+    },
+  ];
+  if (nativeLang && nativeLang !== 'en' && nativeLang !== 'es') {
+    passes.push({ lang: nativeLang, hints: enHints, queries: [name] });
+  }
+
+  for (const pass of passes) {
+    // Dedup queries (some teams have a single hint so the first two queries
+    // become identical) to save API calls.
+    const seen = new Set<string>();
+    for (const q of pass.queries) {
+      if (seen.has(q)) continue;
+      seen.add(q);
+      const candidates = await searchAndFetch(q, pass.lang, 3);
+      // Prefer candidates whose title looks like a person's page
+      // (contains the surname) over list/article pages that happen to
+      // mention the player. E.g. Messi: prefer "Lionel Messi" over
+      // "List of international goals scored by Lionel Messi".
+      const surname = name.split(/\s+/).pop()?.toLowerCase() ?? '';
+      const scored = candidates
+        .filter((c) => c.thumbnail)
+        .map((c) => {
+          const lower = c.title.toLowerCase();
+          let score = 0;
+          if (surname && lower.endsWith(surname)) score += 2;
+          else if (surname && lower.includes(surname)) score += 1;
+          if (/^(list of|history of|\d{4}[–-])/i.test(c.title)) score -= 3;
+          return { c, score };
+        })
+        .sort((a, b) => b.score - a.score);
+      for (const { c } of scored) {
+        if (verifyCandidate(c, pass.hints)) {
+          return { url: c.thumbnail!, via: `${pass.lang}:${c.title}` };
+        }
+      }
+    }
+  }
+  return null;
+}
+
 async function main() {
-  // Load players missing a photo, joined with their team name to build a
-  // better search query.
-  const targets = await db
+  // Build target set.
+  const conditions = FORCE ? [] : [isNull(players.photoUrl)];
+  let targets = await db
     .select({
       id: players.id,
       name: players.name,
       teamName: teams.name,
+      teamCode: teams.code,
     })
     .from(players)
     .innerJoin(teams, eq(players.teamId, teams.id))
-    .where(and(isNull(players.photoUrl)))
-    .limit(LIMIT);
+    .where(conditions.length > 0 ? and(...conditions) : undefined);
+  if (ONLY) targets = targets.filter((t) => ONLY!.includes(t.teamCode));
+  targets = targets.slice(0, LIMIT);
 
-  console.log(`[photos] ${targets.length} player(s) without a photo`);
+  console.log(
+    `[photos] ${targets.length} player(s) to process ` +
+      `(force=${FORCE}, only=${ONLY?.join(',') ?? '-'})`,
+  );
 
   let found = 0;
   let missing = 0;
+  let unchanged = 0;
   for (const p of targets) {
-    // Cascade: EN Wikipedia (broadest), then ES (best for Latin America +
-    // Spain), then the player's native language as a last resort.
-    const nativeLang = NATIVE_WIKI_LANG[p.teamName];
-    const passes: Array<{ lang: string; queries: string[] }> = [
-      {
-        lang: 'en',
-        queries: [`${p.name} footballer`, `${p.name}`, `${p.name} ${p.teamName} football`],
-      },
-      {
-        lang: 'es',
-        queries: [`${p.name} futbolista`, `${p.name}`, `${p.name} ${p.teamName}`],
-      },
-    ];
-    if (nativeLang && nativeLang !== 'en' && nativeLang !== 'es') {
-      passes.push({ lang: nativeLang, queries: [p.name] });
-    }
-
-    let url: string | null = null;
-    outer: for (const pass of passes) {
-      for (const q of pass.queries) {
-        url = await fetchWikipediaThumbnail(q, pass.lang);
-        if (url) break outer;
-      }
-    }
-
-    if (url) {
-      await db.update(players).set({ photoUrl: url }).where(eq(players.id, p.id));
+    const pick = await pickPhotoFor(p.name, p.teamName);
+    if (pick) {
+      await db.update(players).set({ photoUrl: pick.url }).where(eq(players.id, p.id));
       found++;
-      console.log(`  ✓ ${p.name} (${p.teamName})`);
+      console.log(`  ✓ ${p.name} (${p.teamName}) ← ${pick.via}`);
+    } else if (FORCE) {
+      // In --force mode, clearing the URL would lose a previously-good
+      // photo for cases where the new verification is too strict. Leave
+      // the existing URL alone and just note it.
+      unchanged++;
+      console.log(`  · ${p.name} (${p.teamName}) — kept existing (no verified match)`);
     } else {
       missing++;
       console.log(`  · ${p.name} (${p.teamName}) — no photo`);
     }
-
-    // Polite rate-limiting. Each player may fire 2-6 requests across
-    // language passes; 80 ms between players keeps us at ~12 req/s peak
-    // which is still under Wikipedia's API limit.
+    // ~80 ms between players. Each player fires up to ~6 detail
+    // round-trips, so peak is ~12 req/s, well under Wikipedia's limit.
     await new Promise((r) => setTimeout(r, 80));
   }
 
-  console.log(`[photos] done — ${found} matched, ${missing} not found`);
+  console.log(
+    `[photos] done — ${found} matched, ${missing} not found, ${unchanged} kept existing`,
+  );
 }
+
+// Silence unused-import warning when not in FORCE mode.
+void inArray;
 
 main().catch((err) => {
   console.error('[photos] failed:', err);
