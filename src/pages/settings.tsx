@@ -12,7 +12,7 @@ import { Link } from 'react-router-dom';
 import { AvatarPicker } from '@/shared/components/ui/image-picker';
 import { toast } from 'sonner';
 
-type FontScale = 1.0 | 1.15 | 1.3;
+type FontScale = 1.0 | 1.15 | 1.3 | 1.5 | 1.75;
 import { cn } from '@/shared/lib/cn';
 
 const MODE_OPTIONS: { value: ThemeMode; label: string; Icon: React.ElementType }[] = [
@@ -21,10 +21,14 @@ const MODE_OPTIONS: { value: ThemeMode; label: string; Icon: React.ElementType }
   { value: 'light', label: 'Claro', Icon: Sun },
 ];
 
-const FONT_OPTIONS: { value: FontScale; label: string }[] = [
-  { value: 1.0, label: 'Normal' },
-  { value: 1.15, label: 'Grande' },
-  { value: 1.3, label: 'Muy grande' },
+// 5 levels so the slider feels like the OS accessibility settings most
+// older users already know (iOS/Android both expose 5 sizes).
+const FONT_OPTIONS: { value: FontScale; label: string; sample: string }[] = [
+  { value: 1.0,  label: 'Normal',       sample: 'Aa' },
+  { value: 1.15, label: 'Grande',       sample: 'Aa' },
+  { value: 1.3,  label: 'Muy grande',   sample: 'Aa' },
+  { value: 1.5,  label: 'Extra grande', sample: 'Aa' },
+  { value: 1.75, label: 'Enorme',       sample: 'Aa' },
 ];
 
 export function SettingsPage() {
@@ -91,6 +95,46 @@ export function SettingsPage() {
       </div>
 
       <div className="flex flex-col gap-6 px-4 pb-6">
+
+        {/* Font scale — lifted to the very top of Settings so the first
+            thing an older user sees here is 'make this bigger'. The
+            section is duplicated higher up; the original lower position
+            is removed in the same patch. */}
+        <section className="flex flex-col gap-3 p-4 rounded-xl bg-accent-soft border border-accent-border">
+          <div className="flex items-center gap-2">
+            <Type size={18} className="text-accent" />
+            <p className="text-base-s font-semibold text-text">Tamaño de letra</p>
+          </div>
+          <div className="grid grid-cols-5 gap-1.5">
+            {FONT_OPTIONS.map(({ value, label, sample }) => (
+              <button
+                key={value}
+                onClick={() => setFontScale(value)}
+                className={cn(
+                  'flex flex-col items-center justify-center gap-1 py-3 px-1 rounded-lg border transition-colors min-h-[68px]',
+                  fontScale === value
+                    ? 'bg-accent text-accent-on border-accent'
+                    : 'bg-card border-border text-muted hover:border-accent-border',
+                )}
+                aria-pressed={fontScale === value}
+              >
+                <span
+                  className="font-bold leading-none"
+                  style={{ fontSize: `${value * 0.875}rem` }}
+                >
+                  {sample}
+                </span>
+                <span className="text-[10px] font-semibold leading-tight text-center">
+                  {label}
+                </span>
+              </button>
+            ))}
+          </div>
+          <p className="text-xs-s text-muted leading-snug">
+            Hace todo más grande de un toque. También podés pellizcar
+            con dos dedos en cualquier pantalla para hacer zoom.
+          </p>
+        </section>
 
         {/* Avatar */}
         <section className="flex flex-col gap-3">
@@ -204,26 +248,7 @@ export function SettingsPage() {
           </div>
         </section>
 
-        <section className="flex flex-col gap-3">
-          <div className="flex items-center gap-2">
-            <Type size={16} className="text-muted" />
-            <p className="text-sm-s font-semibold text-text">Tamaño de letra</p>
-          </div>
-          <div className="flex gap-2">
-            {FONT_OPTIONS.map(({ value, label }) => (
-              <button
-                key={value}
-                onClick={() => setFontScale(value)}
-                className={cn(
-                  'flex-1 py-2.5 rounded-lg border text-sm-s font-semibold transition-colors',
-                  fontScale === value ? 'bg-accent-soft border-accent text-accent' : 'bg-card border-border text-muted hover:border-accent-border'
-                )}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-        </section>
+        {/* Font scale already rendered at the top — duplicated section removed. */}
 
         <section className="flex flex-col gap-3">
           <p className="text-sm font-semibold text-text">Notificaciones</p>

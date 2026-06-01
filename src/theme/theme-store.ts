@@ -2,7 +2,10 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { AccentKey, ThemeMode } from './palettes';
 
-export type FontScale = 1.0 | 1.15 | 1.3;
+// Expanded after feedback that the app was hard to use for older relatives.
+// 1.5 ('Extra grande') and 1.75 ('Enorme') give accessibility headroom
+// without breaking the layout — tested down to 320px wide.
+export type FontScale = 1.0 | 1.15 | 1.3 | 1.5 | 1.75;
 
 type State = {
   mode: ThemeMode;
