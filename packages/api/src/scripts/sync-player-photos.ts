@@ -306,14 +306,19 @@ async function pickPhotoFor(
             .normalize('NFD')
             // eslint-disable-next-line no-misleading-character-class
             .replace(/[̀-ͯ]/g, '');
-          // Hard requirement: the article title must share at least one
-          // ≥3-char token with the player's name. Otherwise it's a
-          // different person who happens to share the nationality
-          // (e.g. "Abdul Mumin" vs "Lawrence Ati-Zigi", both Ghana).
-          const overlap = tokens.some((t) => lower.includes(t));
-          let score = overlap ? 0 : -10;
-          if (surname && lower.endsWith(surname)) score += 2;
-          else if (surname && lower.includes(surname)) score += 1;
+          // Hard requirement: the article title must contain the player's
+          // SURNAME, not just any token. Names like "Ali" or "Mohamed" are
+          // common enough that "any-token overlap" catches the wrong
+          // homonym (e.g. "Ali Jasim" matched "Hussein Ali Al-Saedi" via
+          // the shared "Ali"). The surname carries the actual identity.
+          if (!surname || !lower.includes(surname)) return { c, score: -10 };
+          let score = 0;
+          if (lower.endsWith(surname)) score += 2;
+          else score += 1;
+          // Bonus for first-name overlap on top of the surname match —
+          // distinguishes between two players with the same surname on
+          // the same team.
+          if (tokens.length > 1 && lower.includes(tokens[0])) score += 1;
           if (/^(list of|history of|\d{4}[–-])/i.test(c.title)) score -= 3;
           return { c, score };
         })
