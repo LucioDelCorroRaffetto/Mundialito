@@ -63,8 +63,23 @@ export default defineConfig({
         ],
       },
       workbox: {
-        globPatterns: ['**/*.{js,css,html,svg,png,woff2}'],
-        navigateFallback: '/index.html',
+        // Precache hashed assets but NOT index.html — it must always come
+        // from the network so users pick up new chunk hashes as soon as a
+        // deploy lands. Without this exclusion, the SW kept serving a
+        // stale HTML that referenced JS chunks deleted by the new build,
+        // producing the "Failed to fetch dynamically imported module"
+        // crash.
+        globPatterns: ['**/*.{js,css,svg,png,woff2}'],
+        globIgnores: ['**/index.html'],
+        navigateFallback: null,
+        // Take over open tabs immediately when a new SW activates, so the
+        // tab right after a deploy starts using the fresh cache without
+        // requiring a manual reload.
+        skipWaiting: true,
+        clientsClaim: true,
+        // Don't serve precached responses for navigations — let the
+        // network return the latest index.html every time.
+        cleanupOutdatedCaches: true,
         importScripts: ['/sw-custom.js'],
         runtimeCaching: [
           {

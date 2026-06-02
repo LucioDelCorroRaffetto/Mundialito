@@ -1,9 +1,10 @@
-import { lazy, Suspense, type ReactNode } from 'react';
+import { Suspense, type ReactNode } from 'react';
 import { createBrowserRouter, Navigate } from 'react-router-dom';
 import { AppShell } from '@/shared/components/layout/app-shell';
 import { RequireAuth } from '@/shared/components/require-auth';
 import { RequireAdmin } from '@/shared/components/require-admin';
 import { ErrorBoundary } from '@/shared/components/error-boundary';
+import { lazyWithReload } from '@/shared/lib/lazy-with-reload';
 
 // Critical-path pages stay in the main bundle so the first paint after login
 // doesn't need a second network round-trip.
@@ -14,22 +15,27 @@ import { RegisterPage } from '@/pages/register';
 // Everything else is code-split — each page becomes its own JS chunk that's
 // fetched the first time the user navigates to it. This roughly halves the
 // initial bundle and keeps interactive pages fast on mobile.
-const HomePage = lazy(() => import('@/pages/home').then((m) => ({ default: m.HomePage })));
-const MatchesPage = lazy(() => import('@/pages/matches').then((m) => ({ default: m.MatchesPage })));
-const MatchDetailPage = lazy(() => import('@/pages/match-detail').then((m) => ({ default: m.MatchDetailPage })));
-const LeaguesPage = lazy(() => import('@/pages/leagues').then((m) => ({ default: m.LeaguesPage })));
-const LeagueDetailPage = lazy(() => import('@/pages/league-detail').then((m) => ({ default: m.LeagueDetailPage })));
-const LeagueCreatePage = lazy(() => import('@/pages/league-create').then((m) => ({ default: m.LeagueCreatePage })));
-const LeagueJoinPage = lazy(() => import('@/pages/league-join').then((m) => ({ default: m.LeagueJoinPage })));
-const LeagueInvitePage = lazy(() => import('@/pages/league-invite').then((m) => ({ default: m.LeagueInvitePage })));
-const ProfilePage = lazy(() => import('@/pages/profile').then((m) => ({ default: m.ProfilePage })));
-const SettingsPage = lazy(() => import('@/pages/settings').then((m) => ({ default: m.SettingsPage })));
-const FantasyPage = lazy(() => import('@/pages/fantasy').then((m) => ({ default: m.FantasyPage })));
-const AchievementsPage = lazy(() => import('@/pages/achievements').then((m) => ({ default: m.AchievementsPage })));
-const AdminPage = lazy(() => import('@/pages/admin').then((m) => ({ default: m.AdminPage })));
-const LeaderboardPage = lazy(() => import('@/pages/leaderboard').then((m) => ({ default: m.LeaderboardPage })));
-const TournamentPredictionsPage = lazy(() => import('@/pages/tournament-predictions').then((m) => ({ default: m.TournamentPredictionsPage })));
-const UserProfilePage = lazy(() => import('@/pages/user-profile').then((m) => ({ default: m.UserProfilePage })));
+//
+// `lazyWithReload` wraps `lazy()` to auto-reload the page when a chunk fails
+// to load because the user has a stale index.html referencing an old build's
+// hashes (common after a Vercel deploy). Without it the user got stuck on
+// the ErrorBoundary's "Algo salió mal" screen until they manually refreshed.
+const HomePage = lazyWithReload(() => import('@/pages/home').then((m) => ({ default: m.HomePage })));
+const MatchesPage = lazyWithReload(() => import('@/pages/matches').then((m) => ({ default: m.MatchesPage })));
+const MatchDetailPage = lazyWithReload(() => import('@/pages/match-detail').then((m) => ({ default: m.MatchDetailPage })));
+const LeaguesPage = lazyWithReload(() => import('@/pages/leagues').then((m) => ({ default: m.LeaguesPage })));
+const LeagueDetailPage = lazyWithReload(() => import('@/pages/league-detail').then((m) => ({ default: m.LeagueDetailPage })));
+const LeagueCreatePage = lazyWithReload(() => import('@/pages/league-create').then((m) => ({ default: m.LeagueCreatePage })));
+const LeagueJoinPage = lazyWithReload(() => import('@/pages/league-join').then((m) => ({ default: m.LeagueJoinPage })));
+const LeagueInvitePage = lazyWithReload(() => import('@/pages/league-invite').then((m) => ({ default: m.LeagueInvitePage })));
+const ProfilePage = lazyWithReload(() => import('@/pages/profile').then((m) => ({ default: m.ProfilePage })));
+const SettingsPage = lazyWithReload(() => import('@/pages/settings').then((m) => ({ default: m.SettingsPage })));
+const FantasyPage = lazyWithReload(() => import('@/pages/fantasy').then((m) => ({ default: m.FantasyPage })));
+const AchievementsPage = lazyWithReload(() => import('@/pages/achievements').then((m) => ({ default: m.AchievementsPage })));
+const AdminPage = lazyWithReload(() => import('@/pages/admin').then((m) => ({ default: m.AdminPage })));
+const LeaderboardPage = lazyWithReload(() => import('@/pages/leaderboard').then((m) => ({ default: m.LeaderboardPage })));
+const TournamentPredictionsPage = lazyWithReload(() => import('@/pages/tournament-predictions').then((m) => ({ default: m.TournamentPredictionsPage })));
+const UserProfilePage = lazyWithReload(() => import('@/pages/user-profile').then((m) => ({ default: m.UserProfilePage })));
 
 /**
  * Minimal full-bleed fallback shown while a lazy page chunk is downloading.
