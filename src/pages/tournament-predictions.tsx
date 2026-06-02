@@ -1,7 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Clock, CheckCircle2, Search, X, Trophy, Users } from 'lucide-react';
+import { ArrowLeft, Clock, CheckCircle2, Search, X, Trophy, Users, Lock } from 'lucide-react';
+
+// ─── Tournament-level lock ────────────────────────────────────────────────────
+// Opening match: June 11 2026, 22:00 UTC (Mexico vs. host USA at AT&T Stadium).
+// Lock fires 5 min before kickoff — consistent with per-match locking.
+const OPENING_LOCK_UTC = new Date('2026-06-11T21:55:00Z');
 import { Button } from '@/shared/components/ui/button';
 import { cn } from '@/shared/lib/cn';
 import { useTeams } from '@/shared/hooks/use-teams';
@@ -502,6 +507,11 @@ export function TournamentPredictionsPage() {
     );
   }
 
+  // Lock status: computed once at render time from the hardcoded threshold.
+  // The server enforces the same rule independently (reads predictionLockUtc
+  // from the first match); this client-side flag is for UX only.
+  const isTournamentLocked = new Date() >= OPENING_LOCK_UTC;
+
   const saving = upsertMutation.isPending;
 
   // Compare local picks vs server-saved picks to detect unsaved changes
@@ -565,16 +575,25 @@ export function TournamentPredictionsPage() {
         </div>
       )}
 
-      {/* Urgency badge */}
-      <div className="mx-4 mb-4 flex items-center gap-2 px-3 py-2 rounded-lg bg-orange-500/15 border border-orange-500/30">
-        <Clock size={14} className="text-orange-400 flex-shrink-0" />
-        <p className="text-xs-s text-orange-400 font-semibold">
-          Solo podés cambiarlos hasta el 11 Jun
-        </p>
-      </div>
+      {/* Lock / urgency banner */}
+      {isTournamentLocked ? (
+        <div className="mx-4 mb-4 flex items-center gap-2 px-3 py-2.5 rounded-lg bg-red-500/15 border border-red-500/30">
+          <Lock size={14} className="text-red-400 flex-shrink-0" />
+          <p className="text-xs-s text-red-400 font-semibold">
+            El torneo ya comenzó — los pronósticos están cerrados
+          </p>
+        </div>
+      ) : (
+        <div className="mx-4 mb-4 flex items-center gap-2 px-3 py-2 rounded-lg bg-orange-500/15 border border-orange-500/30">
+          <Clock size={14} className="text-orange-400 flex-shrink-0" />
+          <p className="text-xs-s text-orange-400 font-semibold">
+            Solo podés cambiarlos hasta el 11 Jun, 18:55 (AR)
+          </p>
+        </div>
+      )}
 
       {/* Pick cards */}
-      <div className="flex flex-col gap-3 px-4">
+      <div className={cn('flex flex-col gap-3 px-4', isTournamentLocked && 'pointer-events-none opacity-60')}>
         <PickCard
           title="Campeón"
           points={50}
@@ -693,26 +712,28 @@ export function TournamentPredictionsPage() {
         </div>
       )}
 
-      {/* Save button */}
-      <div className="px-4 mt-4">
-        {showSaved ? (
-          <motion.div
-            key="saved"
-            initial={{ scale: 0.9, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            className="flex items-center justify-center gap-2 py-3 rounded-lg bg-green-500/15 border border-green-500/30"
-          >
-            <CheckCircle2 size={18} className="text-green-400" />
-            <span className="text-sm-s font-semibold text-green-400">
-              ¡Pronósticos guardados!
-            </span>
-          </motion.div>
-        ) : (
-          <Button fullWidth size="lg" onClick={handleSave} loading={saving} disabled={saving}>
-            Guardar pronósticos
-          </Button>
-        )}
-      </div>
+      {/* Save button — hidden once the tournament is locked */}
+      {!isTournamentLocked && (
+        <div className="px-4 mt-4">
+          {showSaved ? (
+            <motion.div
+              key="saved"
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              className="flex items-center justify-center gap-2 py-3 rounded-lg bg-green-500/15 border border-green-500/30"
+            >
+              <CheckCircle2 size={18} className="text-green-400" />
+              <span className="text-sm-s font-semibold text-green-400">
+                ¡Pronósticos guardados!
+              </span>
+            </motion.div>
+          ) : (
+            <Button fullWidth size="lg" onClick={handleSave} loading={saving} disabled={saving}>
+              Guardar pronósticos
+            </Button>
+          )}
+        </div>
+      )}
     </div>
   );
 }

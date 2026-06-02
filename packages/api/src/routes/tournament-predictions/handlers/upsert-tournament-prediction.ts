@@ -1,8 +1,8 @@
 import { Request, Response } from 'express';
 import { z } from 'zod';
-import { eq, sql, and } from 'drizzle-orm';
+import { eq, sql, and, asc } from 'drizzle-orm';
 import { db } from '../../../db/index.js';
-import { tournamentPredictions, leagueMembers } from '../../../db/schema/index.js';
+import { tournamentPredictions, leagueMembers, matches } from '../../../db/schema/index.js';
 import { AppError } from '../../../lib/errors.js';
 
 const FIELDS = [
@@ -35,6 +35,25 @@ export async function upsertTournamentPredictionHandler(req: Request, res: Respo
   const body = req.body as z.infer<typeof upsertTournamentPredictionSchema>;
   const { leagueId, ...payloadFields } = body;
   const userId = req.user!.id;
+
+  // ── Tournament lock ───────────────────────────────────────────────────────
+  // Tournament-wide predictions (champion, top scorer, etc.) are locked once
+  // the first match of the tournament kicks off. We read the earliest
+  // predictionLockUtc from the matches table so the threshold is exactly 5
+  // minutes before the opening whistle — consistent with per-match locking.
+  const firstMatch = await db
+    .select({ predictionLockUtc: matches.predictionLockUtc })
+    .from(matches)
+    .orderBy(asc(matches.kickoffUtc))
+    .limit(1)
+    .get();
+  if (firstMatch && new Date(firstMatch.predictionLockUtc) <= new Date()) {
+    throw new AppError(
+      'TOURNAMENT_LOCKED',
+      'Los pronósticos del torneo están cerrados — el Mundial ya comenzó',
+      409,
+    );
+  }
 
   // Resolve the user's leagues.
   const memberships = await db
