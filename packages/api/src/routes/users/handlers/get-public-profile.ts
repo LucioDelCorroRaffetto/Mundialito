@@ -11,6 +11,7 @@ import {
   fantasyTeams,
 } from '../../../db/schema/index.js';
 import { dedupeBestPerMatch } from '../../../lib/prediction-aggregates.js';
+import { computeLevel } from '../../../lib/levels.js';
 
 // ─── Admin helpers ───────────────────────────────────────────────────────────
 function getAdminIds(): number[] {
@@ -35,9 +36,16 @@ export async function getPublicProfileHandler(req: Request, res: Response) {
 
   const isAdmin = getAdminIds().includes(userId);
 
-  // Fetch user
+  // Fetch user — include XP + selected title so the profile can render the
+  // level badge and chosen title without a second round-trip.
   const [user] = await db
-    .select({ id: users.id, username: users.username, avatarUrl: users.avatarUrl })
+    .select({
+      id: users.id,
+      username: users.username,
+      avatarUrl: users.avatarUrl,
+      xp: users.xp,
+      selectedTitleSlug: users.selectedTitleSlug,
+    })
     .from(users)
     .where(eq(users.id, userId))
     .limit(1);
@@ -147,6 +155,15 @@ export async function getPublicProfileHandler(req: Request, res: Response) {
     fantasyPoints = 0;
   }
 
+  // Resolve the user's chosen title (if any) into a display name.
+  const titleSlug = user.selectedTitleSlug ?? null;
+  const titleAchievement = titleSlug
+    ? achievementRows.find((a) => a.slug === titleSlug) ?? null
+    : null;
+  const title = titleAchievement
+    ? { slug: titleAchievement.slug, name: titleAchievement.name }
+    : null;
+
   return res.json({
     data: {
       id: user.id,
@@ -154,6 +171,8 @@ export async function getPublicProfileHandler(req: Request, res: Response) {
       avatarUrl: user.avatarUrl,
       isAdmin,
       adminProfile: isAdmin ? ADMIN_PROFILE : null,
+      level: computeLevel(user.xp ?? 0),
+      title,
       stats: {
         totalPoints,
         totalPredictions,

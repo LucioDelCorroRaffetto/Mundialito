@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { db } from '../../../db/index.js';
 import { predictions, users, leagueMembers, userAchievements, achievements, leagues } from '../../../db/schema/index.js';
 import { eq, sql, desc, inArray, notInArray } from 'drizzle-orm';
+import { computeLevel } from '../../../lib/levels.js';
 
 // Tier priority for picking the "top" badge (higher = better)
 const TIER_PRIORITY: Record<string, number> = {
@@ -40,9 +41,19 @@ export async function globalLeaderboardHandler(req: Request, res: Response) {
     userId: users.id,
     username: users.username,
     avatarUrl: users.avatarUrl,
+    xp: users.xp,
+    selectedTitleSlug: users.selectedTitleSlug,
     totalPoints: sql<number>`coalesce(sum(${bestPerMatch.bestPoints}), 0)`,
     predictionCount: sql<number>`count(${bestPerMatch.matchId})`,
   };
+
+  const groupCols = [
+    users.id,
+    users.username,
+    users.avatarUrl,
+    users.xp,
+    users.selectedTitleSlug,
+  ] as const;
 
   const rows = hiddenIds.length > 0
     ? await db
@@ -50,7 +61,7 @@ export async function globalLeaderboardHandler(req: Request, res: Response) {
         .from(users)
         .leftJoin(bestPerMatch, eq(bestPerMatch.userId, users.id))
         .where(notInArray(users.id, hiddenIds))
-        .groupBy(users.id, users.username, users.avatarUrl)
+        .groupBy(...groupCols)
         .orderBy(desc(sql`coalesce(sum(${bestPerMatch.bestPoints}), 0)`))
         .limit(limit)
         .offset(offset)
@@ -58,7 +69,7 @@ export async function globalLeaderboardHandler(req: Request, res: Response) {
         .select(baseSelect)
         .from(users)
         .leftJoin(bestPerMatch, eq(bestPerMatch.userId, users.id))
-        .groupBy(users.id, users.username, users.avatarUrl)
+        .groupBy(...groupCols)
         .orderBy(desc(sql`coalesce(sum(${bestPerMatch.bestPoints}), 0)`))
         .limit(limit)
         .offset(offset);
@@ -105,28 +116,37 @@ export async function globalLeaderboardHandler(req: Request, res: Response) {
     }
   }
 
-  const achievementBonuses = await db
-    .select({
-      userId: userAchievements.userId,
-      totalBonus: sql<number>`sum(${achievements.pointsBonus})`,
-    })
-    .from(userAchievements)
-    .innerJoin(achievements, eq(userAchievements.achievementSlug, achievements.slug))
-    .groupBy(userAchievements.userId);
-  const bonusByUser = new Map(achievementBonuses.map((r) => [r.userId, Number(r.totalBonus)]));
+  // Resolve titles in a single bulk lookup.
+  const titleSlugs = rows
+    .map((r) => r.selectedTitleSlug)
+    .filter((s): s is string => typeof s === 'string' && s.length > 0);
+  const titleNameBySlug = new Map<string, string>();
+  if (titleSlugs.length > 0) {
+    const titleRows = await db
+      .select({ slug: achievements.slug, name: achievements.name })
+      .from(achievements)
+      .where(inArray(achievements.slug, titleSlugs));
+    for (const t of titleRows) titleNameBySlug.set(t.slug, t.name);
+  }
 
+  // Achievement XP no longer adds to the leaderboard score. It powers the
+  // level + title shown next to the username, which travels alongside the
+  // row but doesn't influence rank order.
   const enriched = rows.map((row) => {
     const predPts = Number(row.totalPoints);
-    const bonus = bonusByUser.get(row.userId) ?? 0;
+    const titleSlug = row.selectedTitleSlug ?? null;
     return {
       userId: row.userId,
       username: row.username,
       avatarUrl: row.avatarUrl,
-      totalPoints: predPts + bonus,
-      achievementBonus: bonus,
+      totalPoints: predPts,
       leagueCount: leagueCountByUser.get(row.userId) ?? 0,
       predictionCount: Number(row.predictionCount),
       topBadge: badgesByUser.get(row.userId) ?? null,
+      level: computeLevel(row.xp ?? 0),
+      title: titleSlug
+        ? { slug: titleSlug, name: titleNameBySlug.get(titleSlug) ?? titleSlug }
+        : null,
     };
   });
 
@@ -144,6 +164,6 @@ export async function globalLeaderboardHandler(req: Request, res: Response) {
 
   return res.json({
     data,
-    meta: { limit, offset, total: data.length, bonusesCountTowardRank: true },
+    meta: { limit, offset, total: data.length, bonusesCountTowardRank: false },
   });
 }

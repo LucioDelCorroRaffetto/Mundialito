@@ -4,6 +4,8 @@ import { Settings, ChevronRight, Star, LogOut } from 'lucide-react';
 import { useAuthStore } from '@/shared/stores/auth-store';
 import { useMyStats } from '@/shared/hooks/use-my-stats';
 import { useMyAchievements, useAllAchievements } from '@/shared/hooks/use-achievements';
+import { UserLevelBadge, UserLevelCard } from '@/shared/components/user-level-badge';
+import { computeLevel } from '@/shared/lib/levels';
 
 function StatCard({ label, value }: { label: string; value: string | number }) {
   return (
@@ -55,9 +57,15 @@ export function ProfilePage() {
             <span className="text-2xl-s font-display font-bold text-accent-on">{avatarInitial}</span>
           )}
         </div>
-        <div className="flex-1">
-          <h1 className="text-xl-s font-display font-bold text-text">{user.username}</h1>
-          <p className="text-sm-s text-muted">{user.email}</p>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <h1 className="text-xl-s font-display font-bold text-text truncate">{user.username}</h1>
+            <UserLevelBadge level={user.level ?? computeLevel(user.xp ?? 0)} />
+          </div>
+          {user.title && (
+            <p className="text-xs-s text-accent italic">{user.title.name}</p>
+          )}
+          <p className="text-sm-s text-muted truncate">{user.email}</p>
         </div>
         <Link
           to="/settings"
@@ -69,6 +77,7 @@ export function ProfilePage() {
       </div>
 
       <div className="px-4">
+        <UserLevelCard level={user.level ?? computeLevel(user.xp ?? 0)} className="mb-4" />
         <h2 className="text-base-s font-display font-bold text-text mb-3">Mis estadísticas</h2>
         {statsLoading ? (
           <div className="grid grid-cols-3 gap-2">
@@ -109,7 +118,7 @@ export function ProfilePage() {
                   <p className="text-sm-s font-semibold text-text">{a.name}</p>
                   <p className="text-xs-s text-muted">{a.description}</p>
                 </div>
-                <span className="text-xs-s text-accent font-semibold">+{a.pointsBonus} pts</span>
+                <span className="text-xs-s text-accent font-semibold">+{a.xpReward} XP</span>
               </motion.div>
             ))}
           </div>

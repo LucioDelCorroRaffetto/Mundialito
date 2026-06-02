@@ -246,7 +246,7 @@ function AchievementCard({
                 earned ? surface.points : 'text-white/55',
               )}
             >
-              +{achievement.pointsBonus} pts
+              +{achievement.xpReward} XP
             </span>
             {earned && earnedAt && (
               <span className="text-[10px] text-white/55 uppercase tracking-wider">

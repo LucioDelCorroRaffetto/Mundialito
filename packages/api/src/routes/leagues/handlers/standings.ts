@@ -2,8 +2,9 @@ import { Request, Response } from 'express';
 import { db } from '../../../db/index.js';
 import { predictions, leagueMembers, users, matches, userAchievements, achievements } from '../../../db/schema/index.js';
 import { NotFoundError, AppError } from '../../../lib/errors.js';
-import { and, eq, inArray, sql } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import { calculatePoints } from '../../../lib/scoring.js';
+import { computeLevel } from '../../../lib/levels.js';
 
 // Tier priority for picking the "top" badge (higher = better)
 const TIER_PRIORITY: Record<string, number> = {
@@ -22,9 +23,17 @@ export async function standingsHandler(req: Request, res: Response) {
     .where(and(eq(leagueMembers.leagueId, id), eq(leagueMembers.userId, userId))).get();
   if (!membership) throw new AppError('FORBIDDEN', 'Not a member of this league', 403);
 
-  // Get all members of this league
+  // Get all members of this league — include XP + selected title so we
+  // can show the level badge and chosen title next to each name without a
+  // second round-trip.
   const members = await db
-    .select({ userId: leagueMembers.userId, username: users.username, avatarUrl: users.avatarUrl })
+    .select({
+      userId: leagueMembers.userId,
+      username: users.username,
+      avatarUrl: users.avatarUrl,
+      xp: users.xp,
+      selectedTitleSlug: users.selectedTitleSlug,
+    })
     .from(leagueMembers)
     .innerJoin(users, eq(leagueMembers.userId, users.id))
     .where(eq(leagueMembers.leagueId, id));
@@ -91,30 +100,38 @@ export async function standingsHandler(req: Request, res: Response) {
     }
   }
 
-  // Fetch achievement bonus points per member
-  const achievementBonuses = await db
-    .select({
-      userId: userAchievements.userId,
-      totalBonus: sql<number>`sum(${achievements.pointsBonus})`,
-    })
-    .from(userAchievements)
-    .innerJoin(achievements, eq(userAchievements.achievementSlug, achievements.slug))
-    .where(inArray(userAchievements.userId, memberIds))
-    .groupBy(userAchievements.userId);
-  const bonusByUser = new Map(achievementBonuses.map((r) => [r.userId, Number(r.totalBonus)]));
+  // Resolve each member's selected title (slug → achievement name). We do
+  // a single bulk lookup over the union of all members' chosen slugs.
+  const titleSlugs = members
+    .map((m) => m.selectedTitleSlug)
+    .filter((s): s is string => typeof s === 'string' && s.length > 0);
+  const titleNameBySlug = new Map<string, string>();
+  if (titleSlugs.length > 0) {
+    const titleRows = await db
+      .select({ slug: achievements.slug, name: achievements.name })
+      .from(achievements)
+      .where(inArray(achievements.slug, titleSlugs));
+    for (const t of titleRows) titleNameBySlug.set(t.slug, t.name);
+  }
 
+  // Achievement bonuses are NO LONGER added to score — they accumulate as
+  // XP on the user row instead and surface as a level/title next to the
+  // name. The score is pure prediction skill.
   const standings = members
     .map((m) => {
       const predPoints = pointsByUser.get(m.userId)?.total ?? 0;
-      const bonus = bonusByUser.get(m.userId) ?? 0;
+      const titleSlug = m.selectedTitleSlug ?? null;
       return {
         userId: m.userId,
         username: m.username,
         avatarUrl: m.avatarUrl,
-        points: predPoints + bonus,
-        achievementBonus: bonus,
+        points: predPoints,
         matchesPlayed: pointsByUser.get(m.userId)?.matches ?? 0,
         topBadge: badgesByUser.get(m.userId) ?? null,
+        level: computeLevel(m.xp ?? 0),
+        title: titleSlug
+          ? { slug: titleSlug, name: titleNameBySlug.get(titleSlug) ?? titleSlug }
+          : null,
       };
     })
     .sort((a, b) => b.points - a.points);
@@ -132,6 +149,6 @@ export async function standingsHandler(req: Request, res: Response) {
 
   return res.json({
     data: ranked,
-    meta: { total: ranked.length, bonusesCountTowardRank: true },
+    meta: { total: ranked.length, bonusesCountTowardRank: false },
   });
 }

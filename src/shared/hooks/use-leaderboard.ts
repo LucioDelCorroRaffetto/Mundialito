@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '@/shared/lib/api-client';
+import type { LevelInfo } from '@/shared/lib/levels';
 
 export interface TopBadge {
   slug: string;
@@ -14,12 +15,13 @@ export interface LeaderboardEntry {
   username: string;
   avatarUrl: string | null;
   totalPoints: number;
-  /** Bonus pts coming from logros. Counted toward totalPoints only once the
-   *  Mundial kicks off (see meta.bonusesCountTowardRank). */
-  achievementBonus?: number;
   leagueCount: number;
   predictionCount: number;
   topBadge: TopBadge | null;
+  /** Achievement-derived level (separate from totalPoints). */
+  level?: LevelInfo;
+  /** Currently displayed title (if user picked one). */
+  title?: { slug: string; name: string } | null;
 }
 
 export interface GlobalLeaderboardResponse {
@@ -28,9 +30,11 @@ export interface GlobalLeaderboardResponse {
     limit: number;
     offset: number;
     total: number;
-    /** False until the opening match kicks off. While false, totalPoints
-     *  reflects prediction points only; achievement bonuses are returned
-     *  on each entry but not folded into the rank. */
+    /**
+     * Always false in the XP-based model — achievements no longer
+     * contribute to the leaderboard score. Kept on the wire for backward
+     * compatibility with older clients that branched on this flag.
+     */
     bonusesCountTowardRank?: boolean;
   };
 }

@@ -290,17 +290,34 @@ async function pickPhotoFor(
       // (contains the surname) over list/article pages that happen to
       // mention the player. E.g. Messi: prefer "Lionel Messi" over
       // "List of international goals scored by Lionel Messi".
-      const surname = name.split(/\s+/).pop()?.toLowerCase() ?? '';
+      const tokens = name
+        .toLowerCase()
+        .normalize('NFD')
+        // eslint-disable-next-line no-misleading-character-class
+        .replace(/[̀-ͯ]/g, '')
+        .split(/\s+/)
+        .filter((t) => t.length >= 3);
+      const surname = tokens[tokens.length - 1] ?? '';
       const scored = candidates
         .filter((c) => c.thumbnail)
         .map((c) => {
-          const lower = c.title.toLowerCase();
-          let score = 0;
+          const lower = c.title
+            .toLowerCase()
+            .normalize('NFD')
+            // eslint-disable-next-line no-misleading-character-class
+            .replace(/[̀-ͯ]/g, '');
+          // Hard requirement: the article title must share at least one
+          // ≥3-char token with the player's name. Otherwise it's a
+          // different person who happens to share the nationality
+          // (e.g. "Abdul Mumin" vs "Lawrence Ati-Zigi", both Ghana).
+          const overlap = tokens.some((t) => lower.includes(t));
+          let score = overlap ? 0 : -10;
           if (surname && lower.endsWith(surname)) score += 2;
           else if (surname && lower.includes(surname)) score += 1;
           if (/^(list of|history of|\d{4}[–-])/i.test(c.title)) score -= 3;
           return { c, score };
         })
+        .filter((s) => s.score >= 0)
         .sort((a, b) => b.score - a.score);
       for (const { c } of scored) {
         if (verifyCandidate(c, pass.hints)) {

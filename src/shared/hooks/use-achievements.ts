@@ -9,8 +9,18 @@ export interface Achievement {
   description: string;
   icon: string;
   tier: AchievementTier;
-  pointsBonus: number;
+  /**
+   * XP granted by this logro. Kept as the source-of-truth value from the
+   * catalog; previously this was added to the prediction score, now it
+   * feeds the level/title system instead.
+   */
+  xpReward: number;
   earnedAt?: string;
+  /**
+   * True only on /achievements/mine when this logro is the one the user
+   * currently has selected as their displayed title.
+   */
+  isSelectedTitle?: boolean;
 }
 
 export function useAllAchievements() {

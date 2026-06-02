@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import type { LevelInfo } from '@/shared/lib/levels';
 
 interface User {
   id: number;
@@ -7,6 +8,12 @@ interface User {
   email: string;
   avatarUrl: string | null;
   isAdmin?: boolean;
+  // Achievement-derived prestige. xp is the source of truth; level is a
+  // derived view computed by the backend (or recomputed client-side from
+  // xp via computeLevel() when missing).
+  xp?: number;
+  level?: LevelInfo;
+  title?: { slug: string; name: string } | null;
 }
 
 interface AuthState {

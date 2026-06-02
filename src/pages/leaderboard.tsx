@@ -5,6 +5,7 @@ import { cn } from '@/shared/lib/cn';
 import { SkeletonList } from '@/shared/components/skeleton';
 import { useGlobalLeaderboard, type LeaderboardEntry, type TopBadge } from '@/shared/hooks/use-leaderboard';
 import { useAuthStore } from '@/shared/stores/auth-store';
+import { UserLevelBadge } from '@/shared/components/user-level-badge';
 
 const MEDAL_COLORS = [
   // Each medal carries a colour for both modes so the gold/silver/bronze
@@ -106,12 +107,20 @@ function LeaderboardRow({ entry, isMe }: { entry: LeaderboardEntry; isMe: boolea
         )}
       </div>
       <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1.5 flex-wrap">
           <p className={cn('text-sm font-semibold truncate', isMe ? 'text-accent' : 'text-text')}>
             {entry.username} {isMe && '(vos)'}
           </p>
+          <UserLevelBadge level={entry.level} />
           {entry.topBadge && <BadgeChip badge={entry.topBadge} />}
         </div>
+        {/* Selected title sits under the username — never affects score,
+            purely cosmetic. */}
+        {entry.title && (
+          <p className="text-[11px] text-accent/80 italic truncate">
+            {entry.title.name}
+          </p>
+        )}
         {entry.leagueCount > 0 && (
           <p className="text-xs text-muted">{entry.leagueCount} liga{entry.leagueCount !== 1 ? 's' : ''}</p>
         )}

@@ -11,7 +11,18 @@ import { desc, ne } from 'drizzle-orm';
  */
 export async function listAchievementsHandler(_req: Request, res: Response) {
   const all = await db
-    .select()
+    .select({
+      slug: achievements.slug,
+      name: achievements.name,
+      description: achievements.description,
+      icon: achievements.icon,
+      tier: achievements.tier,
+      // Surface as XP reward — `points_bonus` is just the column name we
+      // didn't rename to keep the migration simple. Achievements no longer
+      // contribute points to the leaderboard score; they award XP that
+      // feeds the level/title system.
+      xpReward: achievements.pointsBonus,
+    })
     .from(achievements)
     .where(ne(achievements.slug, 'presidente_fifa'))
     .orderBy(desc(achievements.pointsBonus));
