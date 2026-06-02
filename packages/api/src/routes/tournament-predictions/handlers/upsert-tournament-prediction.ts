@@ -47,12 +47,17 @@ export async function upsertTournamentPredictionHandler(req: Request, res: Respo
     .orderBy(asc(matches.kickoffUtc))
     .limit(1)
     .get();
-  if (firstMatch && new Date(firstMatch.predictionLockUtc) <= new Date()) {
-    throw new AppError(
-      'TOURNAMENT_LOCKED',
-      'Los pronósticos del torneo están cerrados — el Mundial ya comenzó',
-      409,
-    );
+  if (firstMatch?.predictionLockUtc) {
+    const lockDate = new Date(firstMatch.predictionLockUtc);
+    // Guard: an invalid date (empty string, null coerced to 'Invalid Date')
+    // would make the comparison false and silently skip the lock.
+    if (!isNaN(lockDate.getTime()) && lockDate <= new Date()) {
+      throw new AppError(
+        'TOURNAMENT_LOCKED',
+        'Los pronósticos del torneo están cerrados — el Mundial ya comenzó',
+        409,
+      );
+    }
   }
 
   // Resolve the user's leagues.

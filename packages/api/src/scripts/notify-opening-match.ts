@@ -101,14 +101,15 @@ async function run(): Promise<void> {
 
   try {
     // 3. Fetch the opening match (earliest kickoffUtc).
+    // Note: "at" is a reserved keyword in SQLite — use "away_t" as alias.
     const matchResult = await client.execute(`
       SELECT
         m.kickoff_utc,
         ht.name AS home_team,
-        at.name AS away_team
+        away_t.name AS away_team
       FROM matches m
       JOIN teams ht ON ht.id = m.home_team_id
-      JOIN teams at ON at.id = m.away_team_id
+      JOIN teams away_t ON away_t.id = m.away_team_id
       ORDER BY m.kickoff_utc ASC
       LIMIT 1
     `);

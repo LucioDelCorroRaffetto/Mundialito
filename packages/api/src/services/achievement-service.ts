@@ -185,9 +185,11 @@ async function maybeAward(userId: number, slug: string, awarded: string[]): Prom
     .get();
   const delta = reward?.xp ?? 0;
   if (delta > 0) {
+    // COALESCE guards against pre-migration rows where xp might be NULL;
+    // in SQLite NULL + N = NULL which would silently eat all future XP.
     await db
       .update(users)
-      .set({ xp: sql`${users.xp} + ${delta}` })
+      .set({ xp: sql`COALESCE(${users.xp}, 0) + ${delta}` })
       .where(eq(users.id, userId));
   }
 }

@@ -52,9 +52,18 @@ export function AchievementsPage() {
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['achievements', 'mine'] });
       queryClient.invalidateQueries({ queryKey: ['global-leaderboard'] });
-      // Reflect the new title locally without forcing a /auth/me refetch.
+      // Invalidar /auth/me para que el nombre real del título se refleje
+      // en el profile y cualquier componente que lea user.title del store.
+      queryClient.invalidateQueries({ queryKey: ['auth', 'me'] });
+      // Actualización optimista: la respuesta del PATCH ya incluye el slug
+      // y el nombre real (update-me devuelve selectedTitleSlug). Usamos el
+      // nombre que viene del servidor via la re-fetch de achievements/mine
+      // para evitar el string vacío. Mientras tanto dejamos el title null/slug-only.
       if (me && token) {
-        setMeInStore({ ...me, title: data.selectedTitleSlug ? { slug: data.selectedTitleSlug, name: '' } : null }, token);
+        const newTitle = data.selectedTitleSlug
+          ? { slug: data.selectedTitleSlug, name: mine.find(a => a.slug === data.selectedTitleSlug)?.name ?? data.selectedTitleSlug }
+          : null;
+        setMeInStore({ ...me, title: newTitle }, token);
       }
     },
   });
