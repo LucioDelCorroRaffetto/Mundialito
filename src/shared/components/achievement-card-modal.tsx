@@ -95,7 +95,35 @@ function AchievementCard({
 }) {
   const ref = useRef<HTMLDivElement>(null);
   // Normalised pointer position relative to the card (0..1 on each axis).
-  const [pointer, setPointer] = useState({ x: 0.5, y: 0.5, active: false });
+  // active=true makes the holographic refraction visible; on mobile we keep
+  // it permanently active so users see the rainbow without needing to tilt
+  // the card.
+  const [pointer, setPointer] = useState({ x: 0.5, y: 0.5, active: true });
+  // On touch devices (no hover capability), auto-animate the pointer so the
+  // rainbow sweep is always visible — otherwise the card just looks flat to
+  // mobile users because the holo effect was gated behind cursor movement.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const isTouch =
+      window.matchMedia &&
+      (window.matchMedia('(hover: none)').matches ||
+        window.matchMedia('(pointer: coarse)').matches);
+    if (!isTouch) return;
+
+    let raf = 0;
+    const start = performance.now();
+    function frame(now: number) {
+      // Slow figure-eight sweep across the card so the highlight passes
+      // every region of the card every ~4 seconds.
+      const t = (now - start) / 4000;
+      const x = 0.5 + 0.42 * Math.sin(t * Math.PI * 2);
+      const y = 0.5 + 0.32 * Math.sin(t * Math.PI * 4);
+      setPointer({ x, y, active: true });
+      raf = requestAnimationFrame(frame);
+    }
+    raf = requestAnimationFrame(frame);
+    return () => cancelAnimationFrame(raf);
+  }, []);
 
   function onMove(e: React.PointerEvent<HTMLDivElement>) {
     const el = ref.current;
@@ -107,8 +135,11 @@ function AchievementCard({
       active: true,
     });
   }
+  // Keep `active: true` even after the pointer leaves, so the rainbow stays
+  // visible (it just recentres). The 3D tilt resets to flat which is the
+  // important "released" affordance.
   function onLeave() {
-    setPointer({ x: 0.5, y: 0.5, active: false });
+    setPointer({ x: 0.5, y: 0.5, active: true });
   }
 
   const tier = achievement.tier;

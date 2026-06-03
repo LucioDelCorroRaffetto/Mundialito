@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { ChevronDown, Check, Clock, Trophy, LayoutList, Layers, Star, Crown, BarChart2, BookOpen, ChevronRight, Lock, CheckCircle2 } from 'lucide-react';
+import { ChevronDown, Check, Trophy, LayoutList, Layers, Star, Crown, BarChart2, BookOpen, ChevronRight, Lock, CheckCircle2 } from 'lucide-react';
 import { cn } from '@/shared/lib/cn';
 import { useTeams } from '@/shared/hooks/use-teams';
 import { usePlayers } from '@/shared/hooks/use-players';
@@ -516,17 +516,6 @@ export function FantasyPage() {
         <Trophy size={18} className="text-accent flex-shrink-0" />
         <p className="text-sm-s text-text flex-1">Puntos de tu equipo</p>
         <span className="text-lg font-bold text-accent">{totalPoints}</span>
-      </div>
-
-      {/* Squads not ready banner */}
-      <div className="mx-4 flex items-start gap-3 p-4 rounded-xl bg-amber-500/10 border border-amber-500/30">
-        <Clock size={18} className="text-amber-500 flex-shrink-0 mt-0.5" />
-        <div>
-          <p className="text-sm-s font-semibold text-amber-500">Plantillas aún no confirmadas</p>
-          <p className="text-xs-s text-muted mt-0.5">
-            Los equipos fantasy estarán disponibles a partir del <span className="font-semibold text-text">2 de junio</span>, cuando FIFA publique los planteles oficiales de los 48 países.
-          </p>
-        </div>
       </div>
 
       {tab === 'guide' && <FantasyGuide />}

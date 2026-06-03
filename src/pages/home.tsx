@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Plus, Search, Trophy, ChevronRight, AlertCircle } from 'lucide-react';
+import { Plus, Search, Trophy, ChevronRight, AlertCircle, Sparkles } from 'lucide-react';
 import { useMatches } from '@/shared/hooks/use-matches';
 import { useMyLeagues } from '@/shared/hooks/use-leagues';
 import { useTeamMap } from '@/shared/hooks/use-teams';
 import { useMyPredictions } from '@/shared/hooks/use-predictions';
+import { useMyFantasyTeam } from '@/shared/hooks/use-fantasy';
 import { usePwaInstall } from '@/shared/hooks/use-pwa-install';
 import { useAuthStore } from '@/shared/stores/auth-store';
 import type { Match, Team } from '@/shared/types/api';
@@ -78,12 +79,12 @@ function CountdownTiles({ targetUtc }: { targetUtc: string }) {
       ].map(({ value, label }) => (
         <div
           key={label}
-          className="flex flex-col items-center gap-0.5 bg-elevated rounded-lg px-3 py-2 min-w-[58px]"
+          className="relative flex flex-col items-center gap-0.5 bg-card/80 backdrop-blur-sm border border-accent/30 rounded-xl px-3 py-2.5 min-w-[64px] shadow-[0_0_20px_-8px] shadow-accent/40"
         >
-          <span className="text-2xl font-display font-bold text-accent tabular-nums">
+          <span className="text-3xl font-display font-black text-accent tabular-nums leading-none">
             {String(value).padStart(2, '0')}
           </span>
-          <span className="text-xs text-muted">{label}</span>
+          <span className="text-[10px] text-muted uppercase tracking-wider font-bold mt-1">{label}</span>
         </div>
       ))}
     </div>
@@ -99,14 +100,36 @@ function CountdownHero({
 }) {
   const tournamentStarted = Date.now() > new Date(WORLD_CUP_START).getTime();
 
-  // Before tournament: countdown to first match
+  // Before tournament: countdown to first match. Bigger, more cinematic
+  // hero — radial gradient + soft trophy backdrop + animated sweep so the
+  // first thing users see really feels like a "Mundial coming" moment.
   if (!tournamentStarted) {
     return (
-      <div className="bg-gradient-to-br from-accent-soft to-card border border-accent-border rounded-xl p-5">
-        <p className="text-sm font-semibold text-text mb-3 text-center">
-          Arranca el Mundial 2026 🌎
-        </p>
-        <CountdownTiles targetUtc={WORLD_CUP_START} />
+      <div className="relative overflow-hidden rounded-2xl border border-accent/40 bg-gradient-to-br from-accent/25 via-card to-card p-6">
+        {/* Animated sheen across the hero */}
+        <motion.div
+          initial={{ x: '-100%' }}
+          animate={{ x: '100%' }}
+          transition={{ duration: 6, repeat: Infinity, ease: 'linear' }}
+          className="absolute inset-y-0 w-1/3 bg-gradient-to-r from-transparent via-white/8 to-transparent pointer-events-none"
+          aria-hidden
+        />
+        {/* Big trophy watermark */}
+        <span className="absolute -right-4 -top-4 text-[140px] opacity-[0.05] select-none pointer-events-none" aria-hidden>
+          🏆
+        </span>
+        <div className="relative">
+          <p className="text-[11px] font-bold text-accent uppercase tracking-[0.3em] mb-2 text-center">
+            Cuenta regresiva
+          </p>
+          <p className="text-xl font-display font-black text-text mb-4 text-center">
+            Arranca el Mundial 2026 🌎
+          </p>
+          <CountdownTiles targetUtc={WORLD_CUP_START} />
+          <p className="mt-3 text-center text-xs text-muted">
+            11 de junio · México vs Estados Unidos
+          </p>
+        </div>
       </div>
     );
   }
@@ -126,14 +149,16 @@ function CountdownHero({
   const isLive = Date.now() > kickoffMs;
 
   return (
-    <div className="bg-gradient-to-br from-accent-soft to-card border border-accent-border rounded-xl p-5">
+    <div className="relative overflow-hidden rounded-2xl border border-accent/40 bg-gradient-to-br from-accent/20 via-card to-card p-5">
       {isLive ? (
         <div className="flex items-center gap-2 mb-3 justify-center">
           <span className="w-2 h-2 rounded-full bg-red-400 animate-pulse" />
           <p className="text-xs font-bold text-red-400 uppercase tracking-wider">En juego ahora</p>
         </div>
       ) : (
-        <p className="text-sm font-semibold text-text mb-3 text-center">Próximo partido ⚽</p>
+        <p className="text-[11px] font-bold text-accent uppercase tracking-[0.3em] mb-3 text-center">
+          Próximo partido ⚽
+        </p>
       )}
 
       {homeTeam && awayTeam && (
@@ -179,6 +204,7 @@ export function HomePage() {
   const { data: teamMap } = useTeamMap();
   const { data: leaguesResponse } = useMyLeagues();
   const { data: myPredictionsData } = useMyPredictions();
+  const { data: fantasyTeamData } = useMyFantasyTeam();
   const { isInstallable, isInstalled, install } = usePwaInstall();
   const username = useAuthStore((s) => s.user?.username);
 
@@ -210,13 +236,25 @@ export function HomePage() {
   ).length;
 
   const hasLeagues = apiLeagues.length > 0;
+  // Fantasy CTA: hide once the user has at least the minimum (squad
+  // exists). The exact "11 starters + captain" check happens inside the
+  // Fantasy page; the home banner just nudges users who haven't started.
+  const fantasySquadSize = fantasyTeamData?.squad?.length ?? 0;
+  const needsFantasy = fantasySquadSize < 15;
 
   return (
     <div className="animate-fade-in px-4 pt-6 pb-4 md:px-0 md:pt-8">
       {/* Greeting */}
-      <div className="mb-4">
-        <p className="text-xs text-muted uppercase tracking-widest font-semibold mb-0.5">Mundialito</p>
-        <h1 className="text-2xl font-display font-bold text-text">¡Hola, {username ?? 'crack'}! 👋</h1>
+      <div className="mb-5">
+        <p className="text-[11px] text-accent uppercase tracking-[0.3em] font-bold mb-1">Mundialito</p>
+        <h1 className="text-3xl font-display font-black text-text leading-tight">
+          ¡Hola, <span className="text-accent">{username ?? 'crack'}</span>! 👋
+        </h1>
+        <p className="text-sm text-muted mt-1">
+          {needsFantasy
+            ? 'Armá tu fantasy y dejá tus pronósticos antes del kickoff.'
+            : '¡Todo listo para el Mundial!'}
+        </p>
       </div>
 
       {/* PWA install banner */}
@@ -276,6 +314,39 @@ export function HomePage() {
                 <p className="text-xs text-muted">de tus próximos {apiMatches.length} partidos</p>
               </div>
               <ChevronRight size={16} className="text-orange-400 flex-shrink-0 group-hover:translate-x-0.5 transition-transform" />
+            </Link>
+          )}
+
+          {/* Fantasy call-to-action — appears when the user hasn't yet
+              picked their 15 players. The Fantasy page tab bar already
+              guides them, but on the home this nudge gets users in
+              proactively so they don't miss the deadline. */}
+          {needsFantasy && (
+            <Link
+              to="/fantasy"
+              className="relative overflow-hidden flex items-center gap-3 p-4 rounded-xl bg-gradient-to-r from-violet-500/15 via-fuchsia-500/10 to-violet-500/15 border border-violet-500/40 hover:border-violet-400/60 transition-all group"
+            >
+              <motion.div
+                initial={{ x: '-100%' }}
+                animate={{ x: '100%' }}
+                transition={{ duration: 3.5, repeat: Infinity, ease: 'linear', repeatDelay: 1.5 }}
+                className="absolute inset-y-0 w-1/3 bg-gradient-to-r from-transparent via-white/10 to-transparent pointer-events-none"
+                aria-hidden
+              />
+              <div className="relative w-10 h-10 rounded-lg bg-violet-500/25 flex items-center justify-center flex-shrink-0">
+                <Sparkles size={20} className="text-violet-300" />
+              </div>
+              <div className="relative flex-1">
+                <p className="text-sm font-bold text-text">
+                  {fantasySquadSize === 0
+                    ? '¡Armá tu equipo Fantasy!'
+                    : `Te faltan ${15 - fantasySquadSize} jugadores en tu Fantasy`}
+                </p>
+                <p className="text-xs text-violet-200/80 mt-0.5">
+                  Elegí 15 cracks y sumá puntos cada fecha
+                </p>
+              </div>
+              <ChevronRight size={16} className="relative text-violet-300 flex-shrink-0 group-hover:translate-x-0.5 transition-transform" />
             </Link>
           )}
 
