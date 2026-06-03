@@ -104,6 +104,15 @@ function CountdownHero({
   // hero — radial gradient + soft trophy backdrop + animated sweep so the
   // first thing users see really feels like a "Mundial coming" moment.
   if (!tournamentStarted) {
+    // Caption pulled from the actual opening match in the DB instead of
+    // hard-coded. Falls back to a generic line while data is still loading
+    // so we never display the wrong matchup.
+    const openHome = nextMatch ? teamMap?.get(nextMatch.homeTeamId) : null;
+    const openAway = nextMatch ? teamMap?.get(nextMatch.awayTeamId) : null;
+    const openCaption =
+      openHome && openAway
+        ? `11 de junio · ${openHome.name} vs ${openAway.name}`
+        : '11 de junio · Estadio Azteca';
     return (
       <div className="relative overflow-hidden rounded-2xl border border-accent/40 bg-gradient-to-br from-accent/25 via-card to-card p-6">
         {/* Animated sheen across the hero */}
@@ -126,9 +135,7 @@ function CountdownHero({
             Arranca el Mundial 2026 🌎
           </p>
           <CountdownTiles targetUtc={WORLD_CUP_START} />
-          <p className="mt-3 text-center text-xs text-muted">
-            11 de junio · México vs Estados Unidos
-          </p>
+          <p className="mt-3 text-center text-xs text-muted">{openCaption}</p>
         </div>
       </div>
     );

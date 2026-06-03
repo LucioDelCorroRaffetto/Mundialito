@@ -4,9 +4,9 @@ import { motion } from 'framer-motion';
 import { ArrowLeft, Clock, CheckCircle2, Search, X, Trophy, Users, Lock } from 'lucide-react';
 
 // ─── Tournament-level lock ────────────────────────────────────────────────────
-// Opening match: June 11 2026, 22:00 UTC (Mexico vs. host USA at AT&T Stadium).
+// Opening match: June 11 2026, 19:00 UTC (Mexico vs South Africa at Estadio Azteca).
 // Lock fires 5 min before kickoff — consistent with per-match locking.
-const OPENING_LOCK_UTC = new Date('2026-06-11T21:55:00Z');
+const OPENING_LOCK_UTC = new Date('2026-06-11T18:55:00Z');
 import { Button } from '@/shared/components/ui/button';
 import { cn } from '@/shared/lib/cn';
 import { useTeams } from '@/shared/hooks/use-teams';
@@ -587,7 +587,7 @@ export function TournamentPredictionsPage() {
         <div className="mx-4 mb-4 flex items-center gap-2 px-3 py-2 rounded-lg bg-orange-500/15 border border-orange-500/30">
           <Clock size={14} className="text-orange-400 flex-shrink-0" />
           <p className="text-xs-s text-orange-400 font-semibold">
-            Solo podés cambiarlos hasta el 11 Jun, 18:55 (AR)
+            Solo podés cambiarlos hasta el 11 Jun, 15:55 (AR)
           </p>
         </div>
       )}
