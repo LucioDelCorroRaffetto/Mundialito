@@ -1024,23 +1024,30 @@ function PerRoundLineupTab({ squadPlayers }: { squadPlayers: Player[] }) {
 
   // Populate draft from server data when the round (or the squad itself)
   // changes. Local edits afterwards are preserved.
+  //
+  // The draft is ALWAYS built from the current 15-player squad, with the
+  // server lineup overlayed on top. This is intentional: if the user saved
+  // a lineup back when their squad was different (e.g. before adding a
+  // player, or under an earlier bug that wrote partial rows), we still want
+  // them to see all 15 current squad players — the missing ones simply
+  // appear as bench. Otherwise the Titulares list would render only those
+  // 9-10 stale rows and leave the user unable to even pick the new players.
   useEffect(() => {
-    if (lineupData?.data && lineupData.data.length > 0) {
-      setDraft(lineupData.data.map((r) => ({
-        playerId: r.playerId,
-        isStarter: r.isStarter,
-        isCaptain: r.isCaptain,
-        isViceCaptain: r.isViceCaptain,
-      })));
-    } else if (activeSlug && squadPlayers.length > 0) {
-      // No lineup yet for this round — default all 15 squad players as bench.
-      setDraft(squadPlayers.map((p) => ({
-        playerId: p.id,
-        isStarter: false,
-        isCaptain: false,
-        isViceCaptain: false,
-      })));
-    }
+    if (!activeSlug || squadPlayers.length === 0) return;
+    const lineupByPlayer = new Map(
+      (lineupData?.data ?? []).map((r) => [r.playerId, r]),
+    );
+    setDraft(
+      squadPlayers.map((p) => {
+        const saved = lineupByPlayer.get(p.id);
+        return {
+          playerId: p.id,
+          isStarter: saved?.isStarter ?? false,
+          isCaptain: saved?.isCaptain ?? false,
+          isViceCaptain: saved?.isViceCaptain ?? false,
+        };
+      }),
+    );
     setDirty(false);
     // squadKey (stable) deliberately replaces squadPlayers (unstable ref).
     // eslint-disable-next-line react-hooks/exhaustive-deps
