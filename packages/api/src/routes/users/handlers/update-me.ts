@@ -95,7 +95,6 @@ export async function updateMeHandler(req: Request, res: Response) {
       email: users.email,
       username: users.username,
       avatarUrl: users.avatarUrl,
-      xp: users.xp,
       selectedTitleSlug: users.selectedTitleSlug,
     });
 

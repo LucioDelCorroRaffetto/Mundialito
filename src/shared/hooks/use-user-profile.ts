@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '@/shared/lib/api-client';
+import type { LevelInfo } from '@/shared/lib/levels';
 
 export interface UserPublicProfile {
   id: number;
@@ -11,6 +12,10 @@ export interface UserPublicProfile {
     emoji: string;
     bio: string;
   } | null;
+  /** Achievement-derived level (computed live from earned achievements). */
+  level?: LevelInfo;
+  /** Currently displayed title (if user picked one). */
+  title?: { slug: string; name: string } | null;
   stats: {
     totalPoints: number;
     totalPredictions: number;

@@ -1,9 +1,11 @@
 import { Navigate, useNavigate, useParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Star } from 'lucide-react';
+import { ArrowLeft, Star, Target, Crosshair, ClipboardList, Sparkles } from 'lucide-react';
 import { cn } from '@/shared/lib/cn';
 import { useAuthStore } from '@/shared/stores/auth-store';
 import { useUserProfile } from '@/shared/hooks/use-user-profile';
+import { UserLevelCard, UserLevelBadge } from '@/shared/components/user-level-badge';
+import { computeLevel } from '@/shared/lib/levels';
 
 // Tier chip colours with explicit light + dark variants. Without these the
 // chip is invisible on white (yellow/cyan/slate-300 fade into nothing).
@@ -14,12 +16,32 @@ const TIER_COLORS: Record<string, string> = {
   bronze:   'bg-amber-600/25 text-amber-800 border-amber-600/60 dark:bg-amber-700/20 dark:text-amber-500 dark:border-amber-700/40',
 };
 
-function StatCard({ label, value }: { label: string; value: string | number }) {
+function StatCard({
+  icon,
+  label,
+  value,
+  accentClass = 'text-accent',
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: string | number;
+  accentClass?: string;
+}) {
   return (
-    <div className="flex flex-col items-center gap-0.5 p-3 rounded-lg bg-card border border-border">
-      <span className="text-2xl-s font-display font-bold text-accent">{value}</span>
-      <span className="text-xs-s text-muted text-center leading-tight">{label}</span>
-    </div>
+    <motion.div
+      whileHover={{ y: -2 }}
+      transition={{ type: 'spring', stiffness: 280, damping: 18 }}
+      className="relative flex flex-col items-center gap-1 p-3 rounded-xl bg-card border border-border overflow-hidden"
+    >
+      {/* Subtle radial glow behind the value so the number reads as the
+          star of the card without making the whole tile glow. */}
+      <div className={cn('absolute -top-6 left-1/2 w-16 h-16 -translate-x-1/2 rounded-full opacity-30 blur-2xl', accentClass.replace('text-', 'bg-'))} />
+      <div className={cn('relative w-7 h-7 rounded-full flex items-center justify-center', accentClass)}>
+        {icon}
+      </div>
+      <span className={cn('relative text-2xl-s font-display font-black tabular-nums', accentClass)}>{value}</span>
+      <span className="relative text-[10px] text-muted text-center leading-tight uppercase tracking-wider font-bold">{label}</span>
+    </motion.div>
   );
 }
 
@@ -135,6 +157,10 @@ export function UserProfilePage() {
   const avatarInitial = profile.username.charAt(0).toUpperCase();
   const isAdmin       = profile.isAdmin;
   const ap            = profile.adminProfile;
+  // Level info — backend already returns it but we recompute locally as a
+  // fallback for older cached blobs that may not carry the `level` field.
+  const levelInfo = profile.level ?? computeLevel(0);
+  const accuracy = profile.stats.accuracy ?? 0;
 
   const avatarEl = (
     <div className="w-full h-full bg-accent flex items-center justify-center">
@@ -209,18 +235,47 @@ export function UserProfilePage() {
         {isAdmin ? (
           <GoldRing>{avatarEl}</GoldRing>
         ) : (
-          <div
-            className="w-[72px] h-[72px] rounded-full bg-accent flex items-center justify-center flex-shrink-0 overflow-hidden ring-2"
-            style={{ '--tw-ring-color': `hsl(${userHue(profile.id)} 65% 55% / 0.6)` } as React.CSSProperties}
+          <motion.div
+            initial={{ scale: 0.9, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            transition={{ type: 'spring', stiffness: 280, damping: 18 }}
+            className="relative flex-shrink-0"
           >
-            {avatarEl}
-          </div>
+            {/* Tier-coloured halo behind the avatar. The hue still varies
+                per user (so two same-tier profiles still look distinct),
+                but the OUTER ring uses the tier colour so the prestige
+                level is visible at a glance. */}
+            <div
+              className="absolute inset-0 rounded-full blur-md opacity-50"
+              style={{ background: `hsl(${userHue(profile.id)} 65% 55%)` }}
+            />
+            <div
+              className={cn(
+                'relative w-[76px] h-[76px] rounded-full bg-accent flex items-center justify-center overflow-hidden ring-[3px] ring-offset-2 ring-offset-bg',
+                levelInfo.tier.colorClass.replace('text-', 'ring-'),
+              )}
+            >
+              {avatarEl}
+            </div>
+            {/* Level chip pinned to the avatar's bottom-right corner —
+                shouts the tier+level without needing a separate row. */}
+            <span
+              className={cn(
+                'absolute -bottom-1 -right-1 z-10 inline-flex items-center gap-0.5 rounded-full bg-card border border-border px-1.5 py-0.5 text-[10px] font-black shadow-md',
+                levelInfo.tier.colorClass,
+              )}
+              title={`${levelInfo.tier.name} · Nivel ${levelInfo.level}`}
+            >
+              <span aria-hidden>{levelInfo.tier.icon}</span>
+              <span>{levelInfo.level}</span>
+            </span>
+          </motion.div>
         )}
 
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <h2 className={cn(
-              'text-xl-s font-display font-bold truncate',
+              'text-2xl font-display font-black truncate leading-tight',
               isAdmin ? 'text-amber-700 dark:text-yellow-200' : 'text-text',
             )}>
               {profile.username}
@@ -228,16 +283,33 @@ export function UserProfilePage() {
             {isAdmin && <PresidentBadge />}
           </div>
 
+          {/* Title chosen by the user (italic, accent colour) */}
+          {profile.title && (
+            <p className="text-xs italic text-accent font-semibold truncate mt-0.5">
+              {profile.title.name}
+            </p>
+          )}
+
           {ap && (
             <p className="text-xs-s font-medium mt-0.5 text-amber-700/80 dark:text-yellow-500/80">{ap.role}</p>
           )}
           {!ap && profile.leagueCount > 0 && (
-            <p className="text-sm-s text-muted">
-              {profile.leagueCount} liga{profile.leagueCount !== 1 ? 's' : ''}
+            <p className="text-xs text-muted mt-0.5">
+              👥 {profile.leagueCount} liga{profile.leagueCount !== 1 ? 's' : ''}
+              {profile.stats.totalPredictions > 0 && (
+                <> · 🎯 {profile.stats.totalPredictions} pronósticos</>
+              )}
             </p>
           )}
         </div>
       </div>
+
+      {/* ── Level progress card (non-admin only — admin uses gold theme) */}
+      {!isAdmin && (
+        <div className="px-4">
+          <UserLevelCard level={levelInfo} />
+        </div>
+      )}
 
       {/* ── Bio (admin only) — dual mode: warm parchment in light, soft gold
             on dark. The italic body text needs strong contrast against the
@@ -258,12 +330,48 @@ export function UserProfilePage() {
 
       {/* ── Stats ──────────────────────────────────────────────────────── */}
       <div className="px-4">
-        <h3 className="text-base-s font-display font-bold text-text mb-3">Estadísticas</h3>
+        <h3 className="text-sm font-display font-bold text-muted uppercase tracking-wider mb-3 flex items-center gap-2">
+          <Sparkles size={14} className="text-accent" /> Estadísticas
+        </h3>
         <div className="grid grid-cols-3 gap-2">
-          <StatCard label="🏆 Puntos"  value={profile.stats.totalPoints} />
-          <StatCard label="⚽ Exactos" value={profile.stats.exactScores} />
-          <StatCard label="🎯 Jugados" value={profile.stats.totalPredictions} />
+          <StatCard
+            icon={<Star size={16} />}
+            label="Puntos"
+            value={profile.stats.totalPoints}
+            accentClass="text-amber-400"
+          />
+          <StatCard
+            icon={<Crosshair size={16} />}
+            label="Exactos"
+            value={profile.stats.exactScores}
+            accentClass="text-emerald-400"
+          />
+          <StatCard
+            icon={<ClipboardList size={16} />}
+            label="Jugados"
+            value={profile.stats.totalPredictions}
+            accentClass="text-sky-400"
+          />
         </div>
+        {/* Precisión + resultados acertados — info extra que valía la pena
+            mostrar y que antes estaba oculta detrás del scroll del perfil
+            con stats en 0. Ahora siempre visible. */}
+        {profile.stats.totalPredictions > 0 && (
+          <div className="mt-2 grid grid-cols-2 gap-2">
+            <StatCard
+              icon={<Target size={16} />}
+              label="Aciertos"
+              value={profile.stats.correctResults}
+              accentClass="text-violet-400"
+            />
+            <StatCard
+              icon={<span className="text-xs">%</span>}
+              label="Precisión"
+              value={`${accuracy}%`}
+              accentClass="text-fuchsia-400"
+            />
+          </div>
+        )}
       </div>
 
       {/* ── Fantasy points ─────────────────────────────────────────────── */}
@@ -282,11 +390,22 @@ export function UserProfilePage() {
       {/* ── Achievements ───────────────────────────────────────────────── */}
       <div className="px-4">
         <div className="flex items-center justify-between mb-3">
-          <h3 className="text-base-s font-display font-bold text-text">Logros</h3>
-          <Star size={16} className="text-accent" />
+          <h3 className="text-sm font-display font-bold text-muted uppercase tracking-wider flex items-center gap-2">
+            <Star size={14} className="text-accent" /> Logros
+            {profile.achievements.length > 0 && (
+              <span className="text-text font-black">· {profile.achievements.length}</span>
+            )}
+          </h3>
+          {!isAdmin && (
+            <UserLevelBadge level={levelInfo} />
+          )}
         </div>
         {profile.achievements.length === 0 ? (
-          <p className="text-sm-s text-muted">Todavía sin logros</p>
+          <div className="p-6 rounded-xl bg-card border border-border border-dashed flex flex-col items-center gap-2">
+            <span className="text-3xl opacity-40">🏅</span>
+            <p className="text-sm-s text-muted text-center">Todavía sin logros</p>
+            <p className="text-xs-s text-muted/70 text-center">Hacé pronósticos y unite a ligas para empezar</p>
+          </div>
         ) : (
           <div className="flex flex-col gap-2">
             {profile.achievements.map((a, i) => {
@@ -298,16 +417,29 @@ export function UserProfilePage() {
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ delay: i * 0.04 }}
                   className={cn(
-                    'p-3 rounded-lg border flex items-center gap-3',
+                    'relative overflow-hidden p-3 rounded-xl border flex items-center gap-3 transition-transform hover:-translate-y-0.5',
                     isPresidentBadge
                       ? 'bg-gradient-to-r from-amber-100 to-yellow-50 border-amber-400/60 dark:from-yellow-500/10 dark:to-amber-600/5 dark:border-yellow-500/30'
                       : 'bg-card border-border',
                   )}
                 >
-                  <span className="text-2xl-s">{a.icon}</span>
-                  <div className="flex-1 min-w-0">
+                  {/* Tier-coloured glow behind the icon to give the card
+                      visual depth and quick at-a-glance rarity sense. */}
+                  {!isPresidentBadge && (
+                    <div
+                      className={cn(
+                        'absolute -left-2 top-1/2 -translate-y-1/2 w-14 h-14 rounded-full blur-2xl opacity-30 pointer-events-none',
+                        a.tier === 'platinum' && 'bg-cyan-400',
+                        a.tier === 'gold' && 'bg-yellow-400',
+                        a.tier === 'silver' && 'bg-slate-300',
+                        a.tier === 'bronze' && 'bg-amber-600',
+                      )}
+                    />
+                  )}
+                  <span className="relative text-2xl-s">{a.icon}</span>
+                  <div className="relative flex-1 min-w-0">
                     <p className={cn(
-                      'text-sm-s font-semibold',
+                      'text-sm-s font-bold',
                       isPresidentBadge ? 'text-amber-800 dark:text-yellow-200' : 'text-text',
                     )}>
                       {a.name}
@@ -319,7 +451,7 @@ export function UserProfilePage() {
                   </div>
                   <span
                     className={cn(
-                      'inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold border flex-shrink-0',
+                      'relative inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border flex-shrink-0 uppercase tracking-wider',
                       isPresidentBadge
                         ? 'bg-yellow-400/40 text-amber-800 border-amber-500/60 dark:bg-yellow-400/20 dark:text-yellow-300 dark:border-yellow-400/40'
                         : (TIER_COLORS[a.tier] ?? 'bg-elevated text-muted border-border'),

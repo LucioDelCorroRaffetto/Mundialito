@@ -12,6 +12,7 @@ import {
 } from '../../../db/schema/index.js';
 import { dedupeBestPerMatch } from '../../../lib/prediction-aggregates.js';
 import { computeLevel } from '../../../lib/levels.js';
+import { computeUserXp } from '../../../lib/user-xp.js';
 
 // ─── Admin helpers ───────────────────────────────────────────────────────────
 function getAdminIds(): number[] {
@@ -36,14 +37,12 @@ export async function getPublicProfileHandler(req: Request, res: Response) {
 
   const isAdmin = getAdminIds().includes(userId);
 
-  // Fetch user — include XP + selected title so the profile can render the
-  // level badge and chosen title without a second round-trip.
+  // Fetch user — selected title slug only; xp is computed from achievements.
   const [user] = await db
     .select({
       id: users.id,
       username: users.username,
       avatarUrl: users.avatarUrl,
-      xp: users.xp,
       selectedTitleSlug: users.selectedTitleSlug,
     })
     .from(users)
@@ -53,6 +52,10 @@ export async function getPublicProfileHandler(req: Request, res: Response) {
   if (!user) {
     return res.status(404).json({ error: 'User not found' });
   }
+
+  // Live XP — sum of points_bonus over earned achievements. Guarantees the
+  // level badge always matches the achievements the user actually has.
+  const xp = await computeUserXp(user.id);
 
   // Stats — same logic as my-stats.ts but for any userId
   const predRowsRaw = await db
@@ -171,7 +174,7 @@ export async function getPublicProfileHandler(req: Request, res: Response) {
       avatarUrl: user.avatarUrl,
       isAdmin,
       adminProfile: isAdmin ? ADMIN_PROFILE : null,
-      level: computeLevel(user.xp ?? 0),
+      level: computeLevel(xp),
       title,
       stats: {
         totalPoints,

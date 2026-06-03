@@ -5,6 +5,7 @@ import { NotFoundError, AppError } from '../../../lib/errors.js';
 import { and, eq, inArray } from 'drizzle-orm';
 import { calculatePoints } from '../../../lib/scoring.js';
 import { computeLevel } from '../../../lib/levels.js';
+import { computeUserXpBulk } from '../../../lib/user-xp.js';
 
 // Tier priority for picking the "top" badge (higher = better)
 const TIER_PRIORITY: Record<string, number> = {
@@ -23,15 +24,14 @@ export async function standingsHandler(req: Request, res: Response) {
     .where(and(eq(leagueMembers.leagueId, id), eq(leagueMembers.userId, userId))).get();
   if (!membership) throw new AppError('FORBIDDEN', 'Not a member of this league', 403);
 
-  // Get all members of this league — include XP + selected title so we
-  // can show the level badge and chosen title next to each name without a
-  // second round-trip.
+  // Get all members of this league. XP is computed live below (single
+  // bulk query) so the level badge always reflects the user's current set
+  // of earned achievements.
   const members = await db
     .select({
       userId: leagueMembers.userId,
       username: users.username,
       avatarUrl: users.avatarUrl,
-      xp: users.xp,
       selectedTitleSlug: users.selectedTitleSlug,
     })
     .from(leagueMembers)
@@ -114,9 +114,12 @@ export async function standingsHandler(req: Request, res: Response) {
     for (const t of titleRows) titleNameBySlug.set(t.slug, t.name);
   }
 
+  // Live XP per member — one grouped query for the whole league.
+  const xpByUser = await computeUserXpBulk(memberIds);
+
   // Achievement bonuses are NO LONGER added to score — they accumulate as
-  // XP on the user row instead and surface as a level/title next to the
-  // name. The score is pure prediction skill.
+  // XP derived from earned achievements and surface as a level/title next
+  // to the name. The score is pure prediction skill.
   const standings = members
     .map((m) => {
       const predPoints = pointsByUser.get(m.userId)?.total ?? 0;
@@ -128,7 +131,7 @@ export async function standingsHandler(req: Request, res: Response) {
         points: predPoints,
         matchesPlayed: pointsByUser.get(m.userId)?.matches ?? 0,
         topBadge: badgesByUser.get(m.userId) ?? null,
-        level: computeLevel(m.xp ?? 0),
+        level: computeLevel(xpByUser.get(m.userId) ?? 0),
         title: titleSlug
           ? { slug: titleSlug, name: titleNameBySlug.get(titleSlug) ?? titleSlug }
           : null,

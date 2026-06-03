@@ -1,8 +1,6 @@
 import { db } from '../db/index.js';
 import {
   userAchievements,
-  achievements,
-  users,
   predictions,
   matches,
   leagueMembers,
@@ -174,24 +172,11 @@ async function maybeAward(userId: number, slug: string, awarded: string[]): Prom
   if (result.length === 0) return;
   if (!awarded.includes(slug)) awarded.push(slug);
 
-  // Bump the user's XP by the achievement's reward. We treat the existing
-  // `points_bonus` column as the XP reward — keeping the catalog as the
-  // single source of truth means tuning XP per logro stays in one place.
-  // Score is no longer affected (handled in standings/global-leaderboard).
-  const reward = await db
-    .select({ xp: achievements.pointsBonus })
-    .from(achievements)
-    .where(eq(achievements.slug, slug))
-    .get();
-  const delta = reward?.xp ?? 0;
-  if (delta > 0) {
-    // COALESCE guards against pre-migration rows where xp might be NULL;
-    // in SQLite NULL + N = NULL which would silently eat all future XP.
-    await db
-      .update(users)
-      .set({ xp: sql`COALESCE(${users.xp}, 0) + ${delta}` })
-      .where(eq(users.id, userId));
-  }
+  // XP is no longer mutated here. It is computed live from the user's set
+  // of earned achievements (see lib/user-xp.ts) — inserting the row above
+  // is enough to lift the user's XP, level, and badge in every endpoint.
+  // This eliminates the drift class of bugs where a failed UPDATE would
+  // leave the stored xp out of sync with the actual achievements held.
 }
 
 /** Award `invite_5` to the league's admin if the league now has ≥5 members. */

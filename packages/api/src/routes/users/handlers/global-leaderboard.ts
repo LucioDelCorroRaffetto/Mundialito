@@ -3,6 +3,7 @@ import { db } from '../../../db/index.js';
 import { predictions, users, leagueMembers, userAchievements, achievements, leagues } from '../../../db/schema/index.js';
 import { eq, sql, desc, inArray, notInArray } from 'drizzle-orm';
 import { computeLevel } from '../../../lib/levels.js';
+import { computeUserXpBulk } from '../../../lib/user-xp.js';
 
 // Tier priority for picking the "top" badge (higher = better)
 const TIER_PRIORITY: Record<string, number> = {
@@ -41,7 +42,6 @@ export async function globalLeaderboardHandler(req: Request, res: Response) {
     userId: users.id,
     username: users.username,
     avatarUrl: users.avatarUrl,
-    xp: users.xp,
     selectedTitleSlug: users.selectedTitleSlug,
     totalPoints: sql<number>`coalesce(sum(${bestPerMatch.bestPoints}), 0)`,
     predictionCount: sql<number>`count(${bestPerMatch.matchId})`,
@@ -51,7 +51,6 @@ export async function globalLeaderboardHandler(req: Request, res: Response) {
     users.id,
     users.username,
     users.avatarUrl,
-    users.xp,
     users.selectedTitleSlug,
   ] as const;
 
@@ -129,6 +128,9 @@ export async function globalLeaderboardHandler(req: Request, res: Response) {
     for (const t of titleRows) titleNameBySlug.set(t.slug, t.name);
   }
 
+  // Live XP per user — one grouped query for the whole page.
+  const xpByUser = await computeUserXpBulk(userIds);
+
   // Achievement XP no longer adds to the leaderboard score. It powers the
   // level + title shown next to the username, which travels alongside the
   // row but doesn't influence rank order.
@@ -143,7 +145,7 @@ export async function globalLeaderboardHandler(req: Request, res: Response) {
       leagueCount: leagueCountByUser.get(row.userId) ?? 0,
       predictionCount: Number(row.predictionCount),
       topBadge: badgesByUser.get(row.userId) ?? null,
-      level: computeLevel(row.xp ?? 0),
+      level: computeLevel(xpByUser.get(row.userId) ?? 0),
       title: titleSlug
         ? { slug: titleSlug, name: titleNameBySlug.get(titleSlug) ?? titleSlug }
         : null,

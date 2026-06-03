@@ -4,6 +4,7 @@ import { users, achievements } from '../../../db/schema/index.js';
 import { NotFoundError } from '../../../lib/errors.js';
 import { eq } from 'drizzle-orm';
 import { computeLevel } from '../../../lib/levels.js';
+import { computeUserXp } from '../../../lib/user-xp.js';
 
 function isAdminUser(userId: number): boolean {
   const adminIds = process.env.ADMIN_USER_IDS?.split(',').map(Number).filter(Boolean) ?? [];
@@ -27,6 +28,11 @@ export async function meHandler(req: Request, res: Response) {
     if (row) title = row;
   }
 
+  // XP is derived live from the user's earned achievements — see
+  // lib/user-xp.ts for the rationale. Stored `users.xp` is no longer the
+  // source of truth.
+  const xp = await computeUserXp(user.id);
+
   return res.json({
     id: user.id,
     email: user.email,
@@ -34,8 +40,8 @@ export async function meHandler(req: Request, res: Response) {
     avatarUrl: user.avatarUrl,
     createdAt: user.createdAt,
     isAdmin: isAdminUser(user.id),
-    xp: user.xp ?? 0,
-    level: computeLevel(user.xp ?? 0),
+    xp,
+    level: computeLevel(xp),
     title,
   });
 }
