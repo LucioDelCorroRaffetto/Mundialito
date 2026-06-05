@@ -1,10 +1,12 @@
+import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Settings, ChevronRight, Star, LogOut } from 'lucide-react';
 import { useAuthStore } from '@/shared/stores/auth-store';
 import { useMyStats } from '@/shared/hooks/use-my-stats';
-import { useMyAchievements, useAllAchievements } from '@/shared/hooks/use-achievements';
+import { useMyAchievements, useAllAchievements, type Achievement } from '@/shared/hooks/use-achievements';
 import { UserLevelBadge, UserLevelCard } from '@/shared/components/user-level-badge';
+import { AchievementCardModal } from '@/shared/components/achievement-card-modal';
 import { computeLevel } from '@/shared/lib/levels';
 
 function StatCard({ label, value }: { label: string; value: string | number }) {
@@ -23,6 +25,12 @@ export function ProfilePage() {
   const { data: stats, isLoading: statsLoading } = useMyStats();
   const { data: myAchievementsData } = useMyAchievements();
   const { data: allAchievementsData } = useAllAchievements();
+  // Selected card for the trading-card modal. Both earned + locked logros
+  // are clickable: tapping a locked one opens the same modal in dimmed
+  // "still to unlock" state so the user can preview what they're aiming for.
+  const [selectedCard, setSelectedCard] = useState<
+    { achievement: Achievement; earned: boolean; earnedAt?: string } | null
+  >(null);
 
   const myAchievementSlugs = new Set((myAchievementsData?.data ?? []).map((a) => a.slug));
   const allAchievements = allAchievementsData?.data ?? [];
@@ -107,36 +115,53 @@ export function ProfilePage() {
         {myEarned.length > 0 && (
           <div className="flex flex-col gap-2 mb-3">
             {myEarned.map((a) => (
-              <motion.div
+              <motion.button
                 key={a.slug}
+                type="button"
+                onClick={() =>
+                  setSelectedCard({ achievement: a, earned: true, earnedAt: a.earnedAt })
+                }
                 initial={{ opacity: 0, x: -8 }}
                 animate={{ opacity: 1, x: 0 }}
-                className="flex items-center gap-3 p-3 rounded-lg bg-card border border-accent-border"
+                whileHover={{ y: -1 }}
+                className="flex items-center gap-3 p-3 rounded-lg bg-card border border-accent-border text-left hover:border-accent transition-colors"
               >
                 <span className="text-2xl-s">{a.icon}</span>
-                <div className="flex-1">
+                <div className="flex-1 min-w-0">
                   <p className="text-sm-s font-semibold text-text">{a.name}</p>
                   <p className="text-xs-s text-muted">{a.description}</p>
                 </div>
                 <span className="text-xs-s text-accent font-semibold">+{a.xpReward} XP</span>
-              </motion.div>
+              </motion.button>
             ))}
           </div>
         )}
 
         <div className="flex flex-col gap-2">
           {locked.slice(0, 5).map((a) => (
-            <div key={a.slug} className="flex items-center gap-3 p-3 rounded-lg bg-elevated border border-border opacity-60">
+            <button
+              key={a.slug}
+              type="button"
+              onClick={() => setSelectedCard({ achievement: a, earned: false })}
+              className="flex items-center gap-3 p-3 rounded-lg bg-elevated border border-border opacity-60 hover:opacity-100 transition-opacity text-left"
+            >
               <span className="text-2xl-s grayscale">{a.icon}</span>
-              <div className="flex-1">
+              <div className="flex-1 min-w-0">
                 <p className="text-sm-s font-semibold text-muted">{a.name}</p>
                 <p className="text-xs-s text-muted">{a.description}</p>
               </div>
               <span className="text-xs-s text-muted">🔒</span>
-            </div>
+            </button>
           ))}
         </div>
       </div>
+
+      <AchievementCardModal
+        achievement={selectedCard?.achievement ?? null}
+        earned={selectedCard?.earned ?? false}
+        earnedAt={selectedCard?.earnedAt}
+        onClose={() => setSelectedCard(null)}
+      />
 
       <div className="px-4 pb-4 flex flex-col gap-3">
         <Link to="/achievements" className="flex items-center gap-3 py-3 border-b border-border">

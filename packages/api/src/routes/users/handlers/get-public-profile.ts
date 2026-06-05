@@ -112,6 +112,10 @@ export async function getPublicProfileHandler(req: Request, res: Response) {
       description: achievements.description,
       icon: achievements.icon,
       tier: achievements.tier,
+      // Kept as `xpReward` on the wire even though the column is still
+      // called `points_bonus` — this matches the public catalog endpoint
+      // (`/achievements`) and the modal's `Achievement` shape.
+      xpReward: achievements.pointsBonus,
       earnedAt: userAchievements.earnedAt,
     })
     .from(userAchievements)
@@ -126,6 +130,7 @@ export async function getPublicProfileHandler(req: Request, res: Response) {
         description: 'El que armó todo esto',
         icon: '🏛️',
         tier: 'platinum',
+        xpReward: 0,
         earnedAt: achievementRows.find((a) => a.slug === 'presidente_fifa')?.earnedAt
           ?? new Date().toISOString(),
       },

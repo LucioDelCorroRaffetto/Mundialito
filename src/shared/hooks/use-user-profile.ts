@@ -29,6 +29,7 @@ export interface UserPublicProfile {
     description: string;
     icon: string;
     tier: 'bronze' | 'silver' | 'gold' | 'platinum';
+    xpReward: number;
     earnedAt: string;
   }>;
   leagueCount: number;

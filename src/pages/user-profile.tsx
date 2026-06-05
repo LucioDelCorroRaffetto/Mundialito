@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Navigate, useNavigate, useParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { ArrowLeft, Star, Target, Crosshair, ClipboardList, Sparkles } from 'lucide-react';
@@ -5,7 +6,9 @@ import { cn } from '@/shared/lib/cn';
 import { useAuthStore } from '@/shared/stores/auth-store';
 import { useUserProfile } from '@/shared/hooks/use-user-profile';
 import { UserLevelCard, UserLevelBadge } from '@/shared/components/user-level-badge';
+import { AchievementCardModal } from '@/shared/components/achievement-card-modal';
 import { computeLevel } from '@/shared/lib/levels';
+import type { Achievement } from '@/shared/hooks/use-achievements';
 
 // Tier chip colours with explicit light + dark variants. Without these the
 // chip is invisible on white (yellow/cyan/slate-300 fade into nothing).
@@ -93,6 +96,12 @@ export function UserProfilePage() {
   }
 
   const { data: profile, isLoading, isError } = useUserProfile(isNaN(userId) ? undefined : userId);
+  // Selected achievement for the Pokémon-style modal. We let viewers open
+  // any other user's logro card just like they can on their own profile —
+  // it's a public showcase, no reason to gate it.
+  const [selectedCard, setSelectedCard] = useState<
+    { achievement: Achievement; earned: boolean; earnedAt?: string } | null
+  >(null);
 
   if (isNaN(userId)) {
     return (
@@ -411,13 +420,21 @@ export function UserProfilePage() {
             {profile.achievements.map((a, i) => {
               const isPresidentBadge = a.slug === 'presidente_fifa';
               return (
-                <motion.div
+                <motion.button
                   key={a.slug}
+                  type="button"
+                  onClick={() =>
+                    setSelectedCard({
+                      achievement: a as Achievement,
+                      earned: true,
+                      earnedAt: a.earnedAt,
+                    })
+                  }
                   initial={{ opacity: 0, x: -8 }}
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ delay: i * 0.04 }}
                   className={cn(
-                    'relative overflow-hidden p-3 rounded-xl border flex items-center gap-3 transition-transform hover:-translate-y-0.5',
+                    'relative overflow-hidden p-3 rounded-xl border flex items-center gap-3 transition-transform hover:-translate-y-0.5 text-left',
                     isPresidentBadge
                       ? 'bg-gradient-to-r from-amber-100 to-yellow-50 border-amber-400/60 dark:from-yellow-500/10 dark:to-amber-600/5 dark:border-yellow-500/30'
                       : 'bg-card border-border',
@@ -459,12 +476,19 @@ export function UserProfilePage() {
                   >
                     {isPresidentBadge ? '🏛️ FIFA' : a.tier}
                   </span>
-                </motion.div>
+                </motion.button>
               );
             })}
           </div>
         )}
       </div>
+
+      <AchievementCardModal
+        achievement={selectedCard?.achievement ?? null}
+        earned={selectedCard?.earned ?? false}
+        earnedAt={selectedCard?.earnedAt}
+        onClose={() => setSelectedCard(null)}
+      />
     </div>
   );
 }

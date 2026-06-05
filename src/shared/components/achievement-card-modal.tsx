@@ -95,30 +95,27 @@ function AchievementCard({
 }) {
   const ref = useRef<HTMLDivElement>(null);
   // Normalised pointer position relative to the card (0..1 on each axis).
-  // active=true makes the holographic refraction visible; on mobile we keep
-  // it permanently active so users see the rainbow without needing to tilt
-  // the card.
+  // active=true makes the holographic refraction visible.
   const [pointer, setPointer] = useState({ x: 0.5, y: 0.5, active: true });
-  // On touch devices (no hover capability), auto-animate the pointer so the
-  // rainbow sweep is always visible — otherwise the card just looks flat to
-  // mobile users because the holo effect was gated behind cursor movement.
+  // Track whether the user is actively hovering the card. When they aren't,
+  // the auto-sweep takes over so the card always shines on its own — on
+  // both touch AND desktop. Previously the auto-sweep was gated to touch
+  // devices, which left desktop cards looking flat unless you waved the
+  // mouse over them.
+  const hoveringRef = useRef(false);
   useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const isTouch =
-      window.matchMedia &&
-      (window.matchMedia('(hover: none)').matches ||
-        window.matchMedia('(pointer: coarse)').matches);
-    if (!isTouch) return;
-
     let raf = 0;
     const start = performance.now();
     function frame(now: number) {
-      // Slow figure-eight sweep across the card so the highlight passes
-      // every region of the card every ~4 seconds.
-      const t = (now - start) / 4000;
-      const x = 0.5 + 0.42 * Math.sin(t * Math.PI * 2);
-      const y = 0.5 + 0.32 * Math.sin(t * Math.PI * 4);
-      setPointer({ x, y, active: true });
+      if (!hoveringRef.current) {
+        // Slow figure-eight sweep across the card so the highlight passes
+        // every region of the card every ~4 seconds. The cursor takes
+        // over the moment the user moves the mouse into the card.
+        const t = (now - start) / 4000;
+        const x = 0.5 + 0.42 * Math.sin(t * Math.PI * 2);
+        const y = 0.5 + 0.32 * Math.sin(t * Math.PI * 4);
+        setPointer({ x, y, active: true });
+      }
       raf = requestAnimationFrame(frame);
     }
     raf = requestAnimationFrame(frame);
@@ -129,17 +126,17 @@ function AchievementCard({
     const el = ref.current;
     if (!el) return;
     const rect = el.getBoundingClientRect();
+    hoveringRef.current = true;
     setPointer({
       x: (e.clientX - rect.left) / rect.width,
       y: (e.clientY - rect.top) / rect.height,
       active: true,
     });
   }
-  // Keep `active: true` even after the pointer leaves, so the rainbow stays
-  // visible (it just recentres). The 3D tilt resets to flat which is the
-  // important "released" affordance.
+  // Released cursor → release control back to the auto-sweep so the
+  // shine keeps moving even when the user stops interacting.
   function onLeave() {
-    setPointer({ x: 0.5, y: 0.5, active: true });
+    hoveringRef.current = false;
   }
 
   const tier = achievement.tier;
