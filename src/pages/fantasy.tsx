@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { ChevronDown, Check, Trophy, LayoutList, Layers, Star, Crown, BarChart2, BookOpen, ChevronRight, Lock, CheckCircle2 } from 'lucide-react';
+import { ChevronDown, Check, Trophy, LayoutList, Layers, Star, Crown, Shield, BarChart2, BookOpen, ChevronRight, Lock, CheckCircle2 } from 'lucide-react';
 import { cn } from '@/shared/lib/cn';
 import { useTeams } from '@/shared/hooks/use-teams';
 import { usePlayers } from '@/shared/hooks/use-players';
@@ -1516,6 +1516,7 @@ function UserTeamDrawer({
   const starters = squad.filter((p) => p.isStarter);
   const bench = squad.filter((p) => !p.isStarter);
   const captain = squad.find((p) => p.isCaptain);
+  const viceCaptain = squad.find((p) => p.isViceCaptain);
   const totalPoints = data?.team?.totalPoints ?? 0;
 
   const ORDER: Position[] = ['GK', 'DEF', 'MID', 'FWD'];
@@ -1579,6 +1580,7 @@ function UserTeamDrawer({
                       </div>
                       {players.map((p, idx) => {
                         const isCap = p.isCaptain;
+                        const isVice = p.isViceCaptain;
                         const isLast = idx === players.length - 1;
                         return (
                           <div
@@ -1590,6 +1592,11 @@ function UserTeamDrawer({
                             {isCap && (
                               <span className="flex items-center gap-1 text-xs-s font-bold text-accent bg-accent/10 px-2 py-0.5 rounded-full flex-shrink-0">
                                 <Crown size={10} /> CAP
+                              </span>
+                            )}
+                            {isVice && (
+                              <span className="flex items-center gap-1 text-xs-s font-bold text-slate-300 bg-slate-400/15 border border-slate-400/30 px-2 py-0.5 rounded-full flex-shrink-0">
+                                <Shield size={10} /> VICE
                               </span>
                             )}
                             <span className="text-xs-s font-bold text-accent w-10 text-right flex-shrink-0">
@@ -1632,6 +1639,17 @@ function UserTeamDrawer({
                     <p className="text-sm-s font-bold text-text truncate">{captain.name}</p>
                   </div>
                   <span className="text-xs-s font-bold text-accent">×2 pts</span>
+                </div>
+              )}
+
+              {viceCaptain && (
+                <div className="p-3 rounded-xl bg-slate-400/10 border border-slate-400/20 flex items-center gap-3">
+                  <Shield size={16} className="text-slate-300 flex-shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs-s text-muted">Vicecapitán</p>
+                    <p className="text-sm-s font-bold text-text truncate">{viceCaptain.name}</p>
+                  </div>
+                  <span className="text-xs-s font-bold text-slate-300">×1.5 pts</span>
                 </div>
               )}
             </div>
