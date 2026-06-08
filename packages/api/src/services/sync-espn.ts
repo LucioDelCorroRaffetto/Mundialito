@@ -16,6 +16,7 @@ import { matches, predictions } from '../db/schema/index.js';
 import { calculatePoints } from '../lib/scoring.js';
 import { recomputeAllFantasyPoints } from './fantasy-scoring-service.js';
 import { broadcastMatchUpdate } from '../ws/broadcast.js';
+import { checkAchievements } from './achievement-service.js';
 import type { SyncScoresResult } from './sync-scores.js';
 
 // ─── ESPN response types ──────────────────────────────────────────────────────
@@ -153,6 +154,19 @@ export async function syncScoresFromEspn(date: string): Promise<SyncScoresResult
             { homeScore: newHomeScore, awayScore: newAwayScore },
           );
           await db.update(predictions).set({ points: pts, updatedAt: sql`(datetime('now'))` }).where(eq(predictions.id, pred.id));
+          // Fire the same prediction_scored event the football-data.org
+          // sync fires — without this fallback path, no achievements
+          // (exact_score, hot_streaks, perfect_group, bullseye_zero, …)
+          // would be awarded when ESPN is the active scoring source.
+          try {
+            await checkAchievements(pred.userId, {
+              type: 'prediction_scored',
+              matchId: ourMatch.id,
+              points: pts,
+            });
+          } catch (err) {
+            errors.push(`Achievement check failed for prediction ${pred.id}: ${String(err)}`);
+          }
         }
       }
 

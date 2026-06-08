@@ -18,7 +18,10 @@ function calculatePoints(pred: PredictionInput, result: MatchResult): number {
   const predDiff = pred.homeScore - pred.awayScore;
   const resultDiff = result.homeScore - result.awayScore;
 
-  if (predDiff === 0 && resultDiff === 0) return 1;
+  // Empate acertado (no exacto) = 3 pts to match packages/api/src/lib/scoring.ts.
+  // Previous value here was 1 pt, which would have silently underscored every
+  // draw prediction had this worker re-activated.
+  if (predDiff === 0 && resultDiff === 0) return 3;
   if (Math.sign(predDiff) !== Math.sign(resultDiff)) return 0;
   if (predDiff === resultDiff) return 3;
   return 1;

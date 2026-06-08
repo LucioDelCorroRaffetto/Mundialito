@@ -74,7 +74,12 @@ export const FANTASY_ROUNDS: FantasyRound[] = [
     slug: 'final',
     label: 'Final y 3er puesto',
     deadline: '2026-07-19T14:55:00Z',  // 3rd place match starts 15:00 UTC
-    dbRound: ['sf', 'third', 'final'], // 3rd place + final scored here
+    // Final fantasy round scores ONLY the 3rd-place match and the final.
+    // Previously the array also included 'sf', so semifinal matches were
+    // counted twice (once for the `sf` round, again here) — a starter
+    // who scored in the SF inflated both the user's `sf` total and their
+    // `final` total. Removed 'sf' so each match is scored exactly once.
+    dbRound: ['third', 'final'],
   },
 ];
 

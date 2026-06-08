@@ -56,14 +56,10 @@ export async function checkAchievements(
       // early_bird: same set, but completed before the opening match kickoff.
       await evaluateGroupCompletion(userId, distinctMatches, awarded);
 
-      // night_owl: predicted between 00:00 and 04:59 in the user's timezone.
-      // We don't store timezones server-side, so we approximate with the
-      // request's `x-user-hour` header (set by the client). Bail out silently
-      // when missing — the next save will get another chance.
-      const hourHeader = event.userHour;
-      if (typeof hourHeader === 'number' && hourHeader >= 0 && hourHeader < 5) {
-        await maybeAward(userId, 'night_owl', awarded);
-      }
+      // night_owl was removed from the catalog; calling maybeAward for a
+      // slug that no longer exists in `achievements` throws on the FK and
+      // aborts the rest of this case (incl. group_sampler). Keeping the
+      // event.userHour field accepted in case we re-introduce the logro.
 
       // group_sampler: at least one prediction in each of the 12 groups.
       await evaluateGroupSampler(userId, awarded);
@@ -153,7 +149,10 @@ export async function checkAchievements(
     }
 
     case 'prediction_shared': {
-      await maybeAward(userId, 'share_master', awarded);
+      // share_master was removed from the catalog; trying to award it now
+      // throws on the FK in `user_achievements.achievement_slug → achievements.slug`
+      // which made POST /predictions/shared always return 500. Kept as a
+      // no-op until / unless the slug is re-added to the catalog.
       break;
     }
   }
@@ -711,11 +710,11 @@ async function evaluateUnderdog(
 ): Promise<void> {
   if (finalPosition !== 1) return;
 
-  // Was the user ever top 3 in this league BEFORE quarter-finals? "Before
-  // QF" = triggering match round is 'group' or 'r16' (round of 32 is
-  // labelled 'r32' in our schema — see seed.ts — but we use the same
-  // bracket as the FIFA WC where R16 is the first knockout. We treat
-  // group + r32 as 'before QF'.).
+  // Was the user ever top 3 in this league BEFORE quarter-finals? The
+  // WC2026 bracket is group → r32 → r16 → qf → sf → final. "Before QF"
+  // therefore includes group, r32 AND r16 (r16 was previously omitted,
+  // which let users who only reached top 3 during r16 still claim the
+  // logro — they shouldn't).
   const earlyTop3 = await db
     .select({ id: leaguePositionHistory.id })
     .from(leaguePositionHistory)
@@ -723,7 +722,7 @@ async function evaluateUnderdog(
       and(
         eq(leaguePositionHistory.leagueId, leagueId),
         eq(leaguePositionHistory.userId, userId),
-        inArray(leaguePositionHistory.triggeringRound, ['group', 'r32']),
+        inArray(leaguePositionHistory.triggeringRound, ['group', 'r32', 'r16']),
         sql`${leaguePositionHistory.position} <= 3`,
       ),
     )
