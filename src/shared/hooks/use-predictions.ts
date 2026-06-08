@@ -90,6 +90,15 @@ export function useUpsertPrediction() {
       qc.invalidateQueries({ queryKey: ['leagues', 'mine'] });
       qc.invalidateQueries({ queryKey: ['leagues', 'standings'] });
     },
+    // On a 409 LOCKED (or any error) we need to refetch the prediction so
+    // the UI doesn't keep displaying the optimistic local value the user
+    // typed — otherwise after the lock fires the user still sees their
+    // last attempt as if it had saved. Invalidating brings back the
+    // server-side truth.
+    onError: (_err, input) => {
+      qc.invalidateQueries({ queryKey: ['prediction', input.matchId] });
+      qc.invalidateQueries({ queryKey: ['predictions', 'mine'] });
+    },
   });
 }
 

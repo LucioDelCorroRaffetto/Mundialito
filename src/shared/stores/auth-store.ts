@@ -38,3 +38,32 @@ export const useAuthStore = create<AuthState>()(
 );
 
 export const getStoredToken = () => useAuthStore.getState().token;
+
+// Sync auth state across tabs: if one tab logs out (clears the persisted
+// key) or logs in as a different user, every other open tab should follow
+// suit instead of letting a stale token continue making authenticated
+// requests. Zustand's `persist` writes to localStorage on change but
+// doesn't subscribe to the storage event — we wire that up here.
+if (typeof window !== 'undefined') {
+  window.addEventListener('storage', (e) => {
+    if (e.key !== 'mundialito_auth') return;
+    if (e.newValue == null) {
+      // Key was removed in the other tab → logout here too.
+      useAuthStore.setState({ user: null, token: null, isAuthenticated: false });
+      return;
+    }
+    try {
+      const parsed = JSON.parse(e.newValue) as { state?: AuthState };
+      if (parsed.state) {
+        useAuthStore.setState({
+          user: parsed.state.user ?? null,
+          token: parsed.state.token ?? null,
+          isAuthenticated: parsed.state.isAuthenticated ?? false,
+        });
+      }
+    } catch {
+      // Malformed payload — fail safe to logged-out.
+      useAuthStore.setState({ user: null, token: null, isAuthenticated: false });
+    }
+  });
+}

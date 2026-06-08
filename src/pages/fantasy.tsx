@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { ChevronDown, Check, Trophy, LayoutList, Layers, Star, Crown, Shield, BarChart2, BookOpen, ChevronRight, Lock, CheckCircle2 } from 'lucide-react';
 import { cn } from '@/shared/lib/cn';
@@ -286,15 +286,28 @@ export function FantasyPage() {
   );
   const players = playersData ?? [];
 
-  // Preload existing squad, starters and captain
+  // Preload existing squad, starters and captain from server. We compute a
+  // stable signature of the server squad and only sync local state when the
+  // signature changes — otherwise every background refetch (TanStack Query
+  // re-fires on focus, network reconnect, etc.) would silently wipe the
+  // user's unsaved edits while they're still picking players.
+  const serverSquadSignature = useMemo(() => {
+    if (!fantasyData?.squad) return '';
+    return fantasyData.squad
+      .map((p) => `${p.id}:${p.isStarter ? 's' : 'b'}:${p.isCaptain ? 'c' : '-'}`)
+      .sort()
+      .join('|');
+  }, [fantasyData?.squad]);
+  const lastLoadedSignatureRef = useRef<string | null>(null);
   useEffect(() => {
-    if (fantasyData?.squad && fantasyData.squad.length > 0) {
-      setSelectedPlayerIds(fantasyData.squad.map((p) => p.id));
-      setStarterIds(fantasyData.squad.filter((p) => p.isStarter).map((p) => p.id));
-      const cap = fantasyData.squad.find((p) => p.isCaptain);
-      setCaptainId(cap ? cap.id : null);
-    }
-  }, [fantasyData]);
+    if (!fantasyData?.squad || fantasyData.squad.length === 0) return;
+    if (lastLoadedSignatureRef.current === serverSquadSignature) return;
+    lastLoadedSignatureRef.current = serverSquadSignature;
+    setSelectedPlayerIds(fantasyData.squad.map((p) => p.id));
+    setStarterIds(fantasyData.squad.filter((p) => p.isStarter).map((p) => p.id));
+    const cap = fantasyData.squad.find((p) => p.isCaptain);
+    setCaptainId(cap ? cap.id : null);
+  }, [fantasyData?.squad, serverSquadSignature]);
 
   const playersById = useMemo(() => {
     const map = new Map<number, Player>();

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, useNavigate, Navigate, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { ArrowLeft, Share2, Users, Trophy, ChevronRight, Pencil, X, Check } from 'lucide-react';
 import { toast } from 'sonner';
@@ -195,21 +195,21 @@ export function LeagueDetailPage() {
   const currentUser = useAuthStore((s) => s.user);
 
   const leagueId = Number(id);
-  if (isNaN(leagueId)) {
-    navigate('/leagues', { replace: true });
-    return null;
-  }
+  // Skip the data hooks entirely when the route param is malformed so we
+  // don't fire `/leagues/NaN` requests, and use declarative <Navigate>
+  // instead of calling navigate() during render (which was triggering a
+  // setState-on-render warning and could double-fire on strict mode).
+  const validLeagueId = Number.isFinite(leagueId) && leagueId > 0;
 
-  const { data: league, isLoading: leagueLoading, isError: leagueError } = useLeague(leagueId);
-  const { data: standingsData, isLoading: standingsLoading } = useLeagueStandings(leagueId);
+  const { data: league, isLoading: leagueLoading, isError: leagueError } = useLeague(validLeagueId ? leagueId : undefined);
+  const { data: standingsData, isLoading: standingsLoading } = useLeagueStandings(validLeagueId ? leagueId : undefined);
   const leaveMutation = useLeaveLeague();
   const updateLeague = useUpdateLeague();
   const isAdmin = league?.adminId === currentUser?.id;
   const standings = standingsData?.data ?? [];
 
-  if (leagueError) {
-    navigate('/leagues', { replace: true });
-    return null;
+  if (!validLeagueId || leagueError) {
+    return <Navigate to="/leagues" replace />;
   }
 
   if (leagueLoading) {

@@ -303,6 +303,12 @@ export function MatchDetailPage() {
   };
 
   const handleSave = async () => {
+    // Guard against double-tap: if a save is already in flight, ignore the
+    // second click instead of firing a duplicate request. Without this the
+    // backend ends up processing the same payload twice, and the second
+    // response (which arrives after `setSaved(true)`) can flip the UI back
+    // to a misleading "cerrado" error if the lock just elapsed.
+    if (upsertMutation.isPending) return;
     setSaveError(null);
     try {
       // First-time prediction for this match → omit leagueId so the API
