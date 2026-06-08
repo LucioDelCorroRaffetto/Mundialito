@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Plus, Search, Trophy, ChevronRight, AlertCircle, Sparkles } from 'lucide-react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useMatches } from '@/shared/hooks/use-matches';
 import { useMyLeagues } from '@/shared/hooks/use-leagues';
 import { useTeamMap } from '@/shared/hooks/use-teams';
@@ -15,13 +16,23 @@ import { TeamFlag } from '@/shared/components/ui/team-flag';
 
 const WORLD_CUP_START = '2026-06-11T19:00:00Z';
 
-function useCountdown(targetUtc: string) {
+function useCountdown(targetUtc: string, onEnded?: () => void) {
   const [diff, setDiff] = useState(() => new Date(targetUtc).getTime() - Date.now());
   useEffect(() => {
-    // If the countdown has already ended, don't burn CPU re-rendering every
-    // second forever. Also pause when the tab is hidden — there's nothing
-    // to look at and Render's free tier gets thrashed by background tabs.
-    if (diff <= 0) return;
+    // Re-seed when the target changes so the countdown picks up the new
+    // kickoff (e.g. the home pointing at the next match after the previous
+    // one finished).
+    setDiff(new Date(targetUtc).getTime() - Date.now());
+  }, [targetUtc]);
+
+  useEffect(() => {
+    // If the countdown has already ended, fire the callback once so the
+    // caller can invalidate its queries and advance to the next match,
+    // then exit — no point burning CPU re-rendering every second forever.
+    if (diff <= 0) {
+      onEnded?.();
+      return;
+    }
 
     let id: ReturnType<typeof setInterval> | null = null;
     const start = () => {
@@ -32,6 +43,10 @@ function useCountdown(targetUtc: string) {
         if (next <= 0 && id != null) {
           clearInterval(id);
           id = null;
+          // Reaching zero is also a signal that the match has (likely)
+          // kicked off, so let the caller refetch the match list to find
+          // the next upcoming match.
+          onEnded?.();
         }
       }, 1000);
     };
@@ -43,8 +58,17 @@ function useCountdown(targetUtc: string) {
     };
     const onVisibility = () => {
       if (document.visibilityState === 'visible') {
-        setDiff(new Date(targetUtc).getTime() - Date.now());
-        start();
+        // Coming back to a tab that was hidden for a while: re-seed the
+        // diff, re-check whether the target already passed (in which
+        // case fire onEnded), and only restart the interval if there's
+        // still time left.
+        const fresh = new Date(targetUtc).getTime() - Date.now();
+        setDiff(fresh);
+        if (fresh <= 0) {
+          onEnded?.();
+        } else {
+          start();
+        }
       } else {
         stop();
       }
@@ -67,8 +91,8 @@ function useCountdown(targetUtc: string) {
   return { days, hours, mins, secs, ended: diff <= 0 };
 }
 
-function CountdownTiles({ targetUtc }: { targetUtc: string }) {
-  const { days, hours, mins, secs } = useCountdown(targetUtc);
+function CountdownTiles({ targetUtc, onEnded }: { targetUtc: string; onEnded?: () => void }) {
+  const { days, hours, mins, secs } = useCountdown(targetUtc, onEnded);
   return (
     <div className="flex items-center justify-center gap-2">
       {[
@@ -98,6 +122,15 @@ function CountdownHero({
   nextMatch: Match | null;
   teamMap: Map<number, Team> | undefined;
 }) {
+  const queryClient = useQueryClient();
+  // Triggered when the countdown reaches 0 — invalidates the matches
+  // query so the home auto-advances to the next match without needing the
+  // user to refresh. Also kicks the standings / predictions caches because
+  // a match just kicking off is correlated with points landing soon.
+  const onCountdownEnded = () => {
+    queryClient.invalidateQueries({ queryKey: ['matches'] });
+  };
+
   const tournamentStarted = Date.now() > new Date(WORLD_CUP_START).getTime();
 
   // Before tournament: countdown to first match. Bigger, more cinematic
@@ -113,6 +146,10 @@ function CountdownHero({
       openHome && openAway
         ? `11 de junio · ${openHome.name} vs ${openAway.name}`
         : '11 de junio · Estadio Azteca';
+    // Prefer the kickoff of the actual first match in the DB so the
+    // countdown stays in sync if FIFA shifts the opening time. Falls back
+    // to the constant only if the API hasn't returned matches yet.
+    const targetUtc = nextMatch?.kickoffUtc ?? WORLD_CUP_START;
     return (
       <div className="relative overflow-hidden rounded-2xl border border-accent/40 bg-gradient-to-br from-accent/25 via-card to-card p-6">
         {/* Animated sheen across the hero */}
@@ -134,18 +171,31 @@ function CountdownHero({
           <p className="text-xl font-display font-black text-text mb-4 text-center">
             Arranca el Mundial 2026 🌎
           </p>
-          <CountdownTiles targetUtc={WORLD_CUP_START} />
+          <CountdownTiles targetUtc={targetUtc} onEnded={onCountdownEnded} />
           <p className="mt-3 text-center text-xs text-muted">{openCaption}</p>
         </div>
       </div>
     );
   }
 
-  // Tournament started but no next match found
+  // Tournament started but no scheduled match left. Distinguish "torneo en
+  // curso pero entre partidos" from "torneo terminado" so the message isn't
+  // misleading once the final is in the books.
   if (!nextMatch) {
+    const finalDate = new Date('2026-07-19T19:00:00Z');
+    const tournamentOver = Date.now() > finalDate.getTime();
     return (
       <div className="bg-card border border-border rounded-xl p-5">
-        <p className="text-base font-bold text-accent text-center">¡El Mundial ya comenzó! 🏆</p>
+        {tournamentOver ? (
+          <>
+            <p className="text-base font-bold text-accent text-center">¡Terminó el Mundial! 🏆</p>
+            <p className="text-xs text-muted text-center mt-1">
+              Mirá la tabla final en la pestaña Global
+            </p>
+          </>
+        ) : (
+          <p className="text-base font-bold text-accent text-center">No hay próximos partidos por ahora ⚽</p>
+        )}
       </div>
     );
   }
@@ -182,7 +232,7 @@ function CountdownHero({
         </div>
       )}
 
-      {!isLive && <CountdownTiles targetUtc={nextMatch.kickoffUtc} />}
+      {!isLive && <CountdownTiles targetUtc={nextMatch.kickoffUtc} onEnded={onCountdownEnded} />}
     </div>
   );
 }
@@ -207,7 +257,13 @@ const PLACEHOLDER_TEAM: Team = {
 };
 
 export function HomePage() {
-  const { data: matchesResponse } = useMatches({ status: 'scheduled', limit: 6 });
+  // Refetch every 60s so the home auto-rotates to the next match when the
+  // worker flips one from scheduled → live/finished, even if the user
+  // never refreshes the tab.
+  const { data: matchesResponse } = useMatches(
+    { status: 'scheduled', limit: 6 },
+    { refetchInterval: 60_000 },
+  );
   const { data: teamMap } = useTeamMap();
   const { data: leaguesResponse } = useMyLeagues();
   const { data: myPredictionsData } = useMyPredictions();
