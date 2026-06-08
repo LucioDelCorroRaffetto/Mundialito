@@ -1,12 +1,25 @@
 import { Request, Response } from 'express';
 import { z } from 'zod';
-import { eq, inArray, and, notInArray } from 'drizzle-orm';
+import { eq, inArray, and, notInArray, asc } from 'drizzle-orm';
 import { db } from '../../../db/index.js';
-import { fantasyTeams, fantasySquadPlayers, players, fantasyLineups } from '../../../db/schema/index.js';
+import { fantasyTeams, fantasySquadPlayers, players, fantasyLineups, matches } from '../../../db/schema/index.js';
 import { AppError } from '../../../lib/errors.js';
+import { isLocked } from '../../../lib/match-helpers.js';
+
+// Standard WC fantasy squad composition.
+const POSITION_QUOTAS: Record<'GK' | 'DEF' | 'MID' | 'FWD', number> = {
+  GK: 2,
+  DEF: 5,
+  MID: 5,
+  FWD: 3,
+};
 
 export const updateSquadSchema = z.object({
-  playerIds: z.array(z.number().int().positive()).min(11).max(15),
+  // Squad must be exactly 15 players (2 GK + 5 DEF + 5 MID + 3 FWD). The
+  // previous .min(11).max(15) let clients submit "11 forwards, no
+  // goalkeeper" — server-side enforcement matters because the lineup
+  // validator only checks 11 starters from the existing squad.
+  playerIds: z.array(z.number().int().positive()).length(15),
   // starterIds and captainId are optional for backward-compat with old clients.
   // If omitted the handler picks sensible defaults.
   starterIds: z.array(z.number().int().positive()).length(11).optional(),
@@ -17,6 +30,24 @@ export async function updateSquadHandler(req: Request, res: Response) {
   const userId = req.user!.id;
   const { playerIds } = req.body as z.infer<typeof updateSquadSchema>;
   let { starterIds, captainId } = req.body as z.infer<typeof updateSquadSchema>;
+
+  // Lock the squad once the tournament has kicked off. The lineup is what
+  // the user tweaks per round; the underlying 15-man squad is meant to be
+  // frozen at the start to prevent late-game reshuffles. Same threshold the
+  // tournament-prediction handler uses.
+  const firstMatch = await db
+    .select({ predictionLockUtc: matches.predictionLockUtc })
+    .from(matches)
+    .orderBy(asc(matches.kickoffUtc))
+    .limit(1)
+    .get();
+  if (firstMatch?.predictionLockUtc && isLocked(firstMatch.predictionLockUtc)) {
+    throw new AppError(
+      'SQUAD_LOCKED',
+      'El plantel ya no se puede modificar — el torneo comenzó',
+      409,
+    );
+  }
 
   // Default starterIds: first 11 of playerIds if not supplied.
   if (!starterIds || starterIds.length === 0) {
@@ -46,14 +77,28 @@ export async function updateSquadHandler(req: Request, res: Response) {
     throw new AppError('VALIDATION_ERROR', 'captainId must be one of the starters', 400);
   }
 
-  // Validate players exist.
-  const existingPlayers = await db
-    .select({ id: players.id })
+  // Validate players exist AND that the squad has the right shape
+  // (2 GK / 5 DEF / 5 MID / 3 FWD). Without this check a client could send
+  // "15 forwards", which would then break every fantasy position quota.
+  const playerRows = await db
+    .select({ id: players.id, position: players.position })
     .from(players)
     .where(inArray(players.id, playerIds));
 
-  if (existingPlayers.length !== playerIds.length) {
+  if (playerRows.length !== playerIds.length) {
     throw new AppError('VALIDATION_ERROR', 'One or more player IDs are invalid', 400);
+  }
+
+  const positionCount: Record<string, number> = { GK: 0, DEF: 0, MID: 0, FWD: 0 };
+  for (const p of playerRows) positionCount[p.position] = (positionCount[p.position] ?? 0) + 1;
+  for (const pos of ['GK', 'DEF', 'MID', 'FWD'] as const) {
+    if (positionCount[pos] !== POSITION_QUOTAS[pos]) {
+      throw new AppError(
+        'VALIDATION_ERROR',
+        `El plantel debe tener exactamente ${POSITION_QUOTAS[pos]} ${pos}, recibió ${positionCount[pos]}`,
+        400,
+      );
+    }
   }
 
   // Upsert global fantasy team — one per user.

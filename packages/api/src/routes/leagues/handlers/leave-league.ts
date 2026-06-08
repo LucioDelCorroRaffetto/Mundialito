@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { db } from '../../../db/index.js';
-import { leagues, leagueMembers } from '../../../db/schema/index.js';
+import { leagues, leagueMembers, predictions, tournamentPredictions } from '../../../db/schema/index.js';
 import { NotFoundError, AppError } from '../../../lib/errors.js';
 import { and, eq } from 'drizzle-orm';
 
@@ -28,8 +28,21 @@ export async function leaveLeagueHandler(req: Request, res: Response) {
     );
   }
 
-  await db.delete(leagueMembers).where(
-    and(eq(leagueMembers.leagueId, id), eq(leagueMembers.userId, userId))
-  );
+  // Drop the membership AND any predictions/tournament-predictions the user
+  // had scoped to this league, atomically. Without this the user would
+  // remain visible in the standings query (which joins by predictions →
+  // user, not by membership) and rejoining later would silently keep the
+  // old picks because the carry-over uses ON CONFLICT DO NOTHING.
+  await db.transaction(async (tx) => {
+    await tx.delete(leagueMembers).where(
+      and(eq(leagueMembers.leagueId, id), eq(leagueMembers.userId, userId)),
+    );
+    await tx.delete(predictions).where(
+      and(eq(predictions.leagueId, id), eq(predictions.userId, userId)),
+    );
+    await tx.delete(tournamentPredictions).where(
+      and(eq(tournamentPredictions.leagueId, id), eq(tournamentPredictions.userId, userId)),
+    );
+  });
   return res.status(204).send();
 }

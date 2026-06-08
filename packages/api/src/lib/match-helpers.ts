@@ -5,5 +5,11 @@ export function calcPredictionLock(kickoffUtc: string): string {
 }
 
 export function isLocked(predictionLockUtc: string): boolean {
-  return new Date(predictionLockUtc).getTime() <= Date.now();
+  const t = new Date(predictionLockUtc).getTime();
+  // Fail-safe: if the lock date is malformed (NaN), treat the match as
+  // locked rather than leaving predictions open forever. Real corruption
+  // is rare, but defaulting to "unlocked" would let users submit after
+  // kickoff, which is the worst possible failure mode.
+  if (!Number.isFinite(t)) return true;
+  return t <= Date.now();
 }

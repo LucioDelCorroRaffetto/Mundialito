@@ -17,40 +17,49 @@ import { eq, and } from 'drizzle-orm';
  * as a normal-looking row labelled "Mis pronósticos".
  */
 export async function ensurePersonalLeague(userId: number): Promise<number> {
-  const existing = await db
-    .select({ id: leagues.id })
-    .from(leagues)
-    .innerJoin(leagueMembers, eq(leagueMembers.leagueId, leagues.id))
-    .where(and(eq(leagueMembers.userId, userId), eq(leagues.isPersonal, true)))
-    .limit(1)
-    .get();
-  if (existing) return existing.id;
-
-  // Generate a unique invite code — P + 6 random digits.
-  let code: string;
-  for (let attempt = 0; attempt < 12; attempt++) {
-    code = `P${Math.floor(Math.random() * 900_000 + 100_000)}`;
-    const clash = await db
+  // Run the existence check + creation + membership insert inside a single
+  // transaction so two concurrent calls (e.g. parallel signup + google
+  // sign-in) can't both pass the existence check and create two personal
+  // leagues for the same user.
+  return db.transaction(async (tx) => {
+    const existing = await tx
       .select({ id: leagues.id })
       .from(leagues)
-      .where(eq(leagues.code, code))
+      .innerJoin(leagueMembers, eq(leagueMembers.leagueId, leagues.id))
+      .where(and(eq(leagueMembers.userId, userId), eq(leagues.isPersonal, true)))
       .limit(1)
       .get();
-    if (!clash) break;
-    if (attempt === 11) throw new Error('Could not generate unique personal-league code');
-  }
+    if (existing) return existing.id;
 
-  const [created] = await db
-    .insert(leagues)
-    .values({
-      name: 'Mis pronósticos',
-      code: code!,
-      isPublic: false,
-      adminId: userId,
-      isPersonal: true,
-    })
-    .returning();
+    // Generate a unique invite code — P + 6 random digits.
+    let code: string | undefined;
+    for (let attempt = 0; attempt < 12; attempt++) {
+      const candidate = `P${Math.floor(Math.random() * 900_000 + 100_000)}`;
+      const clash = await tx
+        .select({ id: leagues.id })
+        .from(leagues)
+        .where(eq(leagues.code, candidate))
+        .limit(1)
+        .get();
+      if (!clash) {
+        code = candidate;
+        break;
+      }
+    }
+    if (!code) throw new Error('Could not generate unique personal-league code');
 
-  await db.insert(leagueMembers).values({ leagueId: created.id, userId });
-  return created.id;
+    const [created] = await tx
+      .insert(leagues)
+      .values({
+        name: 'Mis pronósticos',
+        code,
+        isPublic: false,
+        adminId: userId,
+        isPersonal: true,
+      })
+      .returning();
+
+    await tx.insert(leagueMembers).values({ leagueId: created.id, userId });
+    return created.id;
+  });
 }

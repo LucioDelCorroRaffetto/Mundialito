@@ -1,8 +1,8 @@
 import { Request, Response } from 'express';
 import { z } from 'zod';
-import { eq, sql, and, asc } from 'drizzle-orm';
+import { eq, sql, and, asc, inArray } from 'drizzle-orm';
 import { db } from '../../../db/index.js';
-import { tournamentPredictions, leagueMembers, matches } from '../../../db/schema/index.js';
+import { tournamentPredictions, leagueMembers, matches, teams, players } from '../../../db/schema/index.js';
 import { AppError } from '../../../lib/errors.js';
 
 const FIELDS = [
@@ -73,6 +73,39 @@ export async function upsertTournamentPredictionHandler(req: Request, res: Respo
     throw new AppError('FORBIDDEN', 'Not a member of this league', 403);
   }
 
+  // Validate that every team / player ID referenced by the payload exists in
+  // the DB — otherwise the underlying INSERT throws a FK constraint error
+  // and the client gets a generic 500 instead of a friendly 400.
+  const teamIdFields = [
+    'championTeamId', 'runnerUpTeamId', 'thirdPlaceTeamId',
+    'revelationTeamId', 'surpriseEliminatedTeamId', 'bestDefenseTeamId',
+  ] as const;
+  const teamIdsToCheck = teamIdFields
+    .map((f) => payloadFields[f])
+    .filter((v): v is number => typeof v === 'number' && v > 0);
+  if (teamIdsToCheck.length > 0) {
+    const existingTeams = await db
+      .select({ id: teams.id })
+      .from(teams)
+      .where(inArray(teams.id, teamIdsToCheck));
+    const existingIds = new Set(existingTeams.map((t) => t.id));
+    for (const id of teamIdsToCheck) {
+      if (!existingIds.has(id)) {
+        throw new AppError('INVALID_REFERENCE', `Team ${id} no existe`, 400);
+      }
+    }
+  }
+  if (typeof payloadFields.topScorerPlayerId === 'number' && payloadFields.topScorerPlayerId > 0) {
+    const existing = await db
+      .select({ id: players.id })
+      .from(players)
+      .where(eq(players.id, payloadFields.topScorerPlayerId))
+      .get();
+    if (!existing) {
+      throw new AppError('INVALID_REFERENCE', `Player ${payloadFields.topScorerPlayerId} no existe`, 400);
+    }
+  }
+
   // Fetch any existing rows so we can decide field-by-field whether to
   // propagate. The rule: for each non-null field in the request, if NO
   // other league of the user has a non-null value yet, this is a first-time
@@ -122,25 +155,33 @@ export async function upsertTournamentPredictionHandler(req: Request, res: Respo
     return merged;
   }
 
-  const results = [] as any[];
-  for (const lid of userLeagueIds) {
-    const merged = mergedRowFor(lid);
-    const existing = existingByLeague.get(lid);
-    const same =
-      existing &&
-      FIELDS.every((f) => (existing as any)[f] === merged[f]);
-    if (same) continue; // nothing changed for this league — skip the write
+  // Wrap the multi-league upsert in a transaction so a mid-loop failure
+  // doesn't leave the user with champion=Brazil in league A and
+  // champion=null in league B. Once the tournament starts the lock fires
+  // and the user can't re-save to fix the inconsistency — so atomicity
+  // here is critical, not nice-to-have.
+  const results = await db.transaction(async (tx) => {
+    const out: Array<typeof tournamentPredictions.$inferSelect> = [];
+    for (const lid of userLeagueIds) {
+      const merged = mergedRowFor(lid);
+      const existing = existingByLeague.get(lid);
+      const same =
+        existing &&
+        FIELDS.every((f) => (existing as Record<string, unknown>)[f] === merged[f]);
+      if (same) continue; // nothing changed for this league — skip the write
 
-    const [row] = await db
-      .insert(tournamentPredictions)
-      .values({ userId, leagueId: lid, ...merged })
-      .onConflictDoUpdate({
-        target: [tournamentPredictions.userId, tournamentPredictions.leagueId],
-        set: { ...merged, updatedAt: sql`(datetime('now'))` },
-      })
-      .returning();
-    results.push(row);
-  }
+      const [row] = await tx
+        .insert(tournamentPredictions)
+        .values({ userId, leagueId: lid, ...merged })
+        .onConflictDoUpdate({
+          target: [tournamentPredictions.userId, tournamentPredictions.leagueId],
+          set: { ...merged, updatedAt: sql`(datetime('now'))` },
+        })
+        .returning();
+      out.push(row);
+    }
+    return out;
+  });
 
   // Backwards-compat shape.
   if (results.length === 1) return res.status(200).json(results[0]);

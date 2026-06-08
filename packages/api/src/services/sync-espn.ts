@@ -82,20 +82,34 @@ export async function syncScoresFromEspn(date: string): Promise<SyncScoresResult
   let synced = 0;
   let anyMatchFinished = false;
 
-  // ESPN wants YYYYMMDD (no dashes)
+  // ESPN's scoreboard endpoint interprets `dates=YYYYMMDD` in Eastern Time
+  // (the company's home timezone), NOT in UTC. A WC match kicking off at
+  // 02:00 UTC on June 12 is listed under `dates=20260611` (22:00 ET on the
+  // 11th) — so passing only the UTC date misses every late-night fixture.
+  // We hit BOTH the UTC date and the UTC-prior date and merge.
   const espnDate = date.replace(/-/g, '');
-  const url = `https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard?dates=${espnDate}`;
+  const dayBefore = (() => {
+    const d = new Date(`${date}T00:00:00Z`);
+    d.setUTCDate(d.getUTCDate() - 1);
+    return d.toISOString().slice(0, 10).replace(/-/g, '');
+  })();
+
+  async function fetchEspn(d: string): Promise<EspnEvent[]> {
+    const url = `https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard?dates=${d}`;
+    const res = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' } });
+    if (!res.ok) throw new Error(`ESPN returned ${res.status}`);
+    const data = (await res.json()) as EspnResponse;
+    return data.events ?? [];
+  }
 
   let events: EspnEvent[];
   try {
-    const res = await fetch(url, {
-      headers: { 'User-Agent': 'Mozilla/5.0' }, // some CDN edges need a UA
-    });
-    if (!res.ok) {
-      return { synced: 0, errors: [`ESPN returned ${res.status}`], matchesChecked: 0 };
-    }
-    const data = (await res.json()) as EspnResponse;
-    events = data.events ?? [];
+    const [a, b] = await Promise.all([fetchEspn(espnDate), fetchEspn(dayBefore).catch(() => [])]);
+    // Dedup by event id; a fixture can appear in both windows during the
+    // overlap when its kickoff is right at the boundary.
+    const byId = new Map<string, EspnEvent>();
+    for (const e of [...a, ...b]) byId.set(e.id, e);
+    events = [...byId.values()];
   } catch (err) {
     return { synced: 0, errors: [`ESPN fetch failed: ${String(err)}`], matchesChecked: 0 };
   }
@@ -124,9 +138,34 @@ export async function syncScoresFromEspn(date: string): Promise<SyncScoresResult
       const homeComp = competition.competitors.find((c) => c.homeAway === 'home');
       const awayComp = competition.competitors.find((c) => c.homeAway === 'away');
 
-      // During pre-match ESPN may still send "0" — only store scores when live or finished
-      const newHomeScore = (newStatus !== 'scheduled' && homeComp) ? parseInt(homeComp.score, 10) : null;
-      const newAwayScore = (newStatus !== 'scheduled' && awayComp) ? parseInt(awayComp.score, 10) : null;
+      // During pre-match ESPN may still send "0" — only store scores when live or finished.
+      // Also guard against ESPN returning "" or "—" or any non-numeric (it has on past
+      // scoreboards), which would otherwise produce NaN and corrupt the row.
+      const parseScore = (raw: string | undefined): number | null => {
+        if (raw == null) return null;
+        const n = parseInt(raw, 10);
+        return Number.isFinite(n) ? n : null;
+      };
+      let newHomeScore = (newStatus !== 'scheduled') ? parseScore(homeComp?.score) : null;
+      let newAwayScore = (newStatus !== 'scheduled') ? parseScore(awayComp?.score) : null;
+      // ESPN's `competitors[i].score` reports the regulation score even when
+      // a knockout was decided by penalties. Without bumping the winner the
+      // DB stores e.g. 1-1 and every "empate" predictor scores 5, while the
+      // user who actually predicted Argentina-wins gets 0. ESPN exposes the
+      // shootout winner via `competition.status.type.detail` or an "OT" /
+      // "SO" tag; we use `winner: true` on the competitor object when set.
+      if (newStatus === 'finished' && newHomeScore != null && newAwayScore != null) {
+        const detail = (event.status.type as { detail?: string; description?: string }).detail
+          ?? (event.status.type as { description?: string }).description
+          ?? '';
+        const wasShootout = /penalt|shootout|tiros|tanda/i.test(detail);
+        if (wasShootout && newHomeScore === newAwayScore) {
+          const homeWinnerFlag = (homeComp as unknown as { winner?: boolean })?.winner === true;
+          const awayWinnerFlag = (awayComp as unknown as { winner?: boolean })?.winner === true;
+          if (homeWinnerFlag && !awayWinnerFlag) newHomeScore += 1;
+          else if (awayWinnerFlag && !homeWinnerFlag) newAwayScore += 1;
+        }
+      }
 
       const statusChanged = ourMatch.status !== newStatus;
       const scoreChanged  = ourMatch.homeScore !== newHomeScore || ourMatch.awayScore !== newAwayScore;

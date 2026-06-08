@@ -11,10 +11,16 @@ const bodySchema = z.object({
     .max(30, 'Máximo 30 caracteres')
     .regex(/^[a-zA-Z0-9_]+$/, 'Solo letras, números y guión bajo')
     .optional(),
-  // base64 data URL or https URL, max ~400 KB
+  // base64 image data URL or https URL only — reject `data:text/html`,
+  // `javascript:`, `file:`, etc. so a malicious payload can't ride in via
+  // the avatar field and execute as an `<a href>` or `<iframe>` somewhere.
   avatarUrl: z
     .string()
     .max(400_000, 'Imagen demasiado grande')
+    .regex(
+      /^(https:\/\/|data:image\/(png|jpeg|jpg|webp|gif|svg\+xml);base64,)/,
+      'Avatar URL inválido',
+    )
     .nullable()
     .optional(),
   // Slug of an achievement the user has earned. Pass null to clear the title.

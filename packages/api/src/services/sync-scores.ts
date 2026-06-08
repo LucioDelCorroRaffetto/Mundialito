@@ -5,7 +5,7 @@
 
 import { eq, sql } from 'drizzle-orm';
 import { db } from '../db/index.js';
-import { matches, predictions } from '../db/schema/index.js';
+import { matches, predictions, teams } from '../db/schema/index.js';
 import { calculatePoints } from '../lib/scoring.js';
 import { recomputeAllFantasyPoints } from './fantasy-scoring-service.js';
 import { broadcastMatchUpdate } from '../ws/broadcast.js';
@@ -29,6 +29,9 @@ interface FdScore {
   away: number | null;
 }
 
+type FdDuration = 'REGULAR' | 'EXTRA_TIME' | 'PENALTY_SHOOTOUT';
+type FdWinner = 'HOME_TEAM' | 'AWAY_TEAM' | 'DRAW' | null;
+
 interface FdMatch {
   id: number;
   utcDate: string; // ISO 8601
@@ -36,6 +39,10 @@ interface FdMatch {
   score: {
     fullTime: FdScore;
     halfTime: FdScore;
+    extraTime?: FdScore;
+    penalties?: FdScore;
+    duration?: FdDuration;
+    winner?: FdWinner;
   };
   homeTeam: { id: number; tla: string | null; name: string };
   awayTeam: { id: number; tla: string | null; name: string };
@@ -59,6 +66,10 @@ export interface SyncScoresResult {
 function mapStatus(fdStatus: FdStatus): OurStatus {
   if (fdStatus === 'IN_PLAY' || fdStatus === 'PAUSED') return 'live';
   if (fdStatus === 'FINISHED') return 'finished';
+  // SCHEDULED / TIMED / SUSPENDED / POSTPONED / CANCELLED all become
+  // 'scheduled' in our model. We don't have postponed/cancelled states
+  // server-side; the auto-sync just keeps the row at scheduled and the
+  // admin can adjust manually if a match doesn't kick off.
   return 'scheduled';
 }
 
@@ -68,23 +79,78 @@ interface OurMatch {
   homeScore: number | null;
   awayScore: number | null;
   status: string;
+  homeTeamCode: string;
+  awayTeamCode: string;
 }
 
 /**
- * Attempts to find our DB match for a given football-data.org match by kickoff
- * time. Allows a ±10 minute window.
+ * Resolves the actual final score, including penalty shootouts and extra time.
+ * Football-data.org reports `fullTime` as the 90' result; `extraTime` adds
+ * +30' goals; `penalties` only carries the shootout. To keep `calculatePoints`
+ * unchanged (which compares numeric scores), if the match was decided by
+ * penalties we bump the winner by +1 so the home/away delta reflects the
+ * actual winner instead of leaving a tied score in the DB.
+ *
+ * Without this, every knockout decided by shootout would be stored as a draw
+ * and:
+ *  - users who predicted a draw would get +5 (wrong, the predicted result
+ *    wasn't really a draw),
+ *  - users who predicted the actual winner would get 0 (worse: they had it
+ *    right),
+ *  - the bracket / champion picks would silently award everyone who
+ *    predicted "draw" with `prophet` if it happened in the final.
  */
-function findMatchByKickoff(
-  ourMatches: OurMatch[],
-  fdKickoff: string,
-): OurMatch | undefined {
-  const fdTime = new Date(fdKickoff).getTime();
-  const TEN_MINUTES_MS = 10 * 60 * 1000;
+function resolveFinalScore(score: FdMatch['score']): { home: number | null; away: number | null } {
+  // Prefer extra-time score when present (knockouts that went to ET but
+  // didn't reach penalties). Otherwise the canonical fullTime.
+  const base = score.extraTime && (score.extraTime.home != null || score.extraTime.away != null)
+    ? score.extraTime
+    : score.fullTime;
+  let home = base.home;
+  let away = base.away;
+  if (score.duration === 'PENALTY_SHOOTOUT' && score.winner) {
+    if (score.winner === 'HOME_TEAM' && home != null) home = home + 1;
+    else if (score.winner === 'AWAY_TEAM' && away != null) away = away + 1;
+  }
+  return { home, away };
+}
 
-  return ourMatches.find((m) => {
+/**
+ * Match our DB row to a football-data row using BOTH kickoff time (±10 min)
+ * AND the team three-letter codes. The kickoff-only matcher used to collapse
+ * the two simultaneous final-round group matches (FIFA schedules them at the
+ * same UTC slot) into the same row, corrupting one of them with the other's
+ * score.
+ */
+function findMatch(
+  ourMatches: OurMatch[],
+  fdMatch: FdMatch,
+): OurMatch | undefined {
+  const fdTime = new Date(fdMatch.utcDate).getTime();
+  const TEN_MINUTES_MS = 10 * 60 * 1000;
+  const homeTla = fdMatch.homeTeam.tla?.toUpperCase() ?? null;
+  const awayTla = fdMatch.awayTeam.tla?.toUpperCase() ?? null;
+
+  // Pass 1 (strict): kickoff window AND both team codes match. This is the
+  // only safe choice when there are concurrent matches in the same slot.
+  const strict = ourMatches.find((m) => {
+    const diff = Math.abs(new Date(m.kickoffUtc).getTime() - fdTime);
+    if (diff > TEN_MINUTES_MS) return false;
+    if (homeTla && awayTla) {
+      return m.homeTeamCode === homeTla && m.awayTeamCode === awayTla;
+    }
+    return false;
+  });
+  if (strict) return strict;
+
+  // Pass 2 (loose): kickoff only, but only if no other DB match shares the
+  // same slot. Falls back for cases where the FD payload has no TLA.
+  const sameSlot = ourMatches.filter((m) => {
     const diff = Math.abs(new Date(m.kickoffUtc).getTime() - fdTime);
     return diff <= TEN_MINUTES_MS;
   });
+  if (sameSlot.length === 1) return sameSlot[0];
+  return undefined;
 }
 
 export async function syncScores(options: SyncScoresOptions = {}): Promise<SyncScoresResult> {
@@ -132,20 +198,41 @@ export async function syncScores(options: SyncScoresOptions = {}): Promise<SyncS
     return { synced: 0, errors: [], matchesChecked: 0 };
   }
 
-  // --- Load our matches once ---
-  const ourMatches = await db
-    .select({ id: matches.id, kickoffUtc: matches.kickoffUtc, homeScore: matches.homeScore, awayScore: matches.awayScore, status: matches.status })
+  // --- Load our matches once, joined with team codes so findMatch can
+  // disambiguate concurrent kickoffs by team identity. ---
+  const ourMatchesRaw = await db
+    .select({
+      id: matches.id,
+      kickoffUtc: matches.kickoffUtc,
+      homeScore: matches.homeScore,
+      awayScore: matches.awayScore,
+      status: matches.status,
+      homeTeamId: matches.homeTeamId,
+      awayTeamId: matches.awayTeamId,
+    })
     .from(matches);
+  const allTeams = await db.select({ id: teams.id, code: teams.code }).from(teams);
+  const codeById = new Map(allTeams.map((t) => [t.id, t.code.toUpperCase()]));
+  const ourMatches: OurMatch[] = ourMatchesRaw.map((m) => ({
+    id: m.id,
+    kickoffUtc: m.kickoffUtc,
+    homeScore: m.homeScore,
+    awayScore: m.awayScore,
+    status: m.status,
+    homeTeamCode: m.homeTeamId != null ? (codeById.get(m.homeTeamId) ?? '') : '',
+    awayTeamCode: m.awayTeamId != null ? (codeById.get(m.awayTeamId) ?? '') : '',
+  }));
 
   // --- Process each fd match ---
   for (const fdMatch of fdMatches) {
     try {
-      const ourMatch = findMatchByKickoff(ourMatches, fdMatch.utcDate);
+      const ourMatch = findMatch(ourMatches, fdMatch);
       if (!ourMatch) continue; // No corresponding match in our DB — skip
 
       const newStatus = mapStatus(fdMatch.status);
-      const newHomeScore = fdMatch.score.fullTime.home ?? null;
-      const newAwayScore = fdMatch.score.fullTime.away ?? null;
+      const resolved = resolveFinalScore(fdMatch.score);
+      const newHomeScore = resolved.home;
+      const newAwayScore = resolved.away;
 
       // Check if anything changed
       const statusChanged = ourMatch.status !== newStatus;
@@ -158,6 +245,23 @@ export async function syncScores(options: SyncScoresOptions = {}): Promise<SyncS
       const updatePayload: Record<string, unknown> = { status: newStatus };
       if (newHomeScore !== null) updatePayload.homeScore = newHomeScore;
       if (newAwayScore !== null) updatePayload.awayScore = newAwayScore;
+
+      // If a previously-finished match reverts to scheduled (rare, but it
+      // happens on POSTPONED corrections upstream), clear scores and unscore
+      // the predictions. Otherwise the leaderboard keeps points from a match
+      // that "didn't happen yet" — and a future re-finalize would not reset
+      // them because statusChanged would be false next time.
+      if (
+        ourMatch.status === 'finished' &&
+        (newStatus === 'scheduled' || (newHomeScore === null && newAwayScore === null))
+      ) {
+        updatePayload.homeScore = null;
+        updatePayload.awayScore = null;
+        await db
+          .update(predictions)
+          .set({ points: null, updatedAt: sql`(datetime('now'))` })
+          .where(eq(predictions.matchId, ourMatch.id));
+      }
 
       const [updatedMatch] = await db
         .update(matches)

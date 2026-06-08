@@ -433,17 +433,29 @@ async function evaluateGoalfest(
   await maybeAward(userId, 'goalfest', awarded);
 }
 
-/** Scored after 3 consecutive zero-point predictions. Reward for the comeback. */
+/**
+ * Scored after 3 consecutive zero-point predictions. Reward for the comeback.
+ * Slides a window of 4 across the whole history so a user who hit the pattern
+ * mid-tournament still earns it — previously this only looked at the last 4
+ * scored matches and missed the streak unless it landed exactly at the end.
+ */
 async function evaluateSurvivor(
   userId: number,
   history: ScoredRow[],
   awarded: string[],
 ): Promise<void> {
   if (history.length < 4) return;
-  const last4 = history.slice(-4);
-  if (last4[3].points <= 0) return;
-  if (last4[0].points !== 0 || last4[1].points !== 0 || last4[2].points !== 0) return;
-  await maybeAward(userId, 'survivor', awarded);
+  for (let i = 3; i < history.length; i++) {
+    if (
+      history[i].points > 0 &&
+      history[i - 1].points === 0 &&
+      history[i - 2].points === 0 &&
+      history[i - 3].points === 0
+    ) {
+      await maybeAward(userId, 'survivor', awarded);
+      return;
+    }
+  }
 }
 
 /**
@@ -679,7 +691,11 @@ async function evaluateComebackKing(
   memberCount: number,
   awarded: string[],
 ): Promise<void> {
-  if (memberCount < 3) return;
+  // Raise the floor to 5 members. In a 3-person league, "last" and "top 3"
+  // are essentially the same population — everyone trivially gets the
+  // logro the moment they win a single match. 5+ keeps the achievement
+  // meaningful as an actual "comeback".
+  if (memberCount < 5) return;
   if (currentPosition > 3) return;
 
   // Was the user ever LAST in this league?
@@ -1015,10 +1031,18 @@ export async function recomputeUserAchievements(userId: number): Promise<string[
   // prediction_saved family — derive everything from distinct matches.
   const distinctMatches = await loadDistinctPredictedMatchIds(userId);
   if (distinctMatches.length > 0) await maybeAward(userId, 'first_prediction', awarded);
+  // The full predictor ladder — was missing predictor_5 and predictor_50,
+  // so the recompute backfill never granted them even when the user
+  // qualified. Same with the confederation_explorer / big_game_hunter pair
+  // that are evaluated lazily in the live checkAchievements path.
+  if (distinctMatches.length >= 5) await maybeAward(userId, 'predictor_5', awarded);
   if (distinctMatches.length >= 10) await maybeAward(userId, 'predictor_10', awarded);
   if (distinctMatches.length >= 30) await maybeAward(userId, 'predictor_30', awarded);
+  if (distinctMatches.length >= 50) await maybeAward(userId, 'predictor_50', awarded);
   await evaluateGroupCompletion(userId, distinctMatches, awarded);
   await evaluateGroupSampler(userId, awarded);
+  await evaluateConfederationExplorer(userId, awarded);
+  await evaluateBigGameHunter(userId, awarded);
 
   // league_joined family
   const [{ value: leagueCount }] = await db

@@ -23,11 +23,25 @@ export async function joinLeagueHandler(req: Request, res: Response) {
     throw new AppError('NOT_JOINABLE', 'Esta liga no es pública', 403);
   }
 
-  const existing = await db.select().from(leagueMembers)
-    .where(and(eq(leagueMembers.leagueId, league.id), eq(leagueMembers.userId, userId))).get();
-  if (existing) throw new ConflictError('Already a member of this league');
-
-  await db.insert(leagueMembers).values({ leagueId: league.id, userId });
+  // Atomic check-and-insert via ON CONFLICT DO NOTHING + .returning() so
+  // two simultaneous joins for the same (user, league) collapse to a clean
+  // 409 instead of letting one of them surface the raw UNIQUE constraint
+  // violation as a 500.
+  const insertedRows = await db
+    .insert(leagueMembers)
+    .values({ leagueId: league.id, userId })
+    .onConflictDoNothing()
+    .returning({ id: leagueMembers.id });
+  if (insertedRows.length === 0) {
+    // The conflict path means the user is already a member — translate to
+    // the proper 409. Use `and` so a stray membership in another league
+    // doesn't false-positive.
+    const existing = await db.select().from(leagueMembers)
+      .where(and(eq(leagueMembers.leagueId, league.id), eq(leagueMembers.userId, userId)))
+      .get();
+    if (existing) throw new ConflictError('Already a member of this league');
+    throw new AppError('JOIN_FAILED', 'No se pudo unir a la liga', 500);
+  }
 
   // Carry the user's prior match predictions into the new league. We pick
   // any one row per match the user already has (predictions are mirrored

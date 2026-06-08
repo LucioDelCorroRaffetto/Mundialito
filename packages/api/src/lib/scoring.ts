@@ -19,7 +19,26 @@ export interface MatchResult {
  * Lógica de equidad: tanto acertar el empate como acertar ganador+diferencia
  * requieren "entender bien el partido", por eso valen igual.
  */
-export function calculatePoints(pred: PredictionInput, result: MatchResult): number {
+export function calculatePoints(
+  pred: PredictionInput | null | undefined,
+  result: MatchResult | null | undefined,
+): number {
+  // Defensive guards — the TS types claim non-null, but the data can arrive
+  // null when a prediction or a match score row is in transition. Without
+  // these guards `null === null` would award 5 pts to "predictions" against
+  // a still-pending match.
+  if (
+    !pred || !result ||
+    pred.homeScore == null || pred.awayScore == null ||
+    result.homeScore == null || result.awayScore == null ||
+    !Number.isFinite(pred.homeScore) || !Number.isFinite(pred.awayScore) ||
+    !Number.isFinite(result.homeScore) || !Number.isFinite(result.awayScore) ||
+    pred.homeScore < 0 || pred.awayScore < 0 ||
+    result.homeScore < 0 || result.awayScore < 0
+  ) {
+    return 0;
+  }
+
   if (pred.homeScore === result.homeScore && pred.awayScore === result.awayScore) return 5;
 
   const predDiff = pred.homeScore - pred.awayScore;
