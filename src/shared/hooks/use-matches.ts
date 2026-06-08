@@ -45,5 +45,13 @@ export function useMatch(id: number | undefined) {
       return data;
     },
     enabled: id !== undefined && Number.isInteger(id),
+    // While a match is live, poll every 45s so the detail view reflects the
+    // running score. Stops polling once the match is finished/scheduled to
+    // avoid pointless traffic. `query.state.data` is the last fetched match.
+    refetchInterval: (query) => {
+      const m = query.state.data as Match | undefined;
+      return m?.status === 'live' ? 45_000 : false;
+    },
+    refetchIntervalInBackground: false,
   });
 }

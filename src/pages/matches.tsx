@@ -83,7 +83,14 @@ export function MatchesPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const { data: matchesResponse, isLoading, error } = useMatches({ limit: 200 });
+  // Poll every 60s so live scores and the scheduled→live→finished status
+  // transitions show up without a manual refresh. The WS hook (useLeagueSocket)
+  // exists but isn't wired into this page, so polling is the reliable path.
+  // refetchIntervalInBackground is off (in the hook) to spare Render's free tier.
+  const { data: matchesResponse, isLoading, error } = useMatches(
+    { limit: 200 },
+    { refetchInterval: 60_000 },
+  );
   const { data: teamMap } = useTeamMap();
   const { data: teamsData } = useTeams();
   const { data: myPredictionsData } = useMyPredictions();
