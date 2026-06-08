@@ -8,7 +8,10 @@ import { UnauthorizedError } from '../../../lib/errors.js';
 import { eq } from 'drizzle-orm';
 
 export const loginSchema = z.object({
-  email: z.string().email(),
+  // Same normalization as register: lowercase + trim so users who type their
+  // email with stray uppercase / trailing whitespace still match the row we
+  // saved for them.
+  email: z.string().email().transform((v) => v.trim().toLowerCase()),
   password: z.string(),
 });
 

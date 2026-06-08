@@ -18,27 +18,34 @@ interface PushSubscriptionRow {
 }
 
 export async function sendDeadlineReminders(): Promise<void> {
-  const now = new Date().toISOString();
-  const windowEnd = new Date(Date.now() + 35 * 60 * 1000).toISOString();
+  // Slim 5-min "fire zone" centered around 30 min before lock. The cron runs
+  // every 5 min, so each match falls inside exactly one tick — previously
+  // the 35-min window meant the SAME match passed through the query 7 times
+  // (every 5 min for 35 min), shooting 7 push notifications at every user
+  // per match. Now: fire once, ~30 min before kickoff.
+  const windowStartMs = Date.now() + 25 * 60 * 1000;
+  const windowEndMs   = Date.now() + 30 * 60 * 1000;
+  const windowStart = new Date(windowStartMs).toISOString();
+  const windowEnd   = new Date(windowEndMs).toISOString();
 
-  console.log(`[deadline-reminders] Checking matches locking between ${now} and ${windowEnd}...`);
+  console.log(`[deadline-reminders] Checking matches locking between ${windowStart} and ${windowEnd}...`);
 
-  // 1. Query matches where predictionLockUtc is between NOW and NOW+35min AND status='scheduled'
+  // 1. Match window: prediction_lock_utc in [now+25min, now+30min]
   const matchResult = await db.$client.execute({
     sql: `
       SELECT
         m.id,
         ht.name AS home_team,
-        at.name AS away_team,
+        away_t.name AS away_team,
         m.prediction_lock_utc
       FROM matches m
       JOIN teams ht ON ht.id = m.home_team_id
-      JOIN teams at ON at.id = m.away_team_id
+      JOIN teams away_t ON away_t.id = m.away_team_id
       WHERE m.prediction_lock_utc > ?
         AND m.prediction_lock_utc <= ?
         AND m.status = 'scheduled'
     `,
-    args: [now, windowEnd],
+    args: [windowStart, windowEnd],
   });
 
   const upcomingMatches = matchResult.rows as unknown as UpcomingMatch[];

@@ -28,6 +28,11 @@ export async function subscribeHandler(req: Request, res: Response) {
     .onConflictDoUpdate({
       target: pushSubscriptions.endpoint,
       set: {
+        // Re-bind the subscription to whoever is currently authenticated:
+        // when a user shares a device, the previous owner's userId would
+        // otherwise stick to this endpoint and their notifications would
+        // end up pushed to the new user. Always reassign on resubscribe.
+        userId,
         p256dh: keys.p256dh,
         auth: keys.auth,
       },

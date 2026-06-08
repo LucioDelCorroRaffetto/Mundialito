@@ -11,8 +11,10 @@ self.addEventListener('push', (event) => {
 
   const options = {
     body: payload.body ?? '',
-    icon: '/icons/icon-192.svg',
-    badge: '/icons/icon-192.svg',
+    // The PNG files exist (192/512), but icon-192.svg was never shipped —
+    // notifications were falling back to the browser default icon.
+    icon: '/icons/icon-192.png',
+    badge: '/icons/icon-192.png',
     vibrate: [200, 100, 200],
     data: { url: payload.url ?? '/' },
     actions: payload.url ? [{ action: 'open', title: 'Ver →' }] : [],

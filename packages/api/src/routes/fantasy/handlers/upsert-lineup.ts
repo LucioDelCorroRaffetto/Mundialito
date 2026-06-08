@@ -44,6 +44,22 @@ export async function upsertLineupHandler(req: Request, res: Response) {
   const viceIsStarter = starters.find((p) => p.isViceCaptain);
   if (!captainIsStarter) throw new AppError('VALIDATION', 'El capitán debe ser titular', 400);
   if (!viceIsStarter) throw new AppError('VALIDATION', 'El vicecapitán debe ser titular', 400);
+  // Without this check, a client could send the same playerId with both
+  // isCaptain and isViceCaptain true. The recompute then multiplies the
+  // player's points by 2 (captain wins the ternary) but the lineup state
+  // is inconsistent and the user thinks they have a vice too.
+  if (captainIsStarter.playerId === viceIsStarter.playerId) {
+    throw new AppError('VALIDATION', 'El capitán y el vicecapitán deben ser jugadores distintos', 400);
+  }
+  // Also reject duplicated playerIds across the whole payload (would otherwise
+  // crash the insert with a UNIQUE violation halfway through).
+  const seenIds = new Set<number>();
+  for (const p of players) {
+    if (seenIds.has(p.playerId)) {
+      throw new AppError('VALIDATION', 'No podés repetir jugadores en el lineup', 400);
+    }
+    seenIds.add(p.playerId);
+  }
 
   // Verify all players are in the user's squad.
   const team = await db

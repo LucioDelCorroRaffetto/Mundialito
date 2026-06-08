@@ -9,7 +9,13 @@ import { eq, or } from 'drizzle-orm';
 import { ensurePersonalLeague } from '../../../lib/personal-league.js';
 
 export const registerSchema = z.object({
-  email: z.string().email('Email inválido'),
+  // Normalize on the way in: lowercase + trim so "User@X.com " and "user@x.com"
+  // can't coexist as two separate accounts (and login the next day actually
+  // matches what we stored). Same treatment in login.ts.
+  email: z
+    .string()
+    .email('Email inválido')
+    .transform((v) => v.trim().toLowerCase()),
   username: z
     .string()
     .min(3, 'Mínimo 3 caracteres')
