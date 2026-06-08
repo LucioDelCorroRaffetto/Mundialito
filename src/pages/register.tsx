@@ -17,7 +17,10 @@ const schema = z.object({
     .max(30, 'Máximo 30 caracteres')
     .regex(/^[a-zA-Z0-9_]+$/, 'Solo letras, números y guión bajo (_)')
     .refine((v) => /[a-zA-Z]/.test(v), 'El nombre debe tener al menos una letra'),
-  email: z.string().email('Email inválido'),
+  // Trim + lowercase to match the server's normalisation. Without it a
+  // typo like "  User@X.com" registers an account the user then can't
+  // log into the next day with "user@x.com".
+  email: z.string().email('Email inválido').transform((v) => v.trim().toLowerCase()),
   password: z.string().min(8, 'Mínimo 8 caracteres'),
 });
 

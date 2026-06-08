@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 import { Button } from '@/shared/components/ui/button';
 import { Input } from '@/shared/components/ui/input';
-import { useJoinLeague, usePublicLeagues } from '@/shared/hooks/use-leagues';
+import { useJoinLeague, usePublicLeagues, useMyLeagues } from '@/shared/hooks/use-leagues';
 
 export function LeagueJoinPage() {
   const navigate = useNavigate();
@@ -12,6 +12,8 @@ export function LeagueJoinPage() {
 
   const joinMutation = useJoinLeague();
   const { data: publicLeagues } = usePublicLeagues();
+  const { data: myLeaguesData } = useMyLeagues();
+  const myLeagueIds = new Set((myLeaguesData?.data ?? []).map((l) => l.id));
 
   const handleJoinByCode = async () => {
     const trimmed = code.trim();
@@ -33,12 +35,27 @@ export function LeagueJoinPage() {
     }
   };
 
-  const handleJoinLeague = async (leagueCode: string) => {
+  const handleJoinLeague = async (leagueCode: string, leagueId?: number) => {
+    // Shortcut: if the user is already in this league (e.g. they clicked
+    // a public-listing chip for a league they're already a member of),
+    // just navigate there instead of round-tripping to the server and
+    // catching the inevitable 409. The previous silent `catch {}` left
+    // the user wondering why nothing happened.
+    if (leagueId && myLeagueIds.has(leagueId)) {
+      navigate(`/leagues/${leagueId}`);
+      return;
+    }
     try {
       const league = await joinMutation.mutateAsync(leagueCode);
       navigate(`/leagues/${league.id}`);
-    } catch {
-      // If already a member, just navigate there via search results
+    } catch (err: unknown) {
+      const apiError = err as { response?: { data?: { error?: { message?: string } } } };
+      const msg = apiError?.response?.data?.error?.message;
+      if (msg === 'Already a member of this league' && leagueId) {
+        navigate(`/leagues/${leagueId}`);
+      }
+      // Otherwise surface nothing — the user clicked from a search list,
+      // there's no input box near to show an error.
     }
   };
 
@@ -89,7 +106,7 @@ export function LeagueJoinPage() {
                     <p className="text-base-s font-semibold text-text">{league.name}</p>
                   </div>
                   <button
-                    onClick={() => handleJoinLeague(league.code)}
+                    onClick={() => handleJoinLeague(league.code, league.id)}
                     disabled={joinMutation.isPending}
                     className="px-3 py-1.5 rounded-md bg-accent text-accent-on text-sm-s font-semibold flex-shrink-0 hover:opacity-90 transition-opacity disabled:opacity-50"
                   >

@@ -3,7 +3,7 @@ import { eq, and } from 'drizzle-orm';
 import { db } from '../../../db/index.js';
 import { fantasyTeams, fantasySquadPlayers, fantasyLineups, players } from '../../../db/schema/index.js';
 import { computeFantasyPointsByPlayer } from '../../../services/fantasy-scoring-service.js';
-import { getCurrentFantasyRound } from '../../../lib/fantasy-rounds.js';
+import { getCurrentFantasyRound, isRoundOpen } from '../../../lib/fantasy-rounds.js';
 import { AppError } from '../../../lib/errors.js';
 
 /**
@@ -60,8 +60,16 @@ export async function getUserFantasyTeamHandler(req: Request, res: Response) {
 
   const pointsByPlayer = await computeFantasyPointsByPlayer();
 
+  // Privacy: hide starter / captain / vice flags from OTHER users while the
+  // round is still open, so nobody can copy a rival's lineup minutes
+  // before the deadline. The owner always sees their own lineup (matches
+  // the get-my-team behaviour).
+  const requesterId = req.user?.id;
+  const isOwner = requesterId === targetUserId;
+  const hideLineup = !isOwner && isRoundOpen(roundSlug);
+
   const squad = squadRows.map((p) => {
-    const lineup = lineupByPlayer.get(p.id);
+    const lineup = hideLineup ? undefined : lineupByPlayer.get(p.id);
     const isStarter = lineup?.isStarter ?? false;
     const isCaptain = lineup?.isCaptain ?? false;
     const isViceCaptain = lineup?.isViceCaptain ?? false;
@@ -73,5 +81,10 @@ export async function getUserFantasyTeamHandler(req: Request, res: Response) {
     return { ...p, isStarter, isCaptain, isViceCaptain, fantasyPoints };
   });
 
-  return res.json({ team, squad, round: roundSlug });
+  return res.json({
+    team,
+    squad,
+    round: roundSlug,
+    lineupHidden: hideLineup,
+  });
 }

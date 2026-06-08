@@ -2,14 +2,19 @@ import type { Request, Response } from 'express';
 import { z } from 'zod';
 import { db } from '../../../db/index.js';
 import { users, userAchievements } from '../../../db/schema/index.js';
-import { eq, and, ne } from 'drizzle-orm';
+import { eq, and, ne, sql } from 'drizzle-orm';
 
 const bodySchema = z.object({
   username: z
     .string()
-    .min(3, 'Mínimo 3 caracteres')
-    .max(30, 'Máximo 30 caracteres')
-    .regex(/^[a-zA-Z0-9_]+$/, 'Solo letras, números y guión bajo')
+    .transform((v) => v.trim())
+    .pipe(
+      z
+        .string()
+        .min(3, 'Mínimo 3 caracteres')
+        .max(30, 'Máximo 30 caracteres')
+        .regex(/^[a-zA-Z0-9_]+$/, 'Solo letras, números y guión bajo'),
+    )
     .optional(),
   // base64 image data URL or https URL only — reject `data:text/html`,
   // `javascript:`, `file:`, etc. so a malicious payload can't ride in via
@@ -45,11 +50,14 @@ export async function updateMeHandler(req: Request, res: Response) {
   }
 
   if (username) {
-    // Check uniqueness
+    // Check uniqueness case-insensitively so "Lucio" and "lucio" can't
+    // coexist. SQLite's `eq` is case-sensitive by default, so without this
+    // a deliberate attacker (or an honest user with a different shift key)
+    // could claim a near-duplicate of another user's name.
     const [existing] = await db
       .select({ id: users.id })
       .from(users)
-      .where(and(eq(users.username, username), ne(users.id, userId)))
+      .where(and(sql`lower(${users.username}) = lower(${username})`, ne(users.id, userId)))
       .limit(1);
 
     if (existing) {

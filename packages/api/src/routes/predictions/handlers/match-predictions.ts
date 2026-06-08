@@ -30,7 +30,14 @@ export async function matchPredictionsHandler(req: Request, res: Response) {
   const match = await db.select().from(matches).where(eq(matches.id, matchId)).get();
   if (!match) throw new NotFoundError('Match');
 
-  const matchStarted = match.status === 'live' || match.status === 'finished';
+  // Fallback to kickoff time so predictions reveal even if the auto-sync
+  // hasn't flipped `status` to live yet (e.g. the cron ran 2 min ago and
+  // the match just kicked off). Without this fallback the predictions
+  // stayed hidden for up to 3 minutes after kickoff.
+  const matchStarted =
+    match.status === 'live' ||
+    match.status === 'finished' ||
+    new Date(match.kickoffUtc).getTime() <= Date.now();
   const isRevealed =
     league.predictionsVisibility === 'always' ? true : matchStarted;
 

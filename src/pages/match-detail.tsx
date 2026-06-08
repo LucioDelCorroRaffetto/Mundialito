@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { ArrowLeft, Clock, MapPin, CheckCircle2, Share2, Users, Plus, Minus } from 'lucide-react';
@@ -181,11 +181,17 @@ export function MatchDetailPage() {
   const { data: teamMap, isLoading: teamsLoading } = useTeamMap();
   const { data: myLeagues } = useMyLeagues();
 
-  // leagueId is only used for viewing league predictions — not for saving
+  // leagueId is only used for viewing league predictions — not for saving.
+  // Guard against `?leagueId=abc` which would produce NaN and poison every
+  // downstream query (`/predictions/match/X?leagueId=NaN` returns 400 and
+  // strands the UI).
   const leagueIdParam = searchParams.get('leagueId');
-  const [selectedLeagueId, setSelectedLeagueId] = useState<number | null>(
-    leagueIdParam ? Number(leagueIdParam) : null,
-  );
+  const initialLeagueId = (() => {
+    if (!leagueIdParam) return null;
+    const n = Number(leagueIdParam);
+    return Number.isFinite(n) && n > 0 ? n : null;
+  })();
+  const [selectedLeagueId, setSelectedLeagueId] = useState<number | null>(initialLeagueId);
 
   // Validate selectedLeagueId against user's actual leagues
   useEffect(() => {
@@ -220,7 +226,16 @@ export function MatchDetailPage() {
   // Initialize scores when prediction loads. Prefer the league-scoped one when
   // a league is selected; fall back to any prediction so we still show the
   // user's last value when they haven't picked a league yet.
+  //
+  // The `dirtyRef` guard preserves the user's typed-but-not-yet-saved score
+  // across:
+  //   - background refetches triggered by TanStack Query on focus/reconnect,
+  //   - the brief re-render that happens when the league chip changes
+  //     (existingPrediction switches), since the user usually wants to
+  //     copy what they typed into another league.
+  const dirtyRef = useRef(false);
   useEffect(() => {
+    if (dirtyRef.current) return;
     const source = existingPrediction ?? anyPrediction;
     if (source) {
       setHomeScore(source.homeScore ?? 0);
@@ -295,11 +310,13 @@ export function MatchDetailPage() {
   const updateHomeScore = (v: number) => {
     setHomeScore(v);
     setSaved(false);
+    dirtyRef.current = true;
   };
 
   const updateAwayScore = (v: number) => {
     setAwayScore(v);
     setSaved(false);
+    dirtyRef.current = true;
   };
 
   const handleSave = async () => {
@@ -322,6 +339,7 @@ export function MatchDetailPage() {
         ...(isFirstTime ? {} : selectedLeagueId != null ? { leagueId: selectedLeagueId } : {}),
       });
       setSaved(true);
+      dirtyRef.current = false; // server now owns the value
       vibrate(20);
     } catch (e: unknown) {
       const err = e as { response?: { data?: { error?: { message?: string } } } };

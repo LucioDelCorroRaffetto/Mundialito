@@ -14,7 +14,11 @@ import { useLogin } from '@/shared/hooks/use-auth';
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID ?? '';
 
 const schema = z.object({
-  email: z.string().email('Email inválido'),
+  // Trim + lowercase on the client so the value posted matches the server's
+  // normalisation. Without it, users who registered with "User@X.com" and
+  // typed "user@x.com" at login saw "Invalid credentials" — same address
+  // but the SQLite eq() was case-sensitive.
+  email: z.string().email('Email inválido').transform((v) => v.trim().toLowerCase()),
   password: z.string().min(6, 'Mínimo 6 caracteres'),
 });
 

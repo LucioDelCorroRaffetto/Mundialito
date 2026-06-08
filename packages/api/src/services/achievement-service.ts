@@ -580,11 +580,22 @@ async function evaluateUpsetHunter(userId: number, awarded: string[]): Promise<v
 }
 
 /** Loyal: ≥7 distinct UTC days the user made an authenticated request. */
+// Tournament window for "loyal" — the catalog text says "durante el
+// torneo". WC 2026 spans roughly June 11 → July 19.
+const TOURNAMENT_START_DAY = '2026-06-11';
+const TOURNAMENT_END_DAY = '2026-07-19';
+
 async function evaluateLoyal(userId: number, awarded: string[]): Promise<void> {
   const [{ value: days }] = await db
     .select({ value: count() })
     .from(userLoginDays)
-    .where(eq(userLoginDays.userId, userId));
+    .where(
+      and(
+        eq(userLoginDays.userId, userId),
+        sql`${userLoginDays.day} >= ${TOURNAMENT_START_DAY}`,
+        sql`${userLoginDays.day} <= ${TOURNAMENT_END_DAY}`,
+      ),
+    );
   if (days >= 7) await maybeAward(userId, 'loyal', awarded);
 }
 
@@ -1007,10 +1018,21 @@ export async function finalizeFantasyLegends(): Promise<{ userId: number; league
     const top = fantasy.filter((r) => r.total === max);
 
     for (const w of top) {
-      const dummy: string[] = [];
-      await maybeAward(w.userId, 'fantasy_legend', dummy);
-      if (dummy.includes('fantasy_legend')) {
-        winners.push({ userId: w.userId, leagueId: l.id });
+      // Wrap each award in its own try/catch so a single FK / network blip
+      // doesn't abort the whole "everyone gets fantasy_legend" pass. We
+      // log and continue — better one missed badge than a thrown error
+      // that leaves later leagues unprocessed entirely.
+      try {
+        const dummy: string[] = [];
+        await maybeAward(w.userId, 'fantasy_legend', dummy);
+        if (dummy.includes('fantasy_legend')) {
+          winners.push({ userId: w.userId, leagueId: l.id });
+        }
+      } catch (err) {
+        console.error(
+          `[finalizeFantasyLegends] failed for userId=${w.userId} leagueId=${l.id}:`,
+          err,
+        );
       }
     }
   }

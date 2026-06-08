@@ -22,8 +22,22 @@ export async function updateLeagueHandler(req: Request, res: Response) {
   const league = await db.select().from(leagues).where(eq(leagues.id, id)).get();
   if (!league) throw new NotFoundError('League');
   if (league.adminId !== userId) throw new AppError('FORBIDDEN', 'Only admin can edit', 403);
+  // Personal "Mis pronósticos" leagues are auto-provisioned containers; the
+  // user shouldn't be able to flip them to public or rename them — that
+  // would expose private picks via the public search.
+  if (league.isPersonal) {
+    throw new AppError('FORBIDDEN', 'No podés editar tu liga personal', 403);
+  }
 
   const updates = req.body as z.infer<typeof updateLeagueSchema>;
+  // Trim name if provided so "   " can't sneak through min(3).
+  if (typeof updates.name === 'string') {
+    const trimmed = updates.name.trim();
+    if (trimmed.length < 3) {
+      throw new AppError('VALIDATION_ERROR', 'Nombre demasiado corto', 400);
+    }
+    updates.name = trimmed;
+  }
   const [updated] = await db.update(leagues).set(updates).where(eq(leagues.id, id)).returning();
   return res.json(updated);
 }
