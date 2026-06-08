@@ -20,7 +20,9 @@
     "complete:squads": "tsx src/scripts/complete-squads.ts",
     "verify:squads": "tsx src/scripts/verify-squads-vs-wikipedia.ts",
     "fix:squads": "tsx src/scripts/fix-squads-from-wikipedia.ts",
-    "notify:opening": "tsx src/scripts/notify-opening-match.ts"
+    "notify:opening": "tsx src/scripts/notify-opening-match.ts",
+    "backfill:api-fixtures": "tsx src/scripts/backfill-api-fixture-ids.ts",
+    "sync:player-stats": "tsx src/scripts/sync-player-stats.ts"
   },
   "dependencies": {
     "@libsql/client": "^0.14.0",

@@ -17,6 +17,7 @@ import { calculatePoints } from '../lib/scoring.js';
 import { recomputeAllFantasyPoints } from './fantasy-scoring-service.js';
 import { broadcastMatchUpdate } from '../ws/broadcast.js';
 import { checkAchievements } from './achievement-service.js';
+import { syncPlayerStatsForMatch } from './sync-player-stats.js';
 import type { SyncScoresResult } from './sync-scores.js';
 
 // ─── ESPN response types ──────────────────────────────────────────────────────
@@ -207,6 +208,12 @@ export async function syncScoresFromEspn(date: string): Promise<SyncScoresResult
             errors.push(`Achievement check failed for prediction ${pred.id}: ${String(err)}`);
           }
         }
+        // Pull per-player stats for the fantasy module. Fire-and-forget so an
+        // API-Football outage doesn't block the score sync — admin can retry
+        // via POST /admin/matches/:id/sync-player-stats.
+        syncPlayerStatsForMatch(ourMatch.id).catch((err) =>
+          console.error(`[sync-espn] player stats sync failed for match ${ourMatch.id}:`, err),
+        );
       }
 
       broadcastMatchUpdate(updatedMatch);

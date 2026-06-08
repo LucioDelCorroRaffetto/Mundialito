@@ -6,6 +6,7 @@ import { updatePlayerHandler } from './handlers/update-player.js';
 import { syncScoresHandler } from './handlers/sync-scores.js';
 import { getPlayerStatsHandler } from './handlers/get-player-stats.js';
 import { updatePlayerStatsHandler } from './handlers/update-player-stats.js';
+import { syncPlayerStatsHandler } from './handlers/sync-player-stats.js';
 import { finalizeFantasyHandler } from './handlers/finalize-fantasy.js';
 
 export const adminRouter = Router();
@@ -21,6 +22,12 @@ adminRouter.get('/matches/:matchId/player-stats', (req, res, next) =>
 );
 adminRouter.put('/matches/:matchId/player-stats', (req, res, next) =>
   updatePlayerStatsHandler(req, res).catch(next),
+);
+// Auto-sync per-player stats for a finished match from API-Football.
+// Same logic auto-fires from the score sync, but the admin can force a
+// refresh from here if needed.
+adminRouter.post('/matches/:id/sync-player-stats', (req, res, next) =>
+  syncPlayerStatsHandler(req, res).catch(next),
 );
 
 // Awards fantasy_legend to the league-winning fantasy player in each league.

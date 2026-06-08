@@ -10,6 +10,7 @@ import { calculatePoints } from '../lib/scoring.js';
 import { recomputeAllFantasyPoints } from './fantasy-scoring-service.js';
 import { broadcastMatchUpdate } from '../ws/broadcast.js';
 import { checkAchievements, finalizeFantasyLegends } from './achievement-service.js';
+import { syncPlayerStatsForMatch } from './sync-player-stats.js';
 
 // football-data.org status values
 type FdStatus =
@@ -304,6 +305,13 @@ export async function syncScores(options: SyncScoresOptions = {}): Promise<SyncS
           checkAchievements(uid, { type: 'prediction_scored', matchId: ourMatch.id, points: pts })
             .catch(() => {});
         }
+
+        // Pull per-player stats for fantasy scoring. Fire-and-forget so an
+        // API-Football outage doesn't block the score sync — the admin can
+        // always retrigger via POST /admin/matches/:id/sync-player-stats.
+        syncPlayerStatsForMatch(ourMatch.id).catch((err) =>
+          console.error(`[sync-scores] player stats sync failed for match ${ourMatch.id}:`, err),
+        );
       }
 
       // Broadcast the update to connected WebSocket clients
