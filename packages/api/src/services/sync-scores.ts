@@ -10,7 +10,7 @@ import { calculatePoints } from '../lib/scoring.js';
 import { recomputeAllFantasyPoints } from './fantasy-scoring-service.js';
 import { broadcastMatchUpdate } from '../ws/broadcast.js';
 import { checkAchievements, finalizeFantasyLegends } from './achievement-service.js';
-import { syncPlayerStatsForMatch } from './sync-player-stats.js';
+import { syncFifaStatsForMatch } from './sync-fifa-stats.js';
 
 // football-data.org status values
 type FdStatus =
@@ -314,8 +314,8 @@ export async function syncScores(options: SyncScoresOptions = {}): Promise<SyncS
         // first line of defence. Fire-and-forget so an outage doesn't block
         // the score sync.
         if (ourMatch.status !== 'finished') {
-          syncPlayerStatsForMatch(ourMatch.id).catch((err) =>
-            console.error(`[sync-scores] player stats sync failed for match ${ourMatch.id}:`, err),
+          syncFifaStatsForMatch(ourMatch.id).catch((err) =>
+            console.error(`[sync-scores] FIFA stats sync failed for match ${ourMatch.id}:`, err),
           );
         }
       }

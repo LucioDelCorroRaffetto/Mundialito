@@ -17,7 +17,7 @@ import { calculatePoints } from '../lib/scoring.js';
 import { recomputeAllFantasyPoints } from './fantasy-scoring-service.js';
 import { broadcastMatchUpdate } from '../ws/broadcast.js';
 import { checkAchievements } from './achievement-service.js';
-import { syncPlayerStatsForMatch } from './sync-player-stats.js';
+import { syncFifaStatsForMatch } from './sync-fifa-stats.js';
 import type { SyncScoresResult } from './sync-scores.js';
 
 // ─── ESPN response types ──────────────────────────────────────────────────────
@@ -212,8 +212,8 @@ export async function syncScoresFromEspn(date: string): Promise<SyncScoresResult
         // transition into finished, so post-finished score flickers (the
         // penalty bump, ESPN late-marking the winner) don't re-hit
         // API-Football and burn the 100/day quota. Fire-and-forget.
-        if (ourMatch.status !== 'finished') syncPlayerStatsForMatch(ourMatch.id).catch((err) =>
-          console.error(`[sync-espn] player stats sync failed for match ${ourMatch.id}:`, err),
+        if (ourMatch.status !== 'finished') syncFifaStatsForMatch(ourMatch.id).catch((err) =>
+          console.error(`[sync-espn] FIFA stats sync failed for match ${ourMatch.id}:`, err),
         );
       }
 

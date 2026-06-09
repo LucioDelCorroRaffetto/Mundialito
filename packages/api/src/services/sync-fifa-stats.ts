@@ -1,0 +1,342 @@
+/**
+ * Syncs per-player stats (goals, assists, cards, played) for a finished
+ * match from the FIFA.com public API into our `player_match_stats` table,
+ * then triggers a fantasy recompute.
+ *
+ * Why FIFA.com: API-Football's free tier blocks WC 2026 entirely (verified
+ * — `"Free plans do not have access to this season, try from 2022 to 2024."`).
+ * football-data.org free tier returns 403 on the detailed `/matches/{id}`
+ * endpoint. ESPN's `keyEvents` carries event-by-event detail but the
+ * `athletesInvolved` array is empty for soccer matches. FIFA.com's
+ * `/timelines/{competition}/{season}/{stage}/{match}` endpoint is **public,
+ * unauthenticated, and complete** for WC 2026: every Type 0/39/41 (goals),
+ * Type 1 (assists), Type 2 (yellow), Type 3 (red), and Type 5 (substitution)
+ * carries `IdPlayer` + `IdTeam` and a human description we can use as
+ * fallback.
+ *
+ * Player mapping is lazy. The first time we see "FODEN (England) scores"
+ * we fuzzy-match against the England roster and persist the resulting
+ * `fifaIdPlayer` so subsequent matches hit the index instead of running
+ * the matcher again.
+ *
+ * Event-type cheatsheet (from inspecting WC 2022 timelines):
+ *   0     Goal (open play)
+ *   1     Assist (follows a goal)
+ *   2     Yellow card
+ *   3     Red card  (assumed from natural numbering — verify on first
+ *                   tournament occurrence)
+ *   5     Substitution (IdPlayer in, IdSubPlayer out)
+ *  39     Goal direct from free-kick
+ *  41     Goal from penalty
+ */
+import { eq, and, inArray } from 'drizzle-orm';
+import { db } from '../db/index.js';
+import { matches, players, playerMatchStats, teams } from '../db/schema/index.js';
+import { recomputeAllFantasyPoints } from './fantasy-scoring-service.js';
+
+const FIFA_BASE = 'https://api.fifa.com/api/v3';
+const FIFA_COMPETITION_ID = '17';   // FIFA World Cup
+const FIFA_SEASON_ID = '285023';     // WC 2026 (verified empirically)
+
+interface FifaLocaleString {
+  Locale: string;
+  Description: string;
+}
+
+interface FifaTimelineEvent {
+  Type: number;
+  Period: number;
+  IdPlayer?: string | null;
+  IdSubPlayer?: string | null;
+  IdTeam?: string | null;
+  EventDescription?: FifaLocaleString[];
+  MatchMinute?: string | null;
+}
+
+interface FifaTimelineResponse {
+  IdMatch?: string;
+  Event?: FifaTimelineEvent[];
+}
+
+export interface SyncStatsResult {
+  matched: number;
+  unmatched: string[];
+  upserted: number;
+  skipped?: string;
+}
+
+// Event-type sets.
+const GOAL_TYPES = new Set([0, 39, 41]);
+const ASSIST_TYPES = new Set([1]);
+const YELLOW_TYPES = new Set([2]);
+const RED_TYPES = new Set([3]);
+
+const inFlight = new Set<number>();
+
+export async function syncFifaStatsForMatch(
+  matchId: number,
+  opts: { force?: boolean } = {},
+): Promise<SyncStatsResult> {
+  if (inFlight.has(matchId)) {
+    return { matched: 0, unmatched: [], upserted: 0, skipped: 'already in flight' };
+  }
+  if (!opts.force) {
+    const already = await db
+      .select({ id: playerMatchStats.id })
+      .from(playerMatchStats)
+      .where(eq(playerMatchStats.matchId, matchId))
+      .limit(1)
+      .get();
+    if (already) {
+      return { matched: 0, unmatched: [], upserted: 0, skipped: 'already synced (use force)' };
+    }
+  }
+  inFlight.add(matchId);
+  try {
+    return await doSync(matchId);
+  } finally {
+    inFlight.delete(matchId);
+  }
+}
+
+function normName(s: string): string {
+  return s
+    .toLowerCase()
+    .normalize('NFD')
+    // eslint-disable-next-line no-misleading-character-class
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/['’`´ʹ]/g, '')
+    .replace(/[.,\-]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/**
+ * Extract `{ surname, country }` from a FIFA event description like
+ *   "FODEN (England) scores!!"
+ *   "GANA (Senegal) is booked by the referee."
+ *   "ISMAÏLA (Senegal) successfully converts the penalty!"
+ * Returns null when the format doesn't match.
+ */
+function parseDescription(desc: string | undefined): { surname: string; country: string } | null {
+  if (!desc) return null;
+  const m = desc.match(/^([A-ZÁÉÍÓÚÑÜÇA-zÀ-ÿ' .-]+?)\s*\(([^)]+)\)/);
+  if (!m) return null;
+  return { surname: m[1].trim(), country: m[2].trim() };
+}
+
+interface RosterPlayer {
+  id: number;
+  name: string;
+  teamId: number;
+  fifaIdPlayer: string | null;
+}
+
+async function doSync(matchId: number): Promise<SyncStatsResult> {
+  // 1. Load match metadata + FIFA mapping.
+  const m = await db
+    .select({
+      id: matches.id,
+      fifaIdMatch: matches.fifaIdMatch,
+      fifaIdStage: matches.fifaIdStage,
+      status: matches.status,
+      homeTeamId: matches.homeTeamId,
+      awayTeamId: matches.awayTeamId,
+    })
+    .from(matches)
+    .where(eq(matches.id, matchId))
+    .get();
+  if (!m) return { matched: 0, unmatched: [], upserted: 0, skipped: 'match not found' };
+  if (!m.fifaIdMatch || !m.fifaIdStage) {
+    return { matched: 0, unmatched: [], upserted: 0, skipped: 'fifaIdMatch not mapped — run backfill' };
+  }
+  if (m.status !== 'finished') {
+    return { matched: 0, unmatched: [], upserted: 0, skipped: `match status is ${m.status}` };
+  }
+
+  // 2. Fetch the timeline from FIFA.
+  const url = `${FIFA_BASE}/timelines/${FIFA_COMPETITION_ID}/${FIFA_SEASON_ID}/${m.fifaIdStage}/${m.fifaIdMatch}?language=en`;
+  const res = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' } });
+  if (!res.ok) {
+    throw new Error(`FIFA timeline returned ${res.status}`);
+  }
+  const data = (await res.json()) as FifaTimelineResponse;
+  const events = data.Event ?? [];
+  if (events.length === 0) {
+    return { matched: 0, unmatched: [], upserted: 0, skipped: 'no events' };
+  }
+
+  // 3. Load home + away rosters with their (possibly-cached) FIFA IDs.
+  const teamIds = [m.homeTeamId, m.awayTeamId].filter((id): id is number => id != null);
+  const roster: RosterPlayer[] = await db
+    .select({
+      id: players.id,
+      name: players.name,
+      teamId: players.teamId,
+      fifaIdPlayer: players.fifaIdPlayer,
+    })
+    .from(players)
+    .where(inArray(players.teamId, teamIds));
+  const rosterByTeam = new Map<number, RosterPlayer[]>();
+  for (const p of roster) {
+    const list = rosterByTeam.get(p.teamId) ?? [];
+    list.push(p);
+    rosterByTeam.set(p.teamId, list);
+  }
+  const rosterByFifaId = new Map<string, RosterPlayer>();
+  for (const p of roster) {
+    if (p.fifaIdPlayer) rosterByFifaId.set(p.fifaIdPlayer, p);
+  }
+
+  // Country (TLA / FIFA Description) lookup → our teamId. We use this to
+  // resolve descriptions like "FODEN (England)" when IdTeam is missing.
+  const teamRows = await db
+    .select({ id: teams.id, name: teams.name })
+    .from(teams)
+    .where(inArray(teams.id, teamIds));
+  const teamIdByNorm = new Map(teamRows.map((t) => [normName(t.name), t.id] as const));
+
+  // 4. Walk events.
+  interface Acc {
+    goals: number;
+    assists: number;
+    yellow: number;
+    red: boolean;
+    played: boolean;
+  }
+  const stats = new Map<number, Acc>();
+  const unmatched: string[] = [];
+  const pendingFifaIdInserts = new Map<number, string>();
+
+  function ensureBucket(playerId: number): Acc {
+    let b = stats.get(playerId);
+    if (!b) {
+      b = { goals: 0, assists: 0, yellow: 0, red: false, played: false };
+      stats.set(playerId, b);
+    }
+    return b;
+  }
+
+  async function resolvePlayer(ev: FifaTimelineEvent): Promise<RosterPlayer | null> {
+    const fifaId = ev.IdPlayer;
+    if (fifaId && rosterByFifaId.has(fifaId)) {
+      return rosterByFifaId.get(fifaId)!;
+    }
+    const desc = ev.EventDescription?.[0]?.Description;
+    const parsed = parseDescription(desc);
+    if (!parsed) return null;
+    // Find the team by parsed country.
+    const targetTeamId = teamIdByNorm.get(normName(parsed.country));
+    if (!targetTeamId) return null;
+    const teamRoster = rosterByTeam.get(targetTeamId) ?? [];
+    const surnameNorm = normName(parsed.surname);
+    // Match by surname (or last token) on the roster. Reject ambiguous.
+    const candidates = teamRoster.filter((rp) => {
+      const tokens = normName(rp.name).split(' ');
+      const last = tokens[tokens.length - 1];
+      return last === surnameNorm || normName(rp.name).includes(surnameNorm);
+    });
+    if (candidates.length === 0) return null;
+    if (candidates.length > 1) {
+      // Ambiguous (Williams brothers, Hernández brothers, …): refuse.
+      // Still mark "played" via the fall-through path? No — silently drop.
+      // Surface in unmatched so the admin can patch fifaIdPlayer manually.
+      unmatched.push(`ambiguous:${parsed.country}:${parsed.surname}`);
+      return null;
+    }
+    const winner = candidates[0];
+    // Cache the FIFA id for future events / matches.
+    if (fifaId && !winner.fifaIdPlayer) {
+      pendingFifaIdInserts.set(winner.id, fifaId);
+      winner.fifaIdPlayer = fifaId;
+      rosterByFifaId.set(fifaId, winner);
+    }
+    return winner;
+  }
+
+  for (const ev of events) {
+    const player = await resolvePlayer(ev);
+    if (!player) {
+      // For events without a player resolution (period markers, generic
+      // fouls without a body, ...) just skip silently.
+      if (ev.IdPlayer || (ev.EventDescription && ev.EventDescription[0]?.Description)) {
+        const desc = ev.EventDescription?.[0]?.Description ?? `Type ${ev.Type}`;
+        unmatched.push(desc.slice(0, 80));
+      }
+      continue;
+    }
+    const bucket = ensureBucket(player.id);
+    bucket.played = true;
+    if (GOAL_TYPES.has(ev.Type)) bucket.goals += 1;
+    else if (ASSIST_TYPES.has(ev.Type)) bucket.assists += 1;
+    else if (YELLOW_TYPES.has(ev.Type)) bucket.yellow += 1;
+    else if (RED_TYPES.has(ev.Type)) bucket.red = true;
+    // Type 5 substitution — sub-in (IdPlayer) and sub-out (IdSubPlayer)
+    // both played. Handle sub-out separately.
+    if (ev.Type === 5 && ev.IdSubPlayer) {
+      const subOutFifaId = ev.IdSubPlayer;
+      const subOut = rosterByFifaId.get(subOutFifaId) ?? null;
+      if (subOut) {
+        const b2 = ensureBucket(subOut.id);
+        b2.played = true;
+      }
+    }
+  }
+
+  // 5. Persist cached FIFA player IDs (lazy mapping).
+  for (const [playerId, fifaId] of pendingFifaIdInserts) {
+    try {
+      await db
+        .update(players)
+        .set({ fifaIdPlayer: fifaId })
+        .where(eq(players.id, playerId));
+    } catch (err) {
+      console.warn(`[sync-fifa-stats] failed caching fifaIdPlayer for player ${playerId}:`, err);
+    }
+  }
+
+  // 6. Upsert player_match_stats.
+  let upserted = 0;
+  for (const [playerId, b] of stats) {
+    await db
+      .insert(playerMatchStats)
+      .values({
+        matchId,
+        playerId,
+        played: b.played,
+        goals: b.goals,
+        assists: b.assists,
+        yellowCards: Math.min(2, b.yellow),
+        redCard: b.red,
+      })
+      .onConflictDoUpdate({
+        target: [playerMatchStats.matchId, playerMatchStats.playerId],
+        set: {
+          played: b.played,
+          goals: b.goals,
+          assists: b.assists,
+          yellowCards: Math.min(2, b.yellow),
+          redCard: b.red,
+        },
+      });
+    upserted++;
+  }
+
+  // 7. Trigger fantasy recompute when we wrote something.
+  if (upserted > 0) {
+    try {
+      await recomputeAllFantasyPoints();
+    } catch (err) {
+      console.error('[sync-fifa-stats] fantasy recompute failed:', err);
+    }
+  }
+
+  if (unmatched.length > 5) {
+    console.error(
+      `[sync-fifa-stats] match ${matchId}: ${unmatched.length} unmatched events. ` +
+      `First few: ${unmatched.slice(0, 5).join('; ')}`,
+    );
+  }
+
+  return { matched: stats.size, unmatched, upserted };
+}

@@ -20,7 +20,13 @@ export const matches = sqliteTable('matches', {
   status: text('status').notNull().default('scheduled'), // 'scheduled' | 'live' | 'finished'
   homeScore: integer('home_score'),
   awayScore: integer('away_score'),
-  apiFixtureId: integer('api_fixture_id'), // nullable — API-Football fixture ID for live polling
+  apiFixtureId: integer('api_fixture_id'), // nullable — API-Football fixture ID (no longer used in free tier)
+  // FIFA.com API identifiers for the per-match timeline endpoint. We use
+  // FIFA's public API for player stats (goals/assists/cards) because
+  // API-Football's free tier blocks WC 2026 entirely. fifaIdStage is the
+  // bracket stage (group / r32 / r16 / …) that FIFA assigns numerically.
+  fifaIdMatch: text('fifa_id_match'),
+  fifaIdStage: text('fifa_id_stage'),
   createdAt: text('created_at').notNull().default(sql`(datetime('now'))`),
 });
 

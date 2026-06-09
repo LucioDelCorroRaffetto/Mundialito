@@ -1,5 +1,5 @@
 import type { Request, Response } from 'express';
-import { syncPlayerStatsForMatch } from '../../../services/sync-player-stats.js';
+import { syncFifaStatsForMatch } from '../../../services/sync-fifa-stats.js';
 
 /**
  * POST /admin/matches/:id/sync-player-stats
@@ -18,6 +18,6 @@ export async function syncPlayerStatsHandler(req: Request, res: Response) {
   // Admin endpoint forces a refresh even if stats already exist (e.g. the
   // first sync ran before the API had the full lineup, or the admin fixed
   // the score and wants stats recomputed).
-  const result = await syncPlayerStatsForMatch(matchId, { force: true });
+  const result = await syncFifaStatsForMatch(matchId, { force: true });
   return res.json({ data: result });
 }
