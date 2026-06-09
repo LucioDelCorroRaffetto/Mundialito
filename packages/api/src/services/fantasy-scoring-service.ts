@@ -180,8 +180,44 @@ export async function computeFantasyPointsByPlayer(): Promise<Map<number, number
  *  2. Each fantasy_team's legacy totalPoints — sum of all round scores.
  *
  * Captain = x2, ViceCaptain = x1.5, bench = 0.
+ *
+ * Serialization: this function is wrapped at the export level so only one
+ * recompute runs at a time. Multiple concurrent callers (sync-scores,
+ * sync-espn, sync-player-stats, admin endpoints) all coalesce into the
+ * same in-flight promise. The next request that arrives during a running
+ * recompute gets the in-flight promise back; the one after that triggers
+ * a fresh run when the current one ends, so we never lose a state-change
+ * signal but we also never run two parallel recomputes.
  */
+let recomputeInFlight: Promise<RecomputeResult> | null = null;
+let recomputePending = false;
 export async function recomputeAllFantasyPoints(): Promise<RecomputeResult> {
+  if (recomputeInFlight) {
+    // Mark that another run is needed once this finishes.
+    recomputePending = true;
+    return recomputeInFlight;
+  }
+  recomputeInFlight = (async () => {
+    try {
+      return await recomputeAllFantasyPointsImpl();
+    } finally {
+      recomputeInFlight = null;
+      if (recomputePending) {
+        recomputePending = false;
+        // Schedule the deferred re-run on the next tick so the original
+        // caller's promise resolves first.
+        setImmediate(() => {
+          recomputeAllFantasyPoints().catch((err) =>
+            console.error('[fantasy] deferred recompute failed:', err),
+          );
+        });
+      }
+    }
+  })();
+  return recomputeInFlight;
+}
+
+async function recomputeAllFantasyPointsImpl(): Promise<RecomputeResult> {
   // Load ALL lineups at once — cheaper than per-user queries.
   const allLineups = await db.select().from(fantasyLineups);
 

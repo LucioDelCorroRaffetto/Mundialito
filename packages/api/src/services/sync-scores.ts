@@ -306,12 +306,18 @@ export async function syncScores(options: SyncScoresOptions = {}): Promise<SyncS
             .catch(() => {});
         }
 
-        // Pull per-player stats for fantasy scoring. Fire-and-forget so an
-        // API-Football outage doesn't block the score sync — the admin can
-        // always retrigger via POST /admin/matches/:id/sync-player-stats.
-        syncPlayerStatsForMatch(ourMatch.id).catch((err) =>
-          console.error(`[sync-scores] player stats sync failed for match ${ourMatch.id}:`, err),
-        );
+        // Pull per-player stats for fantasy scoring — ONLY on the actual
+        // transition into finished (`status` was not already finished).
+        // Firing on any post-finished score flicker (e.g. the penalty bump)
+        // would hit API-Football again and again, burning the 100/day quota.
+        // The service also self-dedupes by matchId, but gating here is the
+        // first line of defence. Fire-and-forget so an outage doesn't block
+        // the score sync.
+        if (ourMatch.status !== 'finished') {
+          syncPlayerStatsForMatch(ourMatch.id).catch((err) =>
+            console.error(`[sync-scores] player stats sync failed for match ${ourMatch.id}:`, err),
+          );
+        }
       }
 
       // Broadcast the update to connected WebSocket clients

@@ -21,7 +21,7 @@
  * accents, lowercases, and removes punctuation so "M'Bappé" matches
  * "Mbappe", etc.
  */
-import { eq, and, inArray, sql } from 'drizzle-orm';
+import { eq, inArray } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import { matches, players, playerMatchStats, teams } from '../db/schema/index.js';
 import { recomputeAllFantasyPoints } from './fantasy-scoring-service.js';
@@ -96,11 +96,50 @@ function looksLikeMatch(apiName: string, dbName: string): boolean {
   return false;
 }
 
-export async function syncPlayerStatsForMatch(matchId: number): Promise<SyncStatsResult> {
+// Module-level guard: a Set of matchIds currently being synced, so two
+// concurrent invocations (football-data + ESPN both detecting the finish in
+// the same tick, or a fire-and-forget overlapping with the admin endpoint)
+// don't both hit API-Football and both run recomputeAllFantasyPoints.
+const inFlight = new Set<number>();
+
+export async function syncPlayerStatsForMatch(
+  matchId: number,
+  opts: { force?: boolean } = {},
+): Promise<SyncStatsResult> {
   const apiKey = process.env.API_FOOTBALL_KEY;
   if (!apiKey) {
     return { matched: 0, unmatched: [], upserted: 0, skipped: 'API_FOOTBALL_KEY not set' };
   }
+
+  if (inFlight.has(matchId)) {
+    return { matched: 0, unmatched: [], upserted: 0, skipped: 'already in flight' };
+  }
+
+  // Quota guard: unless forced, skip when the match already has player stats.
+  // The auto-sync triggers on the finish transition only, but the admin
+  // retry endpoint and the CLI can re-invoke; this stops accidental quota
+  // burn. `force: true` (admin endpoint) bypasses it for deliberate refresh.
+  if (!opts.force) {
+    const already = await db
+      .select({ id: playerMatchStats.id })
+      .from(playerMatchStats)
+      .where(eq(playerMatchStats.matchId, matchId))
+      .limit(1)
+      .get();
+    if (already) {
+      return { matched: 0, unmatched: [], upserted: 0, skipped: 'already synced (use force)' };
+    }
+  }
+
+  inFlight.add(matchId);
+  try {
+    return await doSync(matchId, apiKey);
+  } finally {
+    inFlight.delete(matchId);
+  }
+}
+
+async function doSync(matchId: number, apiKey: string): Promise<SyncStatsResult> {
 
   // Load the match + apiFixtureId.
   const m = await db
@@ -134,7 +173,13 @@ export async function syncPlayerStatsForMatch(matchId: number): Promise<SyncStat
     throw new Error(`API-Football fixtures/players returned ${res.status}`);
   }
   const data = (await res.json()) as ApiFootballResponse<PlayerStatsBlock>;
-  if (Array.isArray(data.errors) ? false : Object.keys(data.errors ?? {}).length > 0) {
+  // API-Football returns `errors` as either an object map (quota/auth issues)
+  // or an array of strings (validation issues). Previously the array path
+  // was silently ignored.
+  const errCount = Array.isArray(data.errors)
+    ? data.errors.length
+    : Object.keys(data.errors ?? {}).length;
+  if (errCount > 0) {
     throw new Error(`API-Football errors: ${JSON.stringify(data.errors)}`);
   }
   if (!data.response || data.response.length === 0) {
@@ -191,11 +236,21 @@ export async function syncPlayerStatsForMatch(matchId: number): Promise<SyncStat
 
     const roster = dbPlayersByTeam.get(ourTeamId) ?? [];
     for (const ap of block.players) {
-      const dbPlayer = roster.find((p) => looksLikeMatch(ap.player.name, p.name));
-      if (!dbPlayer) {
+      // Collect ALL roster players the heuristic accepts. If more than one
+      // matches (two players with the same surname — Iñaki/Nico Williams,
+      // Theo/Lucas Hernández, etc.), refuse to guess: assigning the wrong
+      // player's goals would corrupt fantasy points for a famous player.
+      // Push to unmatched with an `ambiguous:` prefix for manual review.
+      const candidates = roster.filter((p) => looksLikeMatch(ap.player.name, p.name));
+      if (candidates.length === 0) {
         unmatched.push(`${block.team.name}:${ap.player.name}`);
         continue;
       }
+      if (candidates.length > 1) {
+        unmatched.push(`ambiguous:${block.team.name}:${ap.player.name} → [${candidates.map((c) => c.name).join(', ')}]`);
+        continue;
+      }
+      const dbPlayer = candidates[0];
       matched++;
 
       // Aggregate when API-Football returns multiple `statistics` rows for
@@ -247,10 +302,15 @@ export async function syncPlayerStatsForMatch(matchId: number): Promise<SyncStat
     }
   }
 
-  // Silence the unused-import warning when `sql` isn't needed here. Kept
-  // around in case future versions use raw SQL in the upsert payload.
-  void sql;
-  void and;
+  // M4 alert: if we couldn't match a noticeable number of names, the roster
+  // is probably outdated. Surface that with an error-level log so the admin
+  // notices instead of silently losing stats.
+  if (unmatched.length > 5) {
+    console.error(
+      `[sync-player-stats] match ${matchId}: ${unmatched.length} unmatched ` +
+      `players — squad list may be outdated. First few: ${unmatched.slice(0, 5).join('; ')}`,
+    );
+  }
 
   return { matched, unmatched, upserted };
 }

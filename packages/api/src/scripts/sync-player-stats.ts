@@ -15,7 +15,7 @@
  * "apiFixtureId not mapped" skip reason for every match.
  */
 import 'dotenv/config';
-import { eq, inArray, sql } from 'drizzle-orm';
+import { eq, inArray } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import { matches, playerMatchStats } from '../db/schema/index.js';
 import { syncPlayerStatsForMatch } from '../services/sync-player-stats.js';
@@ -72,11 +72,11 @@ async function main() {
       console.error(`  ✗ match ${matchId} failed:`, err instanceof Error ? err.message : err);
     }
     // Polite pause — API-Football free tier is 10 req/min.
-    await new Promise((r) => setTimeout(r, 700));
+    // Previous 700ms (~85 req/min) would have triggered 429 on the first
+    // tier almost immediately. 6.5s = ~9 req/min, safe.
+    await new Promise((r) => setTimeout(r, 6_500));
   }
   console.log(`\n[sync-player-stats] done — ${okCount} sync(s) completed.`);
-  // silence unused import
-  void sql;
 }
 
 main()

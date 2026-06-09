@@ -15,6 +15,9 @@ export async function syncPlayerStatsHandler(req: Request, res: Response) {
   if (!Number.isInteger(matchId) || matchId <= 0) {
     return res.status(400).json({ error: { code: 'VALIDATION_ERROR', message: 'Invalid match id' } });
   }
-  const result = await syncPlayerStatsForMatch(matchId);
+  // Admin endpoint forces a refresh even if stats already exist (e.g. the
+  // first sync ran before the API had the full lineup, or the admin fixed
+  // the score and wants stats recomputed).
+  const result = await syncPlayerStatsForMatch(matchId, { force: true });
   return res.json({ data: result });
 }

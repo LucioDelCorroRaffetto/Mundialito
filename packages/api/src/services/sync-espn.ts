@@ -208,10 +208,11 @@ export async function syncScoresFromEspn(date: string): Promise<SyncScoresResult
             errors.push(`Achievement check failed for prediction ${pred.id}: ${String(err)}`);
           }
         }
-        // Pull per-player stats for the fantasy module. Fire-and-forget so an
-        // API-Football outage doesn't block the score sync — admin can retry
-        // via POST /admin/matches/:id/sync-player-stats.
-        syncPlayerStatsForMatch(ourMatch.id).catch((err) =>
+        // Pull per-player stats for the fantasy module — ONLY on the actual
+        // transition into finished, so post-finished score flickers (the
+        // penalty bump, ESPN late-marking the winner) don't re-hit
+        // API-Football and burn the 100/day quota. Fire-and-forget.
+        if (ourMatch.status !== 'finished') syncPlayerStatsForMatch(ourMatch.id).catch((err) =>
           console.error(`[sync-espn] player stats sync failed for match ${ourMatch.id}:`, err),
         );
       }
