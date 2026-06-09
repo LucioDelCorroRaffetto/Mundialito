@@ -112,17 +112,31 @@ function normName(s: string): string {
 }
 
 /**
- * Extract `{ surname, country }` from a FIFA event description like
- *   "FODEN (England) scores!!"
- *   "GANA (Senegal) is booked by the referee."
- *   "ISMAÏLA (Senegal) successfully converts the penalty!"
- * Returns null when the format doesn't match.
+ * Extract a player surname (+ optional country) from a FIFA event description.
+ * Supports the two formats FIFA emits:
+ *   "FODEN (England) scores!!"                  → surname=FODEN, country=England
+ *   "GANA (Senegal) is booked by the referee."  → surname=GANA,  country=Senegal
+ *   "Assisted by KANE."                         → surname=KANE,  country=null
+ *   "ROBERTS (in) comes off the bench to ..."   → surname=ROBERTS, country=null
+ *
+ * When country is null the caller must resolve it from `IdTeam` on the event
+ * (which FIFA always populates for events that involve a player).
  */
-function parseDescription(desc: string | undefined): { surname: string; country: string } | null {
+function parseDescription(desc: string | undefined): { surname: string; country: string | null } | null {
   if (!desc) return null;
-  const m = desc.match(/^([A-ZÁÉÍÓÚÑÜÇA-zÀ-ÿ' .-]+?)\s*\(([^)]+)\)/);
-  if (!m) return null;
-  return { surname: m[1].trim(), country: m[2].trim() };
+  // Pattern A: "SURNAME (Country) ..." — country present.
+  const a = desc.match(/^([A-ZÁÉÍÓÚÑÜÇA-zÀ-ÿ' .-]+?)\s*\(([^)]+)\)/);
+  if (a) {
+    const country = a[2].trim();
+    // Reject parenthetical text that is clearly NOT a country, e.g. "(in)",
+    // "(out)", "(yellow card)".
+    const looksLikeCountry = country.length >= 3 && !/^(in|out|penalty|red card|yellow card)$/i.test(country);
+    return { surname: a[1].trim(), country: looksLikeCountry ? country : null };
+  }
+  // Pattern B: "Assisted by SURNAME." — country comes from IdTeam.
+  const b = desc.match(/^Assisted by\s+([A-ZÁÉÍÓÚÑÜÇA-zÀ-ÿ' .-]+?)\.?\s*$/);
+  if (b) return { surname: b[1].trim(), country: null };
+  return null;
 }
 
 interface RosterPlayer {
@@ -188,13 +202,18 @@ async function doSync(matchId: number): Promise<SyncStatsResult> {
     if (p.fifaIdPlayer) rosterByFifaId.set(p.fifaIdPlayer, p);
   }
 
-  // Country (TLA / FIFA Description) lookup → our teamId. We use this to
-  // resolve descriptions like "FODEN (England)" when IdTeam is missing.
+  // Two lookups for resolving an event's team:
+  //   1. fifa IdTeam (always present on player events) — keyed by our match's
+  //      home/away pair via the FIFA team IDs we discover on the fly.
+  //   2. country name from the description ("FODEN (England)") for the very
+  //      first event of the match before we've cached any FIFA team IDs.
   const teamRows = await db
-    .select({ id: teams.id, name: teams.name })
+    .select({ id: teams.id, name: teams.name, code: teams.code })
     .from(teams)
     .where(inArray(teams.id, teamIds));
   const teamIdByNorm = new Map(teamRows.map((t) => [normName(t.name), t.id] as const));
+  // Lazy-populated as we observe (IdPlayer, IdTeam) pairs.
+  const teamIdByFifaIdTeam = new Map<string, number>();
 
   // 4. Walk events.
   interface Acc {
@@ -225,9 +244,25 @@ async function doSync(matchId: number): Promise<SyncStatsResult> {
     const desc = ev.EventDescription?.[0]?.Description;
     const parsed = parseDescription(desc);
     if (!parsed) return null;
-    // Find the team by parsed country.
-    const targetTeamId = teamIdByNorm.get(normName(parsed.country));
-    if (!targetTeamId) return null;
+
+    // Resolve the team. Three sources in order of confidence:
+    //   1. ev.IdTeam → previously-seen mapping in `teamIdByFifaIdTeam`.
+    //   2. parsed country ("FODEN (England)") → name match.
+    //   3. (no resolution → skip).
+    let targetTeamId: number | undefined;
+    if (ev.IdTeam && teamIdByFifaIdTeam.has(ev.IdTeam)) {
+      targetTeamId = teamIdByFifaIdTeam.get(ev.IdTeam)!;
+    } else if (parsed.country) {
+      targetTeamId = teamIdByNorm.get(normName(parsed.country));
+      // Cache the (IdTeam → ourTeamId) link for subsequent events of this
+      // match — including events that lack `country` in the description
+      // (like "Assisted by KANE.").
+      if (ev.IdTeam && targetTeamId != null) {
+        teamIdByFifaIdTeam.set(ev.IdTeam, targetTeamId);
+      }
+    }
+    if (targetTeamId == null) return null;
+
     const teamRoster = rosterByTeam.get(targetTeamId) ?? [];
     const surnameNorm = normName(parsed.surname);
     // Match by surname (or last token) on the roster. Reject ambiguous.
@@ -239,9 +274,8 @@ async function doSync(matchId: number): Promise<SyncStatsResult> {
     if (candidates.length === 0) return null;
     if (candidates.length > 1) {
       // Ambiguous (Williams brothers, Hernández brothers, …): refuse.
-      // Still mark "played" via the fall-through path? No — silently drop.
       // Surface in unmatched so the admin can patch fifaIdPlayer manually.
-      unmatched.push(`ambiguous:${parsed.country}:${parsed.surname}`);
+      unmatched.push(`ambiguous:${parsed.country ?? ev.IdTeam}:${parsed.surname}`);
       return null;
     }
     const winner = candidates[0];
