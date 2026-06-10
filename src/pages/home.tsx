@@ -151,7 +151,7 @@ function CountdownHero({
     // to the constant only if the API hasn't returned matches yet.
     const targetUtc = nextMatch?.kickoffUtc ?? WORLD_CUP_START;
     return (
-      <div className="relative overflow-hidden rounded-2xl border border-accent/40 bg-gradient-to-br from-accent/25 via-card to-card p-6">
+      <div className="wc26-ring relative overflow-hidden rounded-2xl border border-accent/40 bg-gradient-to-br from-accent/25 via-card to-card p-6">
         {/* Animated sheen across the hero */}
         <motion.div
           initial={{ x: '-100%' }}

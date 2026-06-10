@@ -18,7 +18,11 @@ export function AppShell() {
   }, [meData, token, storeLogin]);
 
   return (
-    <div className="min-h-screen bg-bg text-text flex">
+    <div className="min-h-screen bg-bg text-text flex flex-col">
+      {/* Identidad WC26: barra tri-anfitrión fija en el techo de la app */}
+      <div className="wc26-stripe flex-shrink-0" aria-hidden />
+
+      <div className="flex flex-1 min-h-0">
       {/* Desktop sidebar */}
       <Sidebar />
 
@@ -33,6 +37,7 @@ export function AppShell() {
 
         {/* Mobile bottom tab bar */}
         <TabBar />
+      </div>
       </div>
     </div>
   );

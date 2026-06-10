@@ -307,10 +307,36 @@ async function doSync(matchId: number): Promise<SyncStatsResult> {
     else if (YELLOW_TYPES.has(ev.Type)) bucket.yellow += 1;
     else if (RED_TYPES.has(ev.Type)) bucket.red = true;
     // Type 5 substitution — sub-in (IdPlayer) and sub-out (IdSubPlayer)
-    // both played. Handle sub-out separately.
-    if (ev.Type === 5 && ev.IdSubPlayer) {
-      const subOutFifaId = ev.IdSubPlayer;
-      const subOut = rosterByFifaId.get(subOutFifaId) ?? null;
+    // both played. The sub-out player may have ZERO other events in the
+    // timeline (a quiet defender), so resolving them only via the cached
+    // rosterByFifaId would miss them and cost them the clean-sheet bonus.
+    // Parse the "replace SURNAME (out)" fragment from the description as
+    // a fallback resolver.
+    if (ev.Type === 5) {
+      let subOut: RosterPlayer | null = null;
+      if (ev.IdSubPlayer && rosterByFifaId.has(ev.IdSubPlayer)) {
+        subOut = rosterByFifaId.get(ev.IdSubPlayer)!;
+      } else {
+        // "ROBERTS (in) comes off the bench to replace N WILLIAMS (out) (Wales)"
+        const desc = ev.EventDescription?.[0]?.Description ?? '';
+        const m = desc.match(/replace\s+([A-ZÁÉÍÓÚÑÜÇA-zÀ-ÿ' .-]+?)\s*\(out\)/i);
+        if (m && ev.IdTeam && teamIdByFifaIdTeam.has(ev.IdTeam)) {
+          const teamRoster = rosterByTeam.get(teamIdByFifaIdTeam.get(ev.IdTeam)!) ?? [];
+          const outNorm = normName(m[1]);
+          const cands = teamRoster.filter((rp) => {
+            const tokens = normName(rp.name).split(' ');
+            return tokens[tokens.length - 1] === outNorm || normName(rp.name).includes(outNorm);
+          });
+          if (cands.length === 1) {
+            subOut = cands[0];
+            if (ev.IdSubPlayer && !subOut.fifaIdPlayer) {
+              pendingFifaIdInserts.set(subOut.id, ev.IdSubPlayer);
+              subOut.fifaIdPlayer = ev.IdSubPlayer;
+              rosterByFifaId.set(ev.IdSubPlayer, subOut);
+            }
+          }
+        }
+      }
       if (subOut) {
         const b2 = ensureBucket(subOut.id);
         b2.played = true;

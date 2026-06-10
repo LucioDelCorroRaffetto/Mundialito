@@ -1,5 +1,5 @@
 export type AccentKey =
-  | 'gold' | 'cyan' | 'violet' | 'orange'
+  | 'gold' | 'mundial' | 'cyan' | 'violet' | 'orange'
   | 'coral' | 'magenta' | 'lime' | 'teal' | 'contrast';
 
 export type AccentPalette = {
@@ -13,6 +13,9 @@ export type AccentPalette = {
 
 export const accentPalettes: Record<AccentKey, AccentPalette> = {
   gold:     { key: 'gold',     name: 'Dorado trofeo',     color: '#FFC857', on: '#0a0e1a', a11y: true  },
+  // Verde México del trío anfitrión WC26 — los elementos tri-color
+  // (.wc26-gradient-text, .wc26-stripe) son independientes de este acento.
+  mundial:  { key: 'mundial',  name: 'Mundial 2026',      color: '#00C566', on: '#0a0e1a', a11y: true  },
   cyan:     { key: 'cyan',     name: 'Cyan eléctrico',    color: '#00D4FF', on: '#0a0e1a', a11y: true  },
   violet:   { key: 'violet',   name: 'Violeta moderno',   color: '#A78BFA', on: '#0a0e1a', a11y: true  },
   orange:   { key: 'orange',   name: 'Naranja deportivo', color: '#FF8C42', on: '#0a0e1a', a11y: true  },

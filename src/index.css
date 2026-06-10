@@ -28,6 +28,18 @@
   --accent-border: rgba(255, 200, 87, 0.3);
   --font-scale: 1;
   color-scheme: dark light;
+
+  /* ── Identidad Mundial 2026 (tri-anfitrión) ────────────────────────────
+     Verde México · Azul USA · Rojo Canadá. Brillantes para fondo oscuro;
+     las variantes -deep son para fondos claros. Disponibles SIEMPRE,
+     independientes del acento elegido por el usuario. */
+  --wc26-mex: #00c566;
+  --wc26-usa: #3b82f6;
+  --wc26-can: #ef4444;
+  --wc26-mex-deep: #006847;
+  --wc26-usa-deep: #0a3161;
+  --wc26-can-deep: #b31942;
+  --wc26-gradient: linear-gradient(120deg, var(--wc26-mex) 0%, var(--wc26-usa) 50%, var(--wc26-can) 100%);
 }
 
 html, body, #root {
@@ -105,4 +117,47 @@ input, textarea, select, button {
 }
 .no-scrollbar::-webkit-scrollbar {
   display: none;
+}
+
+/* ── Utilidades Mundial 2026 ─────────────────────────────────────────────── */
+
+/* Texto con el degradé tri-anfitrión (títulos hero, el "26" del splash). */
+.wc26-gradient-text {
+  background: var(--wc26-gradient);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* Barra fina tri-color — separador de secciones / techo del app shell. */
+.wc26-stripe {
+  height: 3px;
+  background: var(--wc26-gradient);
+}
+
+/* Borde animado tri-color para cards destacadas (hero del home). */
+.wc26-ring {
+  position: relative;
+}
+.wc26-ring::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  padding: 1px;
+  background: var(--wc26-gradient);
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+  opacity: 0.65;
+}
+
+/* Sweep de luz del splash — una banda de degradé que cruza la pantalla. */
+@keyframes wc26-sweep {
+  0%   { transform: translateX(-120%) skewX(-12deg); }
+  100% { transform: translateX(220%) skewX(-12deg); }
+}
+.wc26-sweep {
+  animation: wc26-sweep 1.4s cubic-bezier(0.6, 0, 0.3, 1) both;
 }
