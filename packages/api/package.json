@@ -22,7 +22,10 @@
     "fix:squads": "tsx src/scripts/fix-squads-from-wikipedia.ts",
     "notify:opening": "tsx src/scripts/notify-opening-match.ts",
     "backfill:api-fixtures": "tsx src/scripts/backfill-api-fixture-ids.ts",
-    "sync:player-stats": "tsx src/scripts/sync-player-stats.ts"
+    "sync:player-stats": "tsx src/scripts/sync-player-stats.ts",
+    "backfill:fifa": "tsx src/scripts/backfill-fifa-match-ids.ts",
+    "diagnose:fifa": "tsx src/scripts/diagnose-fifa.ts",
+    "test:fifa-e2e": "tsx src/scripts/test-fifa-e2e.ts"
   },
   "dependencies": {
     "@libsql/client": "^0.14.0",

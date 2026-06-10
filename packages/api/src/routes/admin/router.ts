@@ -7,6 +7,7 @@ import { syncScoresHandler } from './handlers/sync-scores.js';
 import { getPlayerStatsHandler } from './handlers/get-player-stats.js';
 import { updatePlayerStatsHandler } from './handlers/update-player-stats.js';
 import { syncPlayerStatsHandler } from './handlers/sync-player-stats.js';
+import { diagnoseFifaHandler } from './handlers/diagnose-fifa.js';
 import { finalizeFantasyHandler } from './handlers/finalize-fantasy.js';
 
 export const adminRouter = Router();
@@ -28,6 +29,11 @@ adminRouter.put('/matches/:matchId/player-stats', (req, res, next) =>
 // refresh from here if needed.
 adminRouter.post('/matches/:id/sync-player-stats', (req, res, next) =>
   syncPlayerStatsHandler(req, res).catch(next),
+);
+// Self-test of the FIFA stats pipeline. Returns a structured report — admin
+// UI / external monitoring can poll this and alert if `body.ok === false`.
+adminRouter.get('/diagnostics/fifa-self-test', (req, res, next) =>
+  diagnoseFifaHandler(req, res).catch(next),
 );
 
 // Awards fantasy_legend to the league-winning fantasy player in each league.

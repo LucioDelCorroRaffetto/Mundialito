@@ -33,6 +33,7 @@ import { eq, and, inArray } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import { matches, players, playerMatchStats, teams } from '../db/schema/index.js';
 import { recomputeAllFantasyPoints } from './fantasy-scoring-service.js';
+import { notifyAdmin } from '../lib/notify-admin.js';
 
 const FIFA_BASE = 'https://api.fifa.com/api/v3';
 const FIFA_COMPETITION_ID = '17';   // FIFA World Cup
@@ -370,6 +371,19 @@ async function doSync(matchId: number): Promise<SyncStatsResult> {
       `[sync-fifa-stats] match ${matchId}: ${unmatched.length} unmatched events. ` +
       `First few: ${unmatched.slice(0, 5).join('; ')}`,
     );
+    // Surface to the admin via push — the alternative is finding out by
+    // reading Render logs hours after the match.
+    notifyAdmin(
+      '⚠️ Stats sync con problemas',
+      `Match ${matchId}: ${unmatched.length} eventos sin resolver. Revisá logs.`,
+    ).catch((err) => console.error('[sync-fifa-stats] notify failed:', err));
+  } else if (events.length > 50 && upserted === 0) {
+    // Sanity: a real WC match has ~150-200 events. Zero upserts means the
+    // resolver couldn't match anyone — usually a roster drift.
+    notifyAdmin(
+      '🚨 Stats sync no escribió nada',
+      `Match ${matchId}: ${events.length} eventos FIFA pero 0 stats persistidas. Revisá.`,
+    ).catch((err) => console.error('[sync-fifa-stats] notify failed:', err));
   }
 
   return { matched: stats.size, unmatched, upserted };
