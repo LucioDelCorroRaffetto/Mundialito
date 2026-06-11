@@ -26,7 +26,8 @@
     "backfill:fifa": "tsx src/scripts/backfill-fifa-match-ids.ts",
     "diagnose:fifa": "tsx src/scripts/diagnose-fifa.ts",
     "test:fifa-e2e": "tsx src/scripts/test-fifa-e2e.ts",
-    "notify:last-call": "tsx src/scripts/notify-last-call.ts"
+    "notify:last-call": "tsx src/scripts/notify-last-call.ts",
+    "notify:kickoff": "tsx src/scripts/notify-kickoff-today.ts"
   },
   "dependencies": {
     "@libsql/client": "^0.14.0",
