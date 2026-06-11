@@ -37,27 +37,18 @@ export async function upsertTournamentPredictionHandler(req: Request, res: Respo
   const userId = req.user!.id;
 
   // ── Tournament lock ───────────────────────────────────────────────────────
-  // Tournament-wide predictions (champion, top scorer, etc.) are locked once
-  // the first match of the tournament kicks off. We read the earliest
-  // predictionLockUtc from the matches table so the threshold is exactly 5
-  // minutes before the opening whistle — consistent with per-match locking.
-  const firstMatch = await db
-    .select({ predictionLockUtc: matches.predictionLockUtc })
-    .from(matches)
-    .orderBy(asc(matches.kickoffUtc))
-    .limit(1)
-    .get();
-  if (firstMatch?.predictionLockUtc) {
-    const lockDate = new Date(firstMatch.predictionLockUtc);
-    // Guard: an invalid date (empty string, null coerced to 'Invalid Date')
-    // would make the comparison false and silently skip the lock.
-    if (!isNaN(lockDate.getTime()) && lockDate <= new Date()) {
-      throw new AppError(
-        'TOURNAMENT_LOCKED',
-        'Los pronósticos del torneo están cerrados — el Mundial ya comenzó',
-        409,
-      );
-    }
+  // Originalmente este lock cerraba 5 min antes del partido inaugural. Lo
+  // extendimos 24h porque mucha gente terminó de pronosticar el día del
+  // arranque y la pestaña /tournament quedaba bloqueada antes de que
+  // pudieran completar campeón/top scorer/etc. Esta ventana se cierra
+  // el 2026-06-12 18:55 UTC (24h después del kickoff inaugural).
+  const TOURNAMENT_LOCK_UTC = '2026-06-12T18:55:00Z';
+  if (new Date(TOURNAMENT_LOCK_UTC) <= new Date()) {
+    throw new AppError(
+      'TOURNAMENT_LOCKED',
+      'Los pronósticos del torneo están cerrados',
+      409,
+    );
   }
 
   // Resolve the user's leagues.

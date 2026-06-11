@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, desc } from 'drizzle-orm';
 import { db } from '../../../db/index.js';
 import { fantasyTeams, fantasySquadPlayers, fantasyLineups, players } from '../../../db/schema/index.js';
 import { computeFantasyPointsByPlayer } from '../../../services/fantasy-scoring-service.js';
@@ -41,9 +41,9 @@ export async function getMyTeamHandler(req: Request, res: Response) {
   // round once the tournament is over so the drawer keeps showing
   // something meaningful instead of all-bench.
   const activeRound = getCurrentFantasyRound();
-  const roundSlug = activeRound?.slug ?? 'final';
+  let roundSlug = activeRound?.slug ?? 'final';
 
-  const lineupRows = await db
+  let lineupRows = await db
     .select({
       playerId: fantasyLineups.playerId,
       isStarter: fantasyLineups.isStarter,
@@ -52,6 +52,33 @@ export async function getMyTeamHandler(req: Request, res: Response) {
     })
     .from(fantasyLineups)
     .where(and(eq(fantasyLineups.userId, userId), eq(fantasyLineups.round, roundSlug)));
+
+  // Fallback: si el usuario todavía no armó lineup para el round activo
+  // (caso típico: ya cerró el round anterior y todavía no editó el siguiente),
+  // mostramos su último lineup guardado en lugar de un drawer vacío con
+  // todos en el banco. Sin esto la UX engaña: parece que se "perdieron"
+  // titulares y capitán que en realidad siguen guardados en la ronda previa.
+  if (lineupRows.length === 0) {
+    const lastRow = await db
+      .select({ round: fantasyLineups.round })
+      .from(fantasyLineups)
+      .where(eq(fantasyLineups.userId, userId))
+      .orderBy(desc(fantasyLineups.createdAt))
+      .limit(1)
+      .get();
+    if (lastRow) {
+      roundSlug = lastRow.round;
+      lineupRows = await db
+        .select({
+          playerId: fantasyLineups.playerId,
+          isStarter: fantasyLineups.isStarter,
+          isCaptain: fantasyLineups.isCaptain,
+          isViceCaptain: fantasyLineups.isViceCaptain,
+        })
+        .from(fantasyLineups)
+        .where(and(eq(fantasyLineups.userId, userId), eq(fantasyLineups.round, roundSlug)));
+    }
+  }
   const lineupByPlayer = new Map(lineupRows.map((r) => [r.playerId, r]));
 
   const squadRows = await db

@@ -48,6 +48,10 @@ export function useGlobalLeaderboard(limit = 50, offset = 0) {
       });
       return data;
     },
-    staleTime: 60_000, // 1 minute
+    staleTime: 30_000,
+    // Refresca cada 60s mientras la pestaña está activa para que los puntos
+    // que recalcula el sync FIFA al terminar un partido se vean sin reload.
+    refetchInterval: 60_000,
+    refetchIntervalInBackground: false,
   });
 }

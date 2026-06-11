@@ -65,6 +65,11 @@ export function useLeagueStandings(id: number | undefined) {
       return data;
     },
     enabled: id !== undefined && Number.isInteger(id),
+    // Auto-refresh cada 60s para que los puntos calculados por el sync FIFA
+    // al cerrar un partido se reflejen sin que el usuario tenga que volver
+    // a entrar a la liga.
+    refetchInterval: 60_000,
+    refetchIntervalInBackground: false,
   });
 }
 

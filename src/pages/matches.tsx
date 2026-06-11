@@ -14,20 +14,29 @@ import { R32_LABELS } from '@/shared/data/bracket';
 import { cn } from '@/shared/lib/cn';
 import { SkeletonList } from '@/shared/components/skeleton';
 
-function formatDate(utc: string) {
-  const d = new Date(utc);
-  return d.toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long' });
+function formatDate(localKey: string) {
+  // localKey viene en YYYY-MM-DD (fecha local del dispositivo, ya calculada
+  // en groupByDate). Lo parseamos como fecha local — sin convertir a UTC —
+  // para que no se "corra" un día al renderizar.
+  const [y, m, d] = localKey.split('-').map(Number);
+  const date = new Date(y, m - 1, d);
+  return date.toLocaleDateString('es', { weekday: 'long', day: 'numeric', month: 'long' });
 }
 
 function formatTime(utc: string) {
   const d = new Date(utc);
-  return d.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Argentina/Buenos_Aires' });
+  // Usa la timezone del dispositivo — los usuarios viven en distintos países
+  // de LATAM, fijar Buenos Aires daba horarios incorrectos a todos los demás.
+  return d.toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit', hour12: false });
 }
 
 function groupByDate(matches: Match[]) {
   const groups: Record<string, Match[]> = {};
   for (const m of matches) {
-    const key = m.kickoffUtc.slice(0, 10);
+    // Agrupar por la fecha LOCAL del dispositivo, no por la fecha UTC, para
+    // que un partido de las 22 h MX no aparezca bajo el día siguiente.
+    const local = new Date(m.kickoffUtc);
+    const key = `${local.getFullYear()}-${String(local.getMonth() + 1).padStart(2, '0')}-${String(local.getDate()).padStart(2, '0')}`;
     if (!groups[key]) groups[key] = [];
     groups[key].push(m);
   }

@@ -93,12 +93,13 @@ function ScoreInput({
 
 function formatDate(utc: string) {
   const d = new Date(utc);
-  return d.toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  return d.toLocaleDateString('es', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
 }
 
 function formatTime(utc: string) {
   const d = new Date(utc);
-  return d.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Argentina/Buenos_Aires' });
+  // Usa la zona del dispositivo (LATAM cubre UTC-3 a UTC-6).
+  return d.toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit', hour12: false });
 }
 
 function MemberAvatar({ username, avatarUrl }: { username: string; avatarUrl: string | null }) {
@@ -430,6 +431,9 @@ export function MatchDetailPage() {
         </div>
       </div>
 
+      {/* Live/finished events — goles, asistencias, tarjetas */}
+      <MatchEvents events={match.events} homeTeamCode={homeTeamDisplay.code} status={match.status} />
+
       {/* Points preview */}
       {match.status === 'scheduled' && !teamsAreTbd && (
         <PointsPreview home={homeScore} away={awayScore} />
@@ -591,6 +595,66 @@ export function MatchDetailPage() {
       </div>
 
       <div className="h-6" />
+    </div>
+  );
+}
+
+// ─── Live events block ────────────────────────────────────────────────────────
+
+import type { MatchEvent } from '@/shared/types/api';
+
+function MatchEvents({
+  events,
+  homeTeamCode,
+  status,
+}: {
+  events?: MatchEvent[];
+  homeTeamCode: string;
+  status: 'scheduled' | 'live' | 'finished';
+}) {
+  if (status === 'scheduled' || !events || events.length === 0) return null;
+
+  // Para cada jugador con stat, expandimos a "filas" de evento: 1 por gol,
+  // 1 por amarilla, 1 por roja. Mostramos asistencias agregadas a su gol más
+  // probable (no tenemos timeline minutado en stats agregados, pero sí podemos
+  // decir "Player X — 2 goles" / "Player Y — amarilla").
+  const items: { kind: 'goal' | 'yellow' | 'red'; player: string; team: string; count?: number }[] = [];
+  for (const e of events) {
+    if (e.goals > 0) items.push({ kind: 'goal', player: e.playerName, team: e.teamCode, count: e.goals });
+    if (e.yellowCards > 0) items.push({ kind: 'yellow', player: e.playerName, team: e.teamCode, count: e.yellowCards });
+    if (e.redCard) items.push({ kind: 'red', player: e.playerName, team: e.teamCode });
+  }
+  if (items.length === 0) return null;
+
+  const home = items.filter((i) => i.team === homeTeamCode);
+  const away = items.filter((i) => i.team !== homeTeamCode);
+
+  const Row = ({ item }: { item: typeof items[number] }) => {
+    const icon = item.kind === 'goal' ? '⚽' : item.kind === 'yellow' ? '🟨' : '🟥';
+    return (
+      <div className="flex items-center gap-2 text-sm-s text-text">
+        <span>{icon}</span>
+        <span className="font-medium">{item.player}</span>
+        {item.count && item.count > 1 && <span className="text-muted">×{item.count}</span>}
+      </div>
+    );
+  };
+
+  return (
+    <div className="mx-4 mt-3 p-4 rounded-lg bg-elevated border border-border">
+      <p className="text-sm-s font-semibold text-text mb-3">
+        {status === 'live' ? 'Sucesos del partido (en vivo)' : 'Resumen del partido'}
+      </p>
+      <div className="grid grid-cols-2 gap-4">
+        <div className="flex flex-col gap-2">
+          <p className="text-xs-s text-muted font-bold uppercase">Local</p>
+          {home.length === 0 ? <span className="text-xs-s text-muted">—</span> : home.map((i, idx) => <Row key={idx} item={i} />)}
+        </div>
+        <div className="flex flex-col gap-2">
+          <p className="text-xs-s text-muted font-bold uppercase">Visitante</p>
+          {away.length === 0 ? <span className="text-xs-s text-muted">—</span> : away.map((i, idx) => <Row key={idx} item={i} />)}
+        </div>
+      </div>
     </div>
   );
 }

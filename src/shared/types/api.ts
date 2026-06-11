@@ -30,6 +30,20 @@ export interface Match {
   status: 'scheduled' | 'live' | 'finished';
   homeScore: number | null;
   awayScore: number | null;
+  // Solo lo devuelve GET /matches/:id (no la lista). Acumulados por jugador.
+  events?: MatchEvent[];
+}
+
+export interface MatchEvent {
+  playerId: number;
+  playerName: string;
+  teamId: number;
+  teamCode: string;
+  goals: number;
+  assists: number;
+  yellowCards: number;
+  redCard: boolean;
+  shirtNumber: number | null;
 }
 
 export interface Prediction {

@@ -1526,6 +1526,17 @@ function UserTeamDrawer({
   teamName: string;
   onClose: () => void;
 }) {
+  // Bloquea el scroll del documento padre mientras el drawer está abierto.
+  // Sin esto, en mobile el scroll dentro del drawer "se escapa" al body
+  // (scroll chaining): el usuario empuja para bajar dentro de la lista de
+  // suplentes, el body de la página se mueve, y al soltar parece que la
+  // vista del drawer se "reinicia" cuando en realidad scrolleó el fondo.
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = prev; };
+  }, []);
+
   const { data, isLoading } = useUserFantasyTeam(userId);
   const squad = data?.squad ?? [];
 
@@ -1573,7 +1584,7 @@ function UserTeamDrawer({
         </div>
 
         {/* Body */}
-        <div className="overflow-y-auto flex-1 px-4 pb-6">
+        <div className="overflow-y-auto overscroll-contain flex-1 px-4 pb-6">
           {isLoading ? (
             <div className="py-8"><SkeletonList count={5} /></div>
           ) : squad.length === 0 ? (

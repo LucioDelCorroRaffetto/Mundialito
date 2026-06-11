@@ -239,12 +239,15 @@ function CountdownHero({
 
 function formatKickoff(utc: string) {
   const d = new Date(utc);
-  return d.toLocaleDateString('es-AR', { weekday: 'short', day: 'numeric', month: 'short' });
+  return d.toLocaleDateString('es', { weekday: 'short', day: 'numeric', month: 'short' });
 }
 
 function formatTime(utc: string) {
   const d = new Date(utc);
-  return d.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Argentina/Buenos_Aires' });
+  // Sin timeZone explícito → usa la zona del dispositivo. La app sirve a
+  // usuarios desde Argentina hasta México (5h de diferencia); fijar AR
+  // mostraba horarios incorrectos a todos los demás.
+  return d.toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit', hour12: false });
 }
 
 const PLACEHOLDER_TEAM: Team = {

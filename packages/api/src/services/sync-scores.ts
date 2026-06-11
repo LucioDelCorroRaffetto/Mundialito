@@ -247,21 +247,28 @@ export async function syncScores(options: SyncScoresOptions = {}): Promise<SyncS
       if (newHomeScore !== null) updatePayload.homeScore = newHomeScore;
       if (newAwayScore !== null) updatePayload.awayScore = newAwayScore;
 
-      // If a previously-finished match reverts to scheduled (rare, but it
-      // happens on POSTPONED corrections upstream), clear scores and unscore
-      // the predictions. Otherwise the leaderboard keeps points from a match
-      // that "didn't happen yet" — and a future re-finalize would not reset
-      // them because statusChanged would be false next time.
-      if (
-        ourMatch.status === 'finished' &&
-        (newStatus === 'scheduled' || (newHomeScore === null && newAwayScore === null))
-      ) {
+      // If a previously-finished match reverts to scheduled (POSTPONED
+      // corrections upstream), clear scores and unscore the predictions.
+      // ANTES: este branch también disparaba cuando newStatus seguía siendo
+      // 'finished' pero el payload no traía scores — y en producción FIFA
+      // devolvió varias veces respuestas transicionales sin scores, lo que
+      // borró el 2-0 del MEX-ZAF y mandó toda la tabla global a 0. Ahora
+      // sólo limpiamos si el nuevo estado es claramente 'scheduled'. Un
+      // payload finished sin scores es ruido y se ignora: dejamos los
+      // valores que ya tenemos persistidos.
+      if (ourMatch.status === 'finished' && newStatus === 'scheduled') {
         updatePayload.homeScore = null;
         updatePayload.awayScore = null;
         await db
           .update(predictions)
           .set({ points: null, updatedAt: sql`(datetime('now'))` })
           .where(eq(predictions.matchId, ourMatch.id));
+      }
+
+      // Caso "finished sin scores": NO sobreescribimos lo que ya tenemos
+      // bueno. Salimos antes de tocar la DB para no resetear puntos.
+      if (newStatus === 'finished' && newHomeScore === null && newAwayScore === null) {
+        continue;
       }
 
       const [updatedMatch] = await db
