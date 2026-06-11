@@ -19,6 +19,7 @@
 import 'dotenv/config';
 import { createClient } from '@libsql/client';
 import webpush from 'web-push';
+import { latamTimes } from '../lib/latam-time.js';
 
 // ---------------------------------------------------------------------------
 // Config
@@ -120,11 +121,11 @@ async function run(): Promise<void> {
     }
 
     const firstMatch = matchResult.rows[0] as unknown as MatchRow;
-    const kickoffTime = formatKickoff(firstMatch.kickoff_utc);
+    const kickoffTime = latamTimes(firstMatch.kickoff_utc);
 
     console.log(`[notify-opening] Opening match: ${firstMatch.home_team} vs ${firstMatch.away_team}`);
     console.log(`[notify-opening] Kickoff UTC:   ${firstMatch.kickoff_utc}`);
-    console.log(`[notify-opening] Displayed as:  ${kickoffTime} (hora Argentina)`);
+    console.log(`[notify-opening] Displayed as:  ${kickoffTime}`);
 
     // 4. Fetch all active push subscriptions.
     const subsResult = await client.execute(
@@ -143,7 +144,7 @@ async function run(): Promise<void> {
     // 5. Build the notification payload.
     const payload = JSON.stringify({
       title: '⚽ ¡El Mundial empieza mañana!',
-      body: `Cerrá tus pronósticos antes de las ${kickoffTime} hs (${firstMatch.home_team} vs ${firstMatch.away_team})`,
+      body: `Cerrá tus pronósticos antes del ${kickoffTime} (${firstMatch.home_team} vs ${firstMatch.away_team})`,
       url: '/home',
     });
 

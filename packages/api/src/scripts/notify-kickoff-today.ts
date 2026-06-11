@@ -11,6 +11,7 @@
 import 'dotenv/config';
 import webpush from 'web-push';
 import { createClient } from '@libsql/client';
+import { latamTimes } from '../lib/latam-time.js';
 
 const DRY_RUN = process.env.DRY_RUN === '1';
 
@@ -64,7 +65,7 @@ async function main() {
   matches.forEach(m => console.log(`  ${m.home} vs ${m.away} — ${formatAR(m.kickoff_utc)} AR`));
 
   const firstMatch = matches[0];
-  const kickoffStr = firstMatch ? `${formatAR(firstMatch.kickoff_utc)} hs` : 'hoy';
+  const kickoffStr = firstMatch ? latamTimes(firstMatch.kickoff_utc) : 'hoy';
   const matchLabel = firstMatch ? `${firstMatch.home} vs ${firstMatch.away}` : 'primer partido';
   const matchIds = matches.map(m => Number(m.id));
 
@@ -98,8 +99,8 @@ async function main() {
 
     const title = '⚽ ¡Arranca la primera fecha del Mundial!';
     const body = pending > 0
-      ? `Te falt${pending > 1 ? 'an' : 'a'} ${pending} pronóstico${pending > 1 ? 's' : ''} — el ${matchLabel} empieza a las ${kickoffStr}. ¡Corré!`
-      : `${matchLabel} empieza a las ${kickoffStr}. ¡Todo listo — a disfrutar!`;
+      ? `Te falt${pending > 1 ? 'an' : 'a'} ${pending} pronóstico${pending > 1 ? 's' : ''} — ${matchLabel} empieza ${kickoffStr}. ¡Corré!`
+      : `${matchLabel} empieza ${kickoffStr}. ¡Todo listo — a disfrutar!`;
     const url = pending > 0 ? '/matches' : '/home';
 
     console.log(`  user ${userId} (${pending} pendientes): ${body}${DRY_RUN ? ' [DRY]' : ''}`);

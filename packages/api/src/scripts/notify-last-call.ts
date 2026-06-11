@@ -12,6 +12,7 @@
 import 'dotenv/config';
 import webpush from 'web-push';
 import { createClient } from '@libsql/client';
+import { latamTimes } from '../lib/latam-time.js';
 
 const DRY_RUN = process.env.DRY_RUN === '1';
 
@@ -41,11 +42,14 @@ async function main() {
 
   // Partidos de las próximas 24 h (los que cierran hoy).
   const matchesRes = await client.execute({
-    sql: `SELECT id FROM matches
-          WHERE status = 'scheduled' AND kickoff_utc > ? AND kickoff_utc <= ?`,
+    sql: `SELECT id, kickoff_utc FROM matches
+          WHERE status = 'scheduled' AND kickoff_utc > ? AND kickoff_utc <= ?
+          ORDER BY kickoff_utc ASC`,
     args: [now.toISOString(), in24h.toISOString()],
   });
   const todayMatchIds = matchesRes.rows.map((r) => Number(r.id));
+  const firstKickoff = matchesRes.rows[0]?.kickoff_utc as string | undefined;
+  const kickoffStr = firstKickoff ? latamTimes(firstKickoff) : '15:55 AR';
   console.log(`Partidos en las próximas 24h: ${todayMatchIds.length}`);
 
   // Suscripciones agrupadas por usuario.
@@ -98,7 +102,7 @@ async function main() {
       parts.push(`tenés ${pending} pronóstico${pending > 1 ? 's' : ''} sin hacer de los partidos de hoy`);
     }
     const body = `${parts.join(' y ')[0].toUpperCase()}${parts.join(' y ').slice(1)}. ` +
-      `El fantasy cierra a las 15:55 (AR). ¡Corré!`;
+      `El fantasy cierra antes del ${kickoffStr}. ¡Corré!`;
     const payload = JSON.stringify({
       title: '🚨 ¡HOY arranca el Mundial!',
       body,
