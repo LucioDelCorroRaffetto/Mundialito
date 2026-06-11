@@ -12,10 +12,14 @@ type State = {
   accent: AccentKey;
   fontScale: FontScale;
   reducedMotionOverride: 'auto' | 'on' | 'off';
+  /** Sonidos de la app (gol al guardar pronóstico, chime de logros).
+   *  Opt-in: arranca apagado para no sorprender a nadie. */
+  soundEnabled: boolean;
   setMode: (mode: ThemeMode) => void;
   setAccent: (accent: AccentKey) => void;
   setFontScale: (scale: FontScale) => void;
   setReducedMotion: (v: State['reducedMotionOverride']) => void;
+  setSoundEnabled: (v: boolean) => void;
 };
 
 export const useThemeStore = create<State>()(
@@ -25,10 +29,12 @@ export const useThemeStore = create<State>()(
       accent: 'gold',
       fontScale: 1.0,
       reducedMotionOverride: 'auto',
+      soundEnabled: false,
       setMode: (mode) => set({ mode }),
       setAccent: (accent) => set({ accent }),
       setFontScale: (fontScale) => set({ fontScale }),
       setReducedMotion: (reducedMotionOverride) => set({ reducedMotionOverride }),
+      setSoundEnabled: (soundEnabled) => set({ soundEnabled }),
     }),
     { name: 'mundialito-theme' }
   )

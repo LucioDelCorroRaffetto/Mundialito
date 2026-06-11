@@ -106,6 +106,9 @@ export function LoginPage() {
             Registrate
           </Link>
         </p>
+        <Link to="/ayuda" className="text-xs-s text-muted hover:text-accent underline underline-offset-2">
+          ¿Primera vez? Mirá cómo instalar la app y armar tu liga →
+        </Link>
       </motion.div>
     </div>
   );

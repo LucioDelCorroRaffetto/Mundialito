@@ -324,7 +324,7 @@ export function HomePage() {
       {isInstallable && !isInstalled && (
         <button
           onClick={install}
-          className="w-full flex items-center gap-2 bg-emerald-500/20 border border-emerald-400/30 rounded-xl px-4 py-3 text-sm text-emerald-300 mb-4"
+          className="w-full flex items-center gap-2 bg-emerald-500/20 border border-emerald-400/30 rounded-xl px-4 py-3 text-sm text-emerald-700 dark:text-emerald-300 mb-4"
         >
           <span>📲</span>
           <span className="flex-1 text-left">Instalá Mundialito en tu celular</span>
@@ -349,12 +349,12 @@ export function HomePage() {
                 <span className="w-3.5 h-3.5 rounded-full bg-red-400/40 animate-ping" />
               </div>
               <div className="flex-1">
-                <p className="text-sm font-bold text-red-200 uppercase tracking-wide">
+                <p className="text-sm font-bold text-red-700 dark:text-red-200 uppercase tracking-wide">
                   {liveMatches.length === 1 ? 'Un partido en vivo' : `${liveMatches.length} partidos en vivo`}
                 </p>
-                <p className="text-xs text-red-200/70">Tocá para seguirlos en directo</p>
+                <p className="text-xs text-red-800/70 dark:text-red-200/70">Tocá para seguirlos en directo</p>
               </div>
-              <ChevronRight size={16} className="text-red-300 flex-shrink-0 group-hover:translate-x-0.5 transition-transform" />
+              <ChevronRight size={16} className="text-red-600 dark:text-red-300 flex-shrink-0 group-hover:translate-x-0.5 transition-transform" />
             </Link>
           )}
 
@@ -368,15 +368,16 @@ export function HomePage() {
               className="flex items-center gap-3 p-3.5 rounded-xl bg-gradient-to-r from-orange-500/15 to-orange-500/5 border border-orange-500/40 hover:border-orange-400/60 hover:from-orange-500/20 transition-all group"
             >
               <div className="w-9 h-9 rounded-lg bg-orange-500/25 flex items-center justify-center flex-shrink-0">
-                <AlertCircle size={18} className="text-orange-300" />
+                <AlertCircle size={18} className="text-orange-600 dark:text-orange-300" />
               </div>
               <div className="flex-1">
                 <p className="text-sm font-semibold text-text">
-                  Te quedan <span className="text-orange-300 font-bold">{pendingCount}</span> pronósticos sin hacer
+                  {/* orange-300 era invisible sobre fondo claro — variante 600 en light */}
+                  Te quedan <span className="text-orange-600 dark:text-orange-300 font-bold">{pendingCount}</span> pronósticos sin hacer
                 </p>
                 <p className="text-xs text-muted">de tus próximos {apiMatches.length} partidos</p>
               </div>
-              <ChevronRight size={16} className="text-orange-400 flex-shrink-0 group-hover:translate-x-0.5 transition-transform" />
+              <ChevronRight size={16} className="text-orange-600 dark:text-orange-400 flex-shrink-0 group-hover:translate-x-0.5 transition-transform" />
             </Link>
           )}
 
@@ -397,7 +398,7 @@ export function HomePage() {
                 aria-hidden
               />
               <div className="relative w-10 h-10 rounded-lg bg-violet-500/25 flex items-center justify-center flex-shrink-0">
-                <Sparkles size={20} className="text-violet-300" />
+                <Sparkles size={20} className="text-violet-700 dark:text-violet-300" />
               </div>
               <div className="relative flex-1">
                 <p className="text-sm font-bold text-text">
@@ -405,11 +406,12 @@ export function HomePage() {
                     ? '¡Armá tu equipo Fantasy!'
                     : `Te faltan ${15 - fantasySquadSize} jugadores en tu Fantasy`}
                 </p>
-                <p className="text-xs text-violet-200/80 mt-0.5">
+                {/* violet-200 era ilegible sobre fondo claro */}
+                <p className="text-xs text-violet-800/80 dark:text-violet-200/80 mt-0.5">
                   Elegí 15 cracks y sumá puntos cada fecha
                 </p>
               </div>
-              <ChevronRight size={16} className="relative text-violet-300 flex-shrink-0 group-hover:translate-x-0.5 transition-transform" />
+              <ChevronRight size={16} className="relative text-violet-700 dark:text-violet-300 flex-shrink-0 group-hover:translate-x-0.5 transition-transform" />
             </Link>
           )}
 
@@ -477,6 +479,9 @@ export function HomePage() {
                   Creá una liga o unite con un código para competir con tus amigos
                 </p>
               </div>
+              <Link to="/ayuda" className="text-xs text-accent underline underline-offset-2">
+                Ver guía: instalar la app e invitar amigos
+              </Link>
             </div>
           )}
 

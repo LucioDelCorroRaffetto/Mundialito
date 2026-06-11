@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Lock, X } from 'lucide-react';
 import { cn } from '@/shared/lib/cn';
+import { play } from '@/shared/lib/sounds';
 import type { Achievement, AchievementTier } from '@/shared/hooks/use-achievements';
 
 interface Props {
@@ -28,6 +29,11 @@ export function AchievementCardModal({ achievement, earned, earnedAt, onClose }:
   // Close on Escape + lock body scroll while open. Without the body lock,
   // scrolling on the underlying page bleeds through the backdrop on mobile
   // (especially Safari which doesn't respect the dialog scroll containment).
+  // Fanfarria al abrir un cromo conseguido (si los sonidos están activados).
+  useEffect(() => {
+    if (achievement && earned) play('fanfare');
+  }, [achievement, earned]);
+
   useEffect(() => {
     if (!achievement) return;
     function onKey(e: KeyboardEvent) {

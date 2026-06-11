@@ -36,6 +36,7 @@ const AdminPage = lazyWithReload(() => import('@/pages/admin').then((m) => ({ de
 const LeaderboardPage = lazyWithReload(() => import('@/pages/leaderboard').then((m) => ({ default: m.LeaderboardPage })));
 const TournamentPredictionsPage = lazyWithReload(() => import('@/pages/tournament-predictions').then((m) => ({ default: m.TournamentPredictionsPage })));
 const UserProfilePage = lazyWithReload(() => import('@/pages/user-profile').then((m) => ({ default: m.UserProfilePage })));
+const HelpPage = lazyWithReload(() => import('@/pages/help').then((m) => ({ default: m.HelpPage })));
 
 /**
  * Minimal full-bleed fallback shown while a lazy page chunk is downloading.
@@ -65,6 +66,9 @@ export const router = createBrowserRouter([
   { path: '/login', element: <ErrorBoundary><LoginPage /></ErrorBoundary> },
   { path: '/register', element: <ErrorBoundary><RegisterPage /></ErrorBoundary> },
   { path: '/j/:code', element: <Page><LeagueInvitePage /></Page> },
+  // Guía de onboarding — pública a propósito, para compartirla por WhatsApp
+  // con amigos que todavía no tienen cuenta.
+  { path: '/ayuda', element: <Page><HelpPage /></Page> },
   {
     element: <RequireAuth><AppShell /></RequireAuth>,
     children: [

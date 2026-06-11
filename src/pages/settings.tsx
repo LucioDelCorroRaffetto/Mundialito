@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Moon, Sun, Zap, Type, Bell, BellOff, Pencil, Check, X, Send } from 'lucide-react';
 import { useThemeStore } from '@/theme/theme-store';
+import { play } from '@/shared/lib/sounds';
 import { useAuthStore } from '@/shared/stores/auth-store';
 import { accentList, type ThemeMode } from '@/theme/palettes';
 import { usePushNotifications } from '@/shared/hooks/use-push';
@@ -33,7 +34,7 @@ const FONT_OPTIONS: { value: FontScale; label: string; sample: string }[] = [
 
 export function SettingsPage() {
   const navigate = useNavigate();
-  const { mode, accent, fontScale, setMode, setAccent, setFontScale } = useThemeStore();
+  const { mode, accent, fontScale, soundEnabled, setMode, setAccent, setFontScale, setSoundEnabled } = useThemeStore();
   const { logout } = useAuthStore();
   const user = useAuthStore((s) => s.user);
   const { isSubscribed, isLoading: pushLoading, subscribe, unsubscribe } = usePushNotifications();
@@ -249,6 +250,44 @@ export function SettingsPage() {
         </section>
 
         {/* Font scale already rendered at the top — duplicated section removed. */}
+
+        <section className="flex flex-col gap-3">
+          <p className="text-sm-s font-semibold text-text">Sonidos</p>
+          <button
+            onClick={() => {
+              setSoundEnabled(!soundEnabled);
+              // Feedback inmediato: si lo está prendiendo, que escuche cómo suena.
+              if (!soundEnabled) setTimeout(() => play('goal'), 50);
+            }}
+            className={cn(
+              'flex items-center gap-3 p-4 rounded-lg border transition-colors text-left',
+              soundEnabled ? 'bg-accent-soft border-accent-border' : 'bg-card border-border hover:border-accent-border',
+            )}
+          >
+            <span className="text-xl">{soundEnabled ? '🔊' : '🔇'}</span>
+            <div className="flex-1">
+              <p className="text-base-s font-semibold text-text">
+                {soundEnabled ? 'Sonidos activados' : 'Sonidos desactivados'}
+              </p>
+              <p className="text-sm-s text-muted">
+                Gol al guardar pronóstico · fanfarria en logros
+              </p>
+            </div>
+            <span
+              className={cn(
+                'w-10 h-6 rounded-full relative transition-colors flex-shrink-0',
+                soundEnabled ? 'bg-accent' : 'bg-elevated border border-border',
+              )}
+            >
+              <span
+                className={cn(
+                  'absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-all',
+                  soundEnabled ? 'left-[18px]' : 'left-0.5',
+                )}
+              />
+            </span>
+          </button>
+        </section>
 
         <section className="flex flex-col gap-3">
           <p className="text-sm font-semibold text-text">Notificaciones</p>

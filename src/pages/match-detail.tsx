@@ -14,6 +14,7 @@ import { apiClient } from '@/shared/lib/api-client';
 import type { LeagueMemberPrediction } from '@/shared/hooks/use-predictions';
 import { useHaptic } from '@/shared/hooks/use-haptic';
 import { useMatch } from '@/shared/hooks/use-matches';
+import { play } from '@/shared/lib/sounds';
 import { useTeamMap } from '@/shared/hooks/use-teams';
 import { useMyLeagues } from '@/shared/hooks/use-leagues';
 
@@ -62,6 +63,12 @@ function ScoreInput({
     <div className="flex flex-col items-center gap-2 flex-1 min-w-0">
       <TeamFlag code={team.code} emoji={team.flag} size={48} />
       <span className="text-sm font-bold text-text tracking-wide">{teamDisplayCode(team.code)}</span>
+      {/* Nombre completo del país — para quienes no saben qué es "ZAF" */}
+      {team.name && team.code !== 'TBD' && (
+        <span className="text-xs text-muted text-center leading-tight -mt-1 max-w-[110px] truncate">
+          {team.name}
+        </span>
+      )}
       <div className="flex items-center gap-1.5">
         <button
           onClick={() => onChange(Math.max(0, value - 1))}
@@ -341,6 +348,7 @@ export function MatchDetailPage() {
       setSaved(true);
       dirtyRef.current = false; // server now owns the value
       vibrate(20);
+      play('goal');
     } catch (e: unknown) {
       const err = e as { response?: { data?: { error?: { message?: string } } } };
       const apiMsg = err?.response?.data?.error?.message ?? '';
@@ -379,9 +387,10 @@ export function MatchDetailPage() {
               </span>
             )}
             <div className="flex items-center justify-around w-full gap-4">
-              <div className="flex flex-col items-center gap-2">
+              <div className="flex flex-col items-center gap-1">
                 <TeamFlag code={homeTeamDisplay.code} emoji={homeTeamDisplay.flag} size={48} />
                 <span className="text-base-s font-bold text-text">{teamDisplayCode(homeTeamDisplay.code)}</span>
+                <span className="text-xs text-muted text-center leading-tight max-w-[110px] truncate">{homeTeamDisplay.name}</span>
               </div>
               <span className={cn(
                 'text-4xl font-display font-bold tabular-nums',
@@ -389,9 +398,10 @@ export function MatchDetailPage() {
               )}>
                 {match.homeScore} – {match.awayScore}
               </span>
-              <div className="flex flex-col items-center gap-2">
+              <div className="flex flex-col items-center gap-1">
                 <TeamFlag code={awayTeamDisplay.code} emoji={awayTeamDisplay.flag} size={48} />
                 <span className="text-base-s font-bold text-text">{teamDisplayCode(awayTeamDisplay.code)}</span>
+                <span className="text-xs text-muted text-center leading-tight max-w-[110px] truncate">{awayTeamDisplay.name}</span>
               </div>
             </div>
             {match.status === 'finished' && (

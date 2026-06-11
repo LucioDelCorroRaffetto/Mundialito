@@ -112,7 +112,7 @@ export function MatchesPage() {
     return (
       <div className="p-6 m-4 rounded-lg bg-red-500/10 border border-red-500/30 flex flex-col items-center gap-2 text-center animate-fade-in">
         <span className="text-2xl">⚠️</span>
-        <p className="text-sm font-semibold text-red-300">No pudimos cargar los partidos</p>
+        <p className="text-sm font-semibold text-red-600 dark:text-red-300">No pudimos cargar los partidos</p>
         <p className="text-xs text-muted max-w-xs">{String((error as Error).message)}</p>
       </div>
     );
@@ -142,7 +142,7 @@ export function MatchesPage() {
         <div className="flex items-center gap-2">
           <h1 className="text-2xl-s font-display font-bold text-text">Partidos</h1>
           {liveCount > 0 && (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-red-500/15 border border-red-500/40 text-[10px] font-bold text-red-300 uppercase tracking-wider">
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-red-500/15 border border-red-500/40 text-[10px] font-bold text-red-600 dark:text-red-300 uppercase tracking-wider">
               <span className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse" />
               {liveCount} en vivo
             </span>
@@ -227,7 +227,7 @@ export function MatchesPage() {
                         ? 'bg-red-500 text-white border-red-400 shadow-[0_0_12px_rgba(239,68,68,0.45)]'
                         : 'bg-accent text-accent-on border-accent'
                       : liveTab
-                        ? 'bg-red-500/10 border-red-500/40 text-red-300 hover:bg-red-500/15'
+                        ? 'bg-red-500/10 border-red-500/40 text-red-700 dark:text-red-300 hover:bg-red-500/15'
                         : 'bg-elevated border-border text-muted hover:text-text',
                   )}
                 >

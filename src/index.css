@@ -42,6 +42,14 @@
   --wc26-gradient: linear-gradient(120deg, var(--wc26-mex) 0%, var(--wc26-usa) 50%, var(--wc26-can) 100%);
 }
 
+/* En modo claro, los tri-color brillantes no contrastan sobre blanco —
+   usar las variantes profundas (verde bandera, azul marino, rojo vino). */
+[data-mode="light"] {
+  --wc26-mex: var(--wc26-mex-deep);
+  --wc26-usa: var(--wc26-usa-deep);
+  --wc26-can: var(--wc26-can-deep);
+}
+
 html, body, #root {
   height: 100%;
 }

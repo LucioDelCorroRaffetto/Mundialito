@@ -9,6 +9,7 @@ import { useMyLeagues } from '@/shared/hooks/use-leagues';
 import { useAuthStore } from '@/shared/stores/auth-store';
 import { SkeletonList } from '@/shared/components/skeleton';
 import { toast } from 'sonner';
+import { play } from '@/shared/lib/sounds';
 import { TeamFlag } from '@/shared/components/ui/team-flag';
 import { useFantasyRounds, useFantasyLineup, useUpsertLineup } from '@/shared/hooks/use-fantasy-lineups';
 import type { LineupPlayerInput } from '@/shared/hooks/use-fantasy-lineups';
@@ -445,6 +446,7 @@ export function FantasyPage() {
         captainId: defaultCaptain,
       });
       toast.success('¡Equipo guardado! Elegí tu 11 inicial en la pestaña Titulares.');
+      play('chime');
     } catch (e: unknown) {
       const err = e as { response?: { data?: { error?: { message?: string } } } };
       toast.error(err?.response?.data?.error?.message ?? 'Error al guardar el equipo');
@@ -1124,6 +1126,7 @@ function PerRoundLineupTab({ squadPlayers }: { squadPlayers: Player[] }) {
     try {
       await upsertLineup.mutateAsync({ round: activeSlug, players: draft });
       toast.success('¡Lineup guardado!');
+      play('chime');
       setDirty(false);
     } catch (e: any) {
       const msg = e?.response?.data?.error?.message ?? 'Error al guardar';
@@ -1189,7 +1192,7 @@ function PerRoundLineupTab({ squadPlayers }: { squadPlayers: Player[] }) {
         <div className={cn(
           'mx-4 flex items-center gap-2 px-3 py-2 rounded-lg border text-xs-s',
           isOpen
-            ? 'bg-green-500/10 border-green-500/30 text-green-300'
+            ? 'bg-green-500/10 border-green-500/30 text-green-700 dark:text-green-300'
             : 'bg-elevated border-border text-muted',
         )}>
           {isOpen ? <CheckCircle2 size={14} /> : <Lock size={14} />}
@@ -1608,7 +1611,7 @@ function UserTeamDrawer({
                               </span>
                             )}
                             {isVice && (
-                              <span className="flex items-center gap-1 text-xs-s font-bold text-slate-300 bg-slate-400/15 border border-slate-400/30 px-2 py-0.5 rounded-full flex-shrink-0">
+                              <span className="flex items-center gap-1 text-xs-s font-bold text-slate-600 dark:text-slate-300 bg-slate-400/15 border border-slate-400/30 px-2 py-0.5 rounded-full flex-shrink-0">
                                 <Shield size={10} /> VICE
                               </span>
                             )}
@@ -1657,12 +1660,12 @@ function UserTeamDrawer({
 
               {viceCaptain && (
                 <div className="p-3 rounded-xl bg-slate-400/10 border border-slate-400/20 flex items-center gap-3">
-                  <Shield size={16} className="text-slate-300 flex-shrink-0" />
+                  <Shield size={16} className="text-slate-600 dark:text-slate-300 flex-shrink-0" />
                   <div className="flex-1 min-w-0">
                     <p className="text-xs-s text-muted">Vicecapitán</p>
                     <p className="text-sm-s font-bold text-text truncate">{viceCaptain.name}</p>
                   </div>
-                  <span className="text-xs-s font-bold text-slate-300">×1.5 pts</span>
+                  <span className="text-xs-s font-bold text-slate-600 dark:text-slate-300">×1.5 pts</span>
                 </div>
               )}
             </div>
