@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Clock, MapPin, CheckCircle2, Share2, Users, Plus, Minus } from 'lucide-react';
+import { ArrowLeft, Clock, MapPin, CheckCircle2, Share2, Users, Plus, Minus, Lock } from 'lucide-react';
+import { toast } from 'sonner';
 import { ROUND_LABELS } from '@/shared/data/mock';
 import { getMaxPossiblePoints } from '@/shared/lib/scoring';
 import { Button } from '@/shared/components/ui/button';
@@ -315,13 +316,31 @@ export function MatchDetailPage() {
     }
   };
 
+  // Lock derivado de la hora — kickoff_utc - 5 min. Una vez locked, los
+  // botones +/- ya no editan y mostramos un toast explicando por qué.
+  const isPredictionLocked =
+    match.status !== 'scheduled' ||
+    new Date(match.predictionLockUtc).getTime() <= Date.now();
+
+  const notifyLocked = () => {
+    if (match.status === 'finished') {
+      toast.error('El partido ya terminó — el pronóstico está bloqueado.');
+    } else if (match.status === 'live') {
+      toast.error('El partido está en vivo — no se puede modificar el pronóstico.');
+    } else {
+      toast.error('El plazo para pronosticar ya cerró.');
+    }
+  };
+
   const updateHomeScore = (v: number) => {
+    if (isPredictionLocked) { notifyLocked(); return; }
     setHomeScore(v);
     setSaved(false);
     dirtyRef.current = true;
   };
 
   const updateAwayScore = (v: number) => {
+    if (isPredictionLocked) { notifyLocked(); return; }
     setAwayScore(v);
     setSaved(false);
     dirtyRef.current = true;
@@ -378,8 +397,11 @@ export function MatchDetailPage() {
 
       {/* Score card */}
       <div className="mx-4 p-4 rounded-xl bg-card border border-border shadow-card overflow-hidden">
-        {match.status !== 'scheduled' && match.homeScore !== null ? (
-          // Live / finished: show actual score
+        {match.status !== 'scheduled' ? (
+          // Live / finished: muestra el marcador real si lo tenemos, o un
+          // placeholder "—" mientras el sync no llegó todavía. Antes
+          // caíamos al ScoreInput cuando homeScore era null, lo que dejaba
+          // editar el pronóstico en partidos ya en vivo o terminados.
           <div className="flex flex-col items-center gap-2">
             {match.status === 'live' && (
               <span className="flex items-center gap-1.5 mb-1">
@@ -397,7 +419,7 @@ export function MatchDetailPage() {
                 'text-4xl font-display font-bold tabular-nums',
                 match.status === 'live' ? 'text-red-400' : 'text-text'
               )}>
-                {match.homeScore} – {match.awayScore}
+                {match.homeScore ?? '—'} – {match.awayScore ?? '—'}
               </span>
               <div className="flex flex-col items-center gap-1">
                 <TeamFlag code={awayTeamDisplay.code} emoji={awayTeamDisplay.flag} size={48} />
@@ -409,8 +431,30 @@ export function MatchDetailPage() {
               <span className="text-xs-s text-muted mt-1">Resultado final</span>
             )}
           </div>
+        ) : isPredictionLocked ? (
+          // Scheduled pero el lock ya pasó: bloquea la edición sin esperar
+          // a que llegue el sync FIFA con el status='live'/'finished'.
+          <div className="flex flex-col items-center gap-2">
+            <span className="flex items-center gap-1.5 mb-1">
+              <Lock size={12} className="text-muted" />
+              <span className="text-xs-s font-bold text-muted uppercase tracking-wider">Pronóstico cerrado</span>
+            </span>
+            <div className="flex items-center justify-around w-full gap-4">
+              <div className="flex flex-col items-center gap-1">
+                <TeamFlag code={homeTeamDisplay.code} emoji={homeTeamDisplay.flag} size={48} />
+                <span className="text-base-s font-bold text-text">{teamDisplayCode(homeTeamDisplay.code)}</span>
+                <span className="text-xs text-muted text-center leading-tight max-w-[110px] truncate">{homeTeamDisplay.name}</span>
+              </div>
+              <span className="text-4xl font-display font-bold text-muted tabular-nums">— – —</span>
+              <div className="flex flex-col items-center gap-1">
+                <TeamFlag code={awayTeamDisplay.code} emoji={awayTeamDisplay.flag} size={48} />
+                <span className="text-base-s font-bold text-text">{teamDisplayCode(awayTeamDisplay.code)}</span>
+                <span className="text-xs text-muted text-center leading-tight max-w-[110px] truncate">{awayTeamDisplay.name}</span>
+              </div>
+            </div>
+          </div>
         ) : (
-          // Scheduled: always show score input (no league required to predict)
+          // Scheduled + abierto: inputs editables.
           <div className="flex items-center justify-between gap-1">
             <ScoreInput value={homeScore} onChange={updateHomeScore} team={homeTeamDisplay} />
             <span className="text-sm font-bold text-muted/50 flex-shrink-0 pb-4">vs</span>
