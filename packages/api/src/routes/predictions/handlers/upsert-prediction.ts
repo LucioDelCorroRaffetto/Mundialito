@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { z } from 'zod';
-import { eq, sql } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import { db } from '../../../db/index.js';
 import { predictions, matches, leagueMembers } from '../../../db/schema/index.js';
 import { AppError, NotFoundError } from '../../../lib/errors.js';
@@ -55,7 +55,18 @@ export async function upsertPredictionHandler(req: Request, res: Response) {
     if (!userLeagueIds.includes(leagueId)) {
       throw new AppError('FORBIDDEN', 'Not a member of this league', 403);
     }
-    targetLeagueIds = [leagueId];
+    // Auto-sanación: si el usuario no tiene predicción para este match en
+    // alguna de sus otras ligas (típicamente porque se unió a esa liga
+    // después de pronosticar), también la creamos allí — manteniendo la
+    // invariante "una predicción por match propagada a todas mis ligas".
+    // Las predicciones de otras ligas que YA existen no se tocan.
+    const existing = await db
+      .select({ leagueId: predictions.leagueId })
+      .from(predictions)
+      .where(and(eq(predictions.userId, userId), eq(predictions.matchId, matchId)));
+    const existingSet = new Set(existing.map((e) => e.leagueId));
+    const missingLeagues = userLeagueIds.filter((id) => id !== leagueId && !existingSet.has(id));
+    targetLeagueIds = [leagueId, ...missingLeagues];
   } else {
     targetLeagueIds = userLeagueIds;
   }

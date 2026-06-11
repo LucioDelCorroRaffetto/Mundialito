@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { z } from 'zod';
-import { and, eq, gte, lte, asc } from 'drizzle-orm';
+import { and, eq, gte, lte, asc, or } from 'drizzle-orm';
 import { db } from '../../../db/index.js';
 import { matches } from '../../../db/schema/index.js';
 
@@ -20,7 +20,15 @@ export async function listMatchesHandler(req: Request, res: Response) {
   const { status, from, to, group, limit } = parsed.data;
 
   const conditions = [];
-  if (status) conditions.push(eq(matches.status, status));
+  // 'scheduled' incluye también 'live': el sync FIFA puede tardar en elevar
+  // un partido a 'live' (espera al primer evento), pero el home/countdown ya
+  // tiene que ver el partido en curso para mostrar el banner "EN VIVO".
+  // Mantener filtro estricto en 'live'/'finished' (usados explícitamente).
+  if (status === 'scheduled') {
+    conditions.push(or(eq(matches.status, 'scheduled'), eq(matches.status, 'live')));
+  } else if (status) {
+    conditions.push(eq(matches.status, status));
+  }
   if (from) conditions.push(gte(matches.kickoffUtc, from));
   if (to) conditions.push(lte(matches.kickoffUtc, to));
   if (group) conditions.push(eq(matches.group, group));
