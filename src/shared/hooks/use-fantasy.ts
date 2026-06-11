@@ -21,6 +21,8 @@ export interface FantasySquadPlayer extends Player {
 export interface FantasyTeamWithSquad {
   team: FantasyTeam | null;
   squad: FantasySquadPlayer[];
+  round?: string;
+  lineupHidden?: boolean;
 }
 
 /** Body de PUT /fantasy/squad — plantel completo + titulares + capitán. */
@@ -59,12 +61,20 @@ export function useUpdateFantasySquad() {
   });
 }
 
-/** Fantasy team of any user (read-only, for standings viewer). */
-export function useUserFantasyTeam(userId: number | null) {
+/** Fantasy team of any user (read-only, for standings viewer).
+ *  Optional `round` viewer: lets the drawer flip between Fecha 1 / Fecha 2 /
+ *  etc. to compare lineups across stages without leaving the same modal.
+ *  When omitted, the server picks the current round (with fallback to the
+ *  user's last saved lineup if the current round is still empty). */
+export function useUserFantasyTeam(userId: number | null, round?: string | null) {
   return useQuery({
-    queryKey: ['fantasy', 'team', userId],
+    queryKey: ['fantasy', 'team', userId, round ?? null],
     queryFn: async () => {
-      const { data } = await apiClient.get<FantasyTeamWithSquad>(`/fantasy/team/${userId}`);
+      const params = round ? { round } : undefined;
+      const { data } = await apiClient.get<FantasyTeamWithSquad>(
+        `/fantasy/team/${userId}`,
+        { params },
+      );
       return data;
     },
     enabled: userId != null,

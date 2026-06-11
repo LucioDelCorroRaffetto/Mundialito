@@ -1526,19 +1526,14 @@ function UserTeamDrawer({
   teamName: string;
   onClose: () => void;
 }) {
-  // Bloquea el scroll del documento padre mientras el drawer está abierto.
-  // Sin esto, en mobile el scroll dentro del drawer "se escapa" al body
-  // (scroll chaining): el usuario empuja para bajar dentro de la lista de
-  // suplentes, el body de la página se mueve, y al soltar parece que la
-  // vista del drawer se "reinicia" cuando en realidad scrolleó el fondo.
-  useEffect(() => {
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => { document.body.style.overflow = prev; };
-  }, []);
+  // Selector de fecha — permite ver el lineup que el usuario armó en
+  // cualquier fecha del torneo (no sólo la activa).
+  const { data: roundsData } = useFantasyRounds();
+  const [selectedRound, setSelectedRound] = useState<string | null>(null);
 
-  const { data, isLoading } = useUserFantasyTeam(userId);
+  const { data, isLoading } = useUserFantasyTeam(userId, selectedRound);
   const squad = data?.squad ?? [];
+  const effectiveRound = data?.round ?? selectedRound ?? roundsData?.meta.currentRound ?? null;
 
   const starters = squad.filter((p) => p.isStarter);
   const bench = squad.filter((p) => !p.isStarter);
@@ -1559,32 +1554,70 @@ function UserTeamDrawer({
       onClick={onClose}
     >
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
-      {/* Sheet */}
+      {/* Sheet — draggable hacia abajo desde el handle/header para cerrar. El
+          body (lista de jugadores) NO es draggable: el touch ahí scrollea
+          la lista, no mueve el sheet. */}
       <motion.div
         initial={{ y: '100%' }}
         animate={{ y: 0 }}
         exit={{ y: '100%' }}
         transition={{ type: 'spring', damping: 30, stiffness: 300 }}
-        className="relative z-10 w-full max-w-lg bg-card rounded-t-2xl border-t border-border max-h-[85vh] flex flex-col"
+        className="relative z-10 w-full max-w-lg bg-card rounded-t-2xl border-t border-border h-[85vh] flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Handle */}
-        <div className="flex justify-center pt-3 pb-1 flex-shrink-0">
-          <div className="w-10 h-1 rounded-full bg-border" />
-        </div>
-
-        {/* Header */}
-        <div className="px-5 pb-3 border-b border-border flex items-center gap-3 flex-shrink-0">
-          <Trophy size={18} className="text-accent flex-shrink-0" />
-          <div className="flex-1 min-w-0">
-            <p className="text-sm-s font-bold text-text truncate">{teamName}</p>
-            <p className="text-xs-s text-muted truncate">{username}</p>
+        {/* Handle + Header (zona draggable para cerrar) */}
+        <motion.div
+          drag="y"
+          dragConstraints={{ top: 0, bottom: 0 }}
+          dragElastic={{ top: 0, bottom: 0.5 }}
+          onDragEnd={(_, info) => {
+            if (info.offset.y > 120 || info.velocity.y > 500) onClose();
+          }}
+          className="flex-shrink-0 cursor-grab active:cursor-grabbing touch-none"
+        >
+          <div className="flex justify-center pt-3 pb-1">
+            <div className="w-10 h-1 rounded-full bg-border" />
           </div>
-          <span className="text-lg font-bold text-accent">{totalPoints} pts</span>
-        </div>
+          <div className="px-5 pb-3 border-b border-border flex items-center gap-3">
+            <Trophy size={18} className="text-accent flex-shrink-0" />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm-s font-bold text-text truncate">{teamName}</p>
+              <p className="text-xs-s text-muted truncate">{username}</p>
+            </div>
+            <span className="text-lg font-bold text-accent">{totalPoints} pts</span>
+          </div>
+        </motion.div>
 
-        {/* Body */}
-        <div className="overflow-y-auto overscroll-contain flex-1 px-4 pb-6">
+        {/* Tabs por fecha — muestra los rounds del torneo para ver el 11
+            que armó el usuario en cada uno. Marca con dot el round activo. */}
+        {roundsData && roundsData.data.length > 0 && (
+          <div className="flex gap-1 overflow-x-auto no-scrollbar px-3 py-2 border-b border-border flex-shrink-0">
+            {roundsData.data.map((r) => {
+              const active = effectiveRound === r.slug;
+              return (
+                <button
+                  key={r.slug}
+                  type="button"
+                  onClick={() => setSelectedRound(r.slug)}
+                  className={cn(
+                    'flex-shrink-0 text-xs-s font-semibold px-3 py-1.5 rounded-full transition-colors',
+                    active
+                      ? 'bg-accent text-accent-on'
+                      : 'bg-elevated text-muted hover:text-text',
+                  )}
+                >
+                  {r.label.replace('Grupos — ', '').replace('Ronda de ', 'R')}
+                  {r.isCurrent && !active && <span className="ml-1 w-1.5 h-1.5 rounded-full bg-accent inline-block" />}
+                </button>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Body — scroll interno. min-h-0 es necesario para que flex-1 +
+            overflow-y-auto se comporten en mobile (sin él el contenedor
+            crece más allá del max-h del padre y el scroll no aparece). */}
+        <div className="overflow-y-auto overscroll-contain flex-1 min-h-0 px-4 pb-6">
           {isLoading ? (
             <div className="py-8"><SkeletonList count={5} /></div>
           ) : squad.length === 0 ? (

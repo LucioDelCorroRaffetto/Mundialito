@@ -37,12 +37,13 @@ export async function upsertTournamentPredictionHandler(req: Request, res: Respo
   const userId = req.user!.id;
 
   // ── Tournament lock ───────────────────────────────────────────────────────
-  // Originalmente este lock cerraba 5 min antes del partido inaugural. Lo
-  // extendimos 24h porque mucha gente terminó de pronosticar el día del
-  // arranque y la pestaña /tournament quedaba bloqueada antes de que
-  // pudieran completar campeón/top scorer/etc. Esta ventana se cierra
-  // el 2026-06-12 18:55 UTC (24h después del kickoff inaugural).
-  const TOURNAMENT_LOCK_UTC = '2026-06-12T18:55:00Z';
+  // Originalmente este lock cerraba 5 min antes del partido inaugural. Se
+  // extendió primero 24h y luego una semana adicional: los pronósticos de
+  // torneo (campeón, top scorer, etc.) no afectan partidos ya jugados — el
+  // scoring se evalúa al final de la fase de grupos / del torneo — así que
+  // tiene sentido aceptar entradas tardías mientras siga abierta la fase
+  // de grupos. Cierra el 2026-06-19 18:55 UTC.
+  const TOURNAMENT_LOCK_UTC = '2026-06-19T18:55:00Z';
   if (new Date(TOURNAMENT_LOCK_UTC) <= new Date()) {
     throw new AppError(
       'TOURNAMENT_LOCKED',

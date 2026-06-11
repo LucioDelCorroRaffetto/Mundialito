@@ -25,12 +25,10 @@ export const FANTASY_ROUNDS: FantasyRound[] = [
   {
     slug: 'group_1',
     label: 'Grupos — Fecha 1',
-    // Extendido 24h tras el kickoff inaugural: mucha gente entró tarde a
-    // armar plantel/lineup y el deadline original cortaba antes de que
-    // pudieran terminar. El scoring del MEX-ZAF (ya jugado) usa el lineup
-    // congelado al momento del kickoff; cambios ahora aplican a los
-    // partidos restantes de la fecha 1.
-    deadline: '2026-06-12T18:55:00Z',
+    // Extendido nuevamente: 24h más tras el corte previo. Mucha gente
+    // sigue completando capitanes/suplentes; los partidos que ya se
+    // jugaron usan el lineup congelado al kickoff de cada uno.
+    deadline: '2026-06-13T18:55:00Z',
     dbRound: 'group',
     dateStart: '2026-06-11',
     dateEnd: '2026-06-18',

@@ -1,9 +1,9 @@
 import { Request, Response } from 'express';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, desc } from 'drizzle-orm';
 import { db } from '../../../db/index.js';
 import { fantasyTeams, fantasySquadPlayers, fantasyLineups, players } from '../../../db/schema/index.js';
 import { computeFantasyPointsByPlayer } from '../../../services/fantasy-scoring-service.js';
-import { getCurrentFantasyRound, isRoundOpen } from '../../../lib/fantasy-rounds.js';
+import { getCurrentFantasyRound, isRoundOpen, ROUND_BY_SLUG } from '../../../lib/fantasy-rounds.js';
 import { AppError } from '../../../lib/errors.js';
 
 /**
@@ -31,10 +31,17 @@ export async function getUserFantasyTeamHandler(req: Request, res: Response) {
     return res.json({ team: null, squad: [], round: null });
   }
 
+  // El cliente puede pasar ?round=group_2 para inspeccionar el lineup de
+  // otra fecha (ver el equipo de la rival en la fecha pasada, etc.). Si
+  // no se pasa, usamos el round activo. Validamos contra los slugs conocidos
+  // así no aceptamos cualquier string arbitrario.
+  const requestedRound = String(req.query.round ?? '');
   const activeRound = getCurrentFantasyRound();
-  const roundSlug = activeRound?.slug ?? 'final';
+  let roundSlug = ROUND_BY_SLUG.has(requestedRound)
+    ? requestedRound
+    : (activeRound?.slug ?? 'final');
 
-  const lineupRows = await db
+  let lineupRows = await db
     .select({
       playerId: fantasyLineups.playerId,
       isStarter: fantasyLineups.isStarter,
@@ -43,6 +50,31 @@ export async function getUserFantasyTeamHandler(req: Request, res: Response) {
     })
     .from(fantasyLineups)
     .where(and(eq(fantasyLineups.userId, targetUserId), eq(fantasyLineups.round, roundSlug)));
+
+  // Mismo fallback que get-my-team: si el round pedido no tiene lineup
+  // guardado, mostramos el último que el user armó en cualquier round, así
+  // el drawer nunca queda con titulares vacíos cuando hay data previa.
+  if (lineupRows.length === 0 && !ROUND_BY_SLUG.has(requestedRound)) {
+    const lastRow = await db
+      .select({ round: fantasyLineups.round })
+      .from(fantasyLineups)
+      .where(eq(fantasyLineups.userId, targetUserId))
+      .orderBy(desc(fantasyLineups.createdAt))
+      .limit(1)
+      .get();
+    if (lastRow) {
+      roundSlug = lastRow.round;
+      lineupRows = await db
+        .select({
+          playerId: fantasyLineups.playerId,
+          isStarter: fantasyLineups.isStarter,
+          isCaptain: fantasyLineups.isCaptain,
+          isViceCaptain: fantasyLineups.isViceCaptain,
+        })
+        .from(fantasyLineups)
+        .where(and(eq(fantasyLineups.userId, targetUserId), eq(fantasyLineups.round, roundSlug)));
+    }
+  }
   const lineupByPlayer = new Map(lineupRows.map((r) => [r.playerId, r]));
 
   const squadRows = await db
