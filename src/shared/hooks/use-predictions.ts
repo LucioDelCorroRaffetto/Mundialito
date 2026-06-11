@@ -114,6 +114,17 @@ export function useLeagueMatchPredictions(matchId: number | undefined, leagueId:
       return data;
     },
     enabled: matchId !== undefined && leagueId != null,
+    // Refresh cada 60s mientras la pestaña esté activa: cuando el sync FIFA
+    // recalcula `predictions.points` al terminar un partido, el cliente que
+    // tenía la página abierta no se enteraba — los `+X pts` no aparecían
+    // hasta que recargara. Con este intervalo, la columna de puntos por
+    // pronóstico se actualiza sola en los minutos posteriores al final.
+    refetchInterval: 60_000,
+    refetchIntervalInBackground: false,
+    // Sin staleTime: queremos que cada montaje del componente (cambiar de
+    // tab de liga y volver) traiga fresco, no la versión cacheada que
+    // todavía tenía points=null.
+    staleTime: 0,
   });
 }
 

@@ -32,6 +32,14 @@ export function useLeagueSocket(leagueId: number | undefined) {
           qc.invalidateQueries({ queryKey: ['matches'] });
           if (msg.data?.id) {
             qc.invalidateQueries({ queryKey: ['match', msg.data.id] });
+            // Cuando un partido se finaliza, el sync recalcula los `points`
+            // de las predicciones. Sin invalidar también la vista de
+            // pronósticos por liga, los `+X pts` que muestra cada miembro
+            // se quedan pegados al valor que tenían al inicio (típicamente
+            // null) hasta que el usuario refresca a mano.
+            qc.invalidateQueries({ queryKey: ['predictions', 'league-match', msg.data.id] });
+            qc.invalidateQueries({ queryKey: ['predictions', 'mine'] });
+            qc.invalidateQueries({ queryKey: ['global-leaderboard'] });
           }
         }
 
