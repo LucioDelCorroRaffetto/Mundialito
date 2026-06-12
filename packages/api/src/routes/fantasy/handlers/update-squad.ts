@@ -1,10 +1,11 @@
 import { Request, Response } from 'express';
 import { z } from 'zod';
-import { eq, inArray, and, notInArray, asc } from 'drizzle-orm';
+import { eq, inArray, and, notInArray } from 'drizzle-orm';
 import { db } from '../../../db/index.js';
-import { fantasyTeams, fantasySquadPlayers, players, fantasyLineups, matches } from '../../../db/schema/index.js';
+import { fantasyTeams, fantasySquadPlayers, players, fantasyLineups } from '../../../db/schema/index.js';
 import { AppError } from '../../../lib/errors.js';
 import { isLocked } from '../../../lib/match-helpers.js';
+import { ROUND_BY_SLUG } from '../../../lib/fantasy-rounds.js';
 
 // Standard WC fantasy squad composition.
 const POSITION_QUOTAS: Record<'GK' | 'DEF' | 'MID' | 'FWD', number> = {
@@ -31,20 +32,18 @@ export async function updateSquadHandler(req: Request, res: Response) {
   const { playerIds } = req.body as z.infer<typeof updateSquadSchema>;
   let { starterIds, captainId } = req.body as z.infer<typeof updateSquadSchema>;
 
-  // Lock the squad once the tournament has kicked off. The lineup is what
-  // the user tweaks per round; the underlying 15-man squad is meant to be
-  // frozen at the start to prevent late-game reshuffles. Same threshold the
-  // tournament-prediction handler uses.
-  const firstMatch = await db
-    .select({ predictionLockUtc: matches.predictionLockUtc })
-    .from(matches)
-    .orderBy(asc(matches.kickoffUtc))
-    .limit(1)
-    .get();
-  if (firstMatch?.predictionLockUtc && isLocked(firstMatch.predictionLockUtc)) {
+  // Lock del plantel: usamos el deadline del round 'group_1' (Fecha 1)
+  // como umbral. Antes usábamos el predictionLockUtc del primer partido,
+  // pero ese cierra 5 min antes del kickoff y dejó usuarios con plantel
+  // incompleto durante toda la Fecha 1. Ahora pueden cerrar el plantel
+  // hasta que cierre la Fecha 1 — coherente con el deadline del lineup
+  // que ya conoce el usuario.
+  const group1 = ROUND_BY_SLUG.get('group_1');
+  const squadLockUtc = group1?.deadline;
+  if (squadLockUtc && isLocked(squadLockUtc)) {
     throw new AppError(
       'SQUAD_LOCKED',
-      'El plantel ya no se puede modificar — el torneo comenzó',
+      'El plantel ya no se puede modificar — el plazo de Fecha 1 cerró',
       409,
     );
   }

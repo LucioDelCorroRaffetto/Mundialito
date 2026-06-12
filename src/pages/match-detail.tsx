@@ -25,6 +25,30 @@ function teamDisplayCode(code: string): string {
   return code === 'TBD' ? 'Por definir' : code;
 }
 
+/** Mapping de nombres muy largos a versiones cortas para que entren en
+ *  los cards del partido sin truncarse. Los demás equipos se renderizan
+ *  con su nombre real. */
+const SHORT_TEAM_NAME: Record<string, string> = {
+  'Bosnia-Herzegovina': 'Bosnia',
+  'Bosnia y Herzegovina': 'Bosnia',
+  'Estados Unidos': 'EE. UU.',
+  'Países Bajos': 'P. Bajos',
+  'Arabia Saudita': 'Arabia',
+  'República Checa': 'Chequia',
+  'República Democrática del Congo': 'RD Congo',
+  'Cabo Verde': 'C. Verde',
+  'Costa de Marfil': 'C. Marfil',
+  'Trinidad y Tobago': 'Trinidad',
+  'Nueva Zelanda': 'N. Zelanda',
+  'Corea del Norte': 'C. Norte',
+  'Corea del Sur': 'Corea',
+  'Costa Rica': 'C. Rica',
+};
+
+function shortTeamName(name: string): string {
+  return SHORT_TEAM_NAME[name] ?? name;
+}
+
 function PointsPreview({ home, away }: { home: number; away: number }) {
   const { isDraw, ifExact, ifWinnerDiff, ifWinner } = getMaxPossiblePoints(home, away);
   return (
@@ -582,7 +606,7 @@ export function MatchDetailPage() {
               <div className="flex flex-col items-center gap-1">
                 <TeamFlag code={homeTeamDisplay.code} emoji={homeTeamDisplay.flag} size={48} />
                 <span className="text-base-s font-bold text-text">{teamDisplayCode(homeTeamDisplay.code)}</span>
-                <span className="text-xs text-muted text-center leading-tight max-w-[110px] truncate">{homeTeamDisplay.name}</span>
+                <span className="text-xs text-muted text-center leading-tight max-w-[120px] line-clamp-2 break-words">{shortTeamName(homeTeamDisplay.name)}</span>
               </div>
               <span className={cn(
                 'text-4xl font-display font-bold tabular-nums',
@@ -593,7 +617,7 @@ export function MatchDetailPage() {
               <div className="flex flex-col items-center gap-1">
                 <TeamFlag code={awayTeamDisplay.code} emoji={awayTeamDisplay.flag} size={48} />
                 <span className="text-base-s font-bold text-text">{teamDisplayCode(awayTeamDisplay.code)}</span>
-                <span className="text-xs text-muted text-center leading-tight max-w-[110px] truncate">{awayTeamDisplay.name}</span>
+                <span className="text-xs text-muted text-center leading-tight max-w-[120px] line-clamp-2 break-words">{shortTeamName(awayTeamDisplay.name)}</span>
               </div>
             </div>
             {match.status === 'finished' && (
@@ -612,13 +636,13 @@ export function MatchDetailPage() {
               <div className="flex flex-col items-center gap-1">
                 <TeamFlag code={homeTeamDisplay.code} emoji={homeTeamDisplay.flag} size={48} />
                 <span className="text-base-s font-bold text-text">{teamDisplayCode(homeTeamDisplay.code)}</span>
-                <span className="text-xs text-muted text-center leading-tight max-w-[110px] truncate">{homeTeamDisplay.name}</span>
+                <span className="text-xs text-muted text-center leading-tight max-w-[120px] line-clamp-2 break-words">{shortTeamName(homeTeamDisplay.name)}</span>
               </div>
               <span className="text-4xl font-display font-bold text-muted tabular-nums">— – —</span>
               <div className="flex flex-col items-center gap-1">
                 <TeamFlag code={awayTeamDisplay.code} emoji={awayTeamDisplay.flag} size={48} />
                 <span className="text-base-s font-bold text-text">{teamDisplayCode(awayTeamDisplay.code)}</span>
-                <span className="text-xs text-muted text-center leading-tight max-w-[110px] truncate">{awayTeamDisplay.name}</span>
+                <span className="text-xs text-muted text-center leading-tight max-w-[120px] line-clamp-2 break-words">{shortTeamName(awayTeamDisplay.name)}</span>
               </div>
             </div>
           </div>
