@@ -221,6 +221,11 @@ function ForecastPanel({ matchId, homeCode, awayCode }: { matchId: number; homeC
   const top = data.topScores[0];
   const topPct = Math.round((top?.prob ?? 0) * 100);
 
+  // Tonos semánticos fijos, no atados al accent del tema. Antes usábamos
+  // bg-accent para home y bg-orange-400 para away, lo que chocaba si el
+  // usuario tenía el accent en 'orange' o 'gold' (las dos barras se veían
+  // del mismo color). Estos 3 tonos contrastan entre sí y siguen legibles
+  // tanto en modo claro como oscuro.
   return (
     <div className="mx-4 mt-3 p-4 rounded-lg bg-elevated border border-border">
       <div className="flex items-center justify-between mb-2">
@@ -230,15 +235,15 @@ function ForecastPanel({ matchId, homeCode, awayCode }: { matchId: number; homeC
         </span>
       </div>
       {/* Probability bar */}
-      <div className="flex h-2 rounded-full overflow-hidden mb-2">
-        <div className="bg-accent" style={{ width: `${homePct}%` }} />
-        <div className="bg-muted/50" style={{ width: `${drawPct}%` }} />
-        <div className="bg-orange-400" style={{ width: `${awayPct}%` }} />
+      <div className="flex h-2 rounded-full overflow-hidden mb-2 bg-elevated">
+        <div className="bg-emerald-500 dark:bg-emerald-400" style={{ width: `${homePct}%` }} />
+        <div className="bg-slate-400 dark:bg-slate-500" style={{ width: `${drawPct}%` }} />
+        <div className="bg-sky-500 dark:bg-sky-400" style={{ width: `${awayPct}%` }} />
       </div>
       <div className="flex items-center justify-between text-xs-s">
-        <span className="text-accent font-bold">{homeCode} {homePct}%</span>
-        <span className="text-muted font-semibold">Empate {drawPct}%</span>
-        <span className="text-orange-400 font-bold">{awayCode} {awayPct}%</span>
+        <span className="text-emerald-600 dark:text-emerald-400 font-bold">{homeCode} {homePct}%</span>
+        <span className="text-slate-500 dark:text-slate-400 font-semibold">Empate {drawPct}%</span>
+        <span className="text-sky-600 dark:text-sky-400 font-bold">{awayCode} {awayPct}%</span>
       </div>
       {top && (
         <p className="text-xs-s text-muted mt-2 text-center">
