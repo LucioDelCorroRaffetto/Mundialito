@@ -1,10 +1,10 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { motion } from 'framer-motion';
+import { motion, useDragControls } from 'framer-motion';
 import { ChevronDown, Check, Trophy, LayoutList, Layers, Star, Crown, Shield, BarChart2, BookOpen, ChevronRight, Lock, CheckCircle2 } from 'lucide-react';
 import { cn } from '@/shared/lib/cn';
 import { useTeams } from '@/shared/hooks/use-teams';
 import { usePlayers } from '@/shared/hooks/use-players';
-import { useMyFantasyTeam, useUpdateFantasySquad, useFantasyStandings, useUserFantasyTeam } from '@/shared/hooks/use-fantasy';
+import { useMyFantasyTeam, useUpdateFantasySquad, useFantasyStandings, useUserFantasyTeam, useUserFantasyPointsByRound } from '@/shared/hooks/use-fantasy';
 import { useMyLeagues } from '@/shared/hooks/use-leagues';
 import { useAuthStore } from '@/shared/stores/auth-store';
 import { SkeletonList } from '@/shared/components/skeleton';
@@ -1180,7 +1180,7 @@ function PerRoundLineupTab({ squadPlayers }: { squadPlayers: Player[] }) {
               )}
             >
               {!r.isOpen && <Lock size={10} />}
-              {r.label.replace('Grupos — ', '')}
+              {shortRoundLabel(r.label)}
               {r.isCurrent && <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />}
             </button>
           ))}
@@ -1515,6 +1515,18 @@ function LineupTab({
 
 // ─── User fantasy team drawer ────────────────────────────────────────────────
 
+/** Acorta el label canónico del round (ej: "Octavos de final" → "Octavos")
+ *  para que entren todos los chips en una sola línea en mobile. */
+function shortRoundLabel(label: string): string {
+  return label
+    .replace('Grupos — ', '')
+    .replace('Ronda de 32', 'R32')
+    .replace('Octavos de final', 'Octavos')
+    .replace('Cuartos de final', 'Cuartos')
+    .replace('Semifinales', 'Semis')
+    .replace('Final y 3er puesto', 'Final');
+}
+
 function UserTeamDrawer({
   userId,
   username,
@@ -1526,12 +1538,20 @@ function UserTeamDrawer({
   teamName: string;
   onClose: () => void;
 }) {
+  const dragControls = useDragControls();
   // Selector de fecha — permite ver el lineup que el usuario armó en
   // cualquier fecha del torneo (no sólo la activa).
   const { data: roundsData } = useFantasyRounds();
   const [selectedRound, setSelectedRound] = useState<string | null>(null);
 
   const { data, isLoading } = useUserFantasyTeam(userId, selectedRound);
+  // Puntos por round del usuario — alimenta el badge debajo de cada tab.
+  const { data: pointsByRoundData } = useUserFantasyPointsByRound(userId);
+  const pointsByRound = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const r of pointsByRoundData ?? []) map.set(r.round, r.points);
+    return map;
+  }, [pointsByRoundData]);
   const squad = data?.squad ?? [];
   const effectiveRound = data?.round ?? selectedRound ?? roundsData?.meta.currentRound ?? null;
 
@@ -1554,26 +1574,30 @@ function UserTeamDrawer({
       onClick={onClose}
     >
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
-      {/* Sheet — draggable hacia abajo desde el handle/header para cerrar. El
-          body (lista de jugadores) NO es draggable: el touch ahí scrollea
-          la lista, no mueve el sheet. */}
+      {/* Sheet — el sheet entero es el que se mueve, pero el drag SOLO se
+          inicia desde el handle/header (dragListener={false} + dragControls).
+          Así el body (lista) sigue siendo scrolleable con touch normal. */}
       <motion.div
         initial={{ y: '100%' }}
         animate={{ y: 0 }}
         exit={{ y: '100%' }}
         transition={{ type: 'spring', damping: 30, stiffness: 300 }}
+        drag="y"
+        dragControls={dragControls}
+        dragListener={false}
+        dragConstraints={{ top: 0, bottom: 0 }}
+        dragElastic={{ top: 0, bottom: 0.4 }}
+        onDragEnd={(_, info) => {
+          if (info.offset.y > 120 || info.velocity.y > 500) onClose();
+        }}
         className="relative z-10 w-full max-w-lg bg-card rounded-t-2xl border-t border-border h-[85vh] flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Handle + Header (zona draggable para cerrar) */}
-        <motion.div
-          drag="y"
-          dragConstraints={{ top: 0, bottom: 0 }}
-          dragElastic={{ top: 0, bottom: 0.5 }}
-          onDragEnd={(_, info) => {
-            if (info.offset.y > 120 || info.velocity.y > 500) onClose();
-          }}
-          className="flex-shrink-0 cursor-grab active:cursor-grabbing touch-none"
+        {/* Handle + Header (única zona que inicia el drag — el sheet entero
+            se mueve). touch-none evita que el browser robe el gesto. */}
+        <div
+          onPointerDown={(e) => dragControls.start(e)}
+          className="flex-shrink-0 cursor-grab active:cursor-grabbing touch-none select-none"
         >
           <div className="flex justify-center pt-3 pb-1">
             <div className="w-10 h-1 rounded-full bg-border" />
@@ -1586,28 +1610,44 @@ function UserTeamDrawer({
             </div>
             <span className="text-lg font-bold text-accent">{totalPoints} pts</span>
           </div>
-        </motion.div>
+        </div>
 
         {/* Tabs por fecha — muestra los rounds del torneo para ver el 11
-            que armó el usuario en cada uno. Marca con dot el round activo. */}
+            que armó el usuario en cada uno. Cada chip muestra labels cortos
+            (Octavos, Cuartos, Semis, Final) y los pts del usuario en esa
+            fecha. Marca con dot el round activo del torneo. */}
         {roundsData && roundsData.data.length > 0 && (
           <div className="flex gap-1 overflow-x-auto no-scrollbar px-3 py-2 border-b border-border flex-shrink-0">
             {roundsData.data.map((r) => {
               const active = effectiveRound === r.slug;
+              const pts = pointsByRound.get(r.slug);
+              const hasPts = pts != null && pts > 0;
               return (
                 <button
                   key={r.slug}
                   type="button"
                   onClick={() => setSelectedRound(r.slug)}
                   className={cn(
-                    'flex-shrink-0 text-xs-s font-semibold px-3 py-1.5 rounded-full transition-colors',
+                    'flex-shrink-0 flex items-center gap-1.5 text-xs-s font-semibold px-3 py-1.5 rounded-full transition-colors',
                     active
                       ? 'bg-accent text-accent-on'
                       : 'bg-elevated text-muted hover:text-text',
                   )}
                 >
-                  {r.label.replace('Grupos — ', '').replace('Ronda de ', 'R')}
-                  {r.isCurrent && !active && <span className="ml-1 w-1.5 h-1.5 rounded-full bg-accent inline-block" />}
+                  <span>{shortRoundLabel(r.label)}</span>
+                  {hasPts && (
+                    <span
+                      className={cn(
+                        'text-[10px] font-bold px-1.5 py-0.5 rounded-full leading-none',
+                        active
+                          ? 'bg-accent-on/20 text-accent-on'
+                          : 'bg-accent/15 text-accent',
+                      )}
+                    >
+                      {pts}
+                    </span>
+                  )}
+                  {r.isCurrent && !active && <span className="w-1.5 h-1.5 rounded-full bg-accent inline-block" />}
                 </button>
               );
             })}

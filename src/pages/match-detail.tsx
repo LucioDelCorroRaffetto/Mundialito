@@ -10,7 +10,7 @@ import { cn } from '@/shared/lib/cn';
 import { sharePredictionCard } from '@/shared/lib/generate-prediction-card';
 import { TeamFlag } from '@/shared/components/ui/team-flag';
 import { useAuthStore } from '@/shared/stores/auth-store';
-import { useUpsertPrediction, useLeagueMatchPredictions, useMyPredictionForMatch } from '@/shared/hooks/use-predictions';
+import { useUpsertPrediction, useLeagueMatchPredictions, useMyPredictionForMatch, useMyPredictionByLeague } from '@/shared/hooks/use-predictions';
 import { apiClient } from '@/shared/lib/api-client';
 import type { LeagueMemberPrediction } from '@/shared/hooks/use-predictions';
 import { useHaptic } from '@/shared/hooks/use-haptic';
@@ -179,6 +179,88 @@ function LeaguePredictionsSection({
   );
 }
 
+/**
+ * Card de "Mi pronóstico" para partidos live/finished/saved.
+ * Si el usuario tiene el MISMO marcador en todas las ligas → muestra una sola
+ * línea como antes. Si hay divergencia → muestra mini-listado por liga,
+ * cada una con sus puntos.
+ *
+ * El backend ya devuelve null para ligas sin pronóstico — esas se ocultan
+ * en la vista resumida y se muestran como "—" si hay divergencia.
+ */
+function MyPredictionPanel({
+  predsByLeague,
+  fallbackHome,
+  fallbackAway,
+  fallbackPoints,
+}: {
+  predsByLeague: import('@/shared/hooks/use-predictions').MyPredictionByLeagueRow[];
+  fallbackHome: number | null;
+  fallbackAway: number | null;
+  fallbackPoints: number | null;
+}) {
+  const withScores = predsByLeague.filter(
+    (p) => p.homeScore !== null && p.awayScore !== null,
+  );
+
+  // Detección de divergencia: ¿hay más de un marcador distinto?
+  const uniqueScores = new Set(
+    withScores.map((p) => `${p.homeScore}-${p.awayScore}`),
+  );
+  const isDivergent = uniqueScores.size > 1;
+
+  if (!isDivergent || withScores.length <= 1) {
+    return (
+      <div className="mx-4 mt-4 p-4 rounded-lg bg-accent-soft border border-accent-border">
+        <p className="text-xs-s text-accent font-semibold mb-1">Tu pronóstico</p>
+        <div className="flex items-center justify-between">
+          <span className="text-base-s font-display font-bold text-text">
+            {fallbackHome ?? '—'} – {fallbackAway ?? '—'}
+          </span>
+          {fallbackPoints !== null && (
+            <span className="text-sm-s font-bold text-accent">+{fallbackPoints} pts</span>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mx-4 mt-4 p-4 rounded-lg bg-accent-soft border border-accent-border">
+      <div className="flex items-center justify-between mb-2">
+        <p className="text-xs-s text-accent font-semibold">Tu pronóstico por liga</p>
+        <span className="text-[10px] font-bold text-orange-400 bg-orange-500/15 px-2 py-0.5 rounded-full">
+          Distintos resultados
+        </span>
+      </div>
+      <div className="flex flex-col gap-1.5">
+        {withScores.map((p) => (
+          <div
+            key={p.leagueId}
+            className="flex items-center gap-3 px-2.5 py-2 rounded-md bg-card border border-border"
+          >
+            <span className="text-xs-s text-text font-medium flex-1 truncate">{p.leagueName}</span>
+            <span className="text-sm-s font-display font-bold text-text tabular-nums">
+              {p.homeScore} – {p.awayScore}
+            </span>
+            <span
+              className={cn(
+                'text-xs-s font-bold w-14 text-right tabular-nums',
+                p.points !== null && p.points > 0 ? 'text-accent' : 'text-muted',
+              )}
+            >
+              {p.points !== null ? (p.points > 0 ? `+${p.points} pts` : '+0 pts') : '—'}
+            </span>
+          </div>
+        ))}
+      </div>
+      <p className="text-[10px] text-muted mt-2 leading-snug">
+        Cada liga puntúa por separado: editar el marcador solo afecta a la liga que elijas.
+      </p>
+    </div>
+  );
+}
+
 export function MatchDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -222,6 +304,27 @@ export function MatchDetailPage() {
   // We also need to know whether ANY prediction exists across leagues — if not,
   // saving without a leagueId propagates to all of them.
   const { data: anyPrediction } = useMyPredictionForMatch(matchId);
+  // Pronósticos por liga: alimenta la vista divergente + el selector
+  // "Aplicar a" para guardar en N ligas a la vez.
+  const { data: predsByLeague } = useMyPredictionByLeague(matchId);
+
+  // Ligas donde se va a guardar en el próximo save. Default: la liga
+  // seleccionada actualmente. El usuario puede agregar/sacar antes de
+  // tocar Guardar.
+  const [targetLeagueIds, setTargetLeagueIds] = useState<Set<number>>(new Set());
+  useEffect(() => {
+    if (selectedLeagueId != null) {
+      setTargetLeagueIds(new Set([selectedLeagueId]));
+    }
+  }, [selectedLeagueId]);
+  const toggleTargetLeague = (id: number) => {
+    setTargetLeagueIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
 
   const [homeScore, setHomeScore] = useState(0);
   const [awayScore, setAwayScore] = useState(0);
@@ -348,25 +451,37 @@ export function MatchDetailPage() {
 
   const handleSave = async () => {
     // Guard against double-tap: if a save is already in flight, ignore the
-    // second click instead of firing a duplicate request. Without this the
-    // backend ends up processing the same payload twice, and the second
-    // response (which arrives after `setSaved(true)`) can flip the UI back
-    // to a misleading "cerrado" error if the lock just elapsed.
+    // second click instead of firing a duplicate request.
     if (upsertMutation.isPending) return;
     setSaveError(null);
+
+    const isFirstTime = !anyPrediction;
+    // Si es primer pronóstico (y no se eligió explícitamente un subset),
+    // mantenemos el atajo legacy de "guardar en todas" (leagueId omitido).
+    // Caso contrario iteramos por las ligas elegidas.
+    const useAllShortcut =
+      isFirstTime && targetLeagueIds.size <= 1 && myLeagueList.length > 1;
+
+    const targets: (number | null)[] = useAllShortcut
+      ? [null] // null = backend propaga a todas
+      : Array.from(targetLeagueIds);
+
+    if (!useAllShortcut && targets.length === 0) {
+      setSaveError('Elegí al menos una liga');
+      return;
+    }
+
     try {
-      // First-time prediction for this match → omit leagueId so the API
-      // propagates the result to every league the user belongs to.
-      // Editing an existing prediction → scope it to the selected league.
-      const isFirstTime = !anyPrediction;
-      await upsertMutation.mutateAsync({
-        matchId: match.id,
-        homeScore,
-        awayScore,
-        ...(isFirstTime ? {} : selectedLeagueId != null ? { leagueId: selectedLeagueId } : {}),
-      });
+      for (const leagueId of targets) {
+        await upsertMutation.mutateAsync({
+          matchId: match.id,
+          homeScore,
+          awayScore,
+          ...(leagueId != null ? { leagueId } : {}),
+        });
+      }
       setSaved(true);
-      dirtyRef.current = false; // server now owns the value
+      dirtyRef.current = false;
       vibrate(20);
       play('goal');
     } catch (e: unknown) {
@@ -522,23 +637,73 @@ export function MatchDetailPage() {
             </>
           ) : (
             <>
-              {/* Clear feedback about WHAT the save will touch: first prediction
-                  propagates to every league the user belongs to, subsequent
-                  saves are scoped to the league currently in the chip selector
-                  above the bracket. */}
+              {/* Multi-liga selector — solo si está en >1 ligas. Default
+                  arranca con la liga activa tildada, así editar un marcador
+                  no contamina otras ligas. */}
               {myLeagueList.length > 1 && (
-                <p className="text-xs-s text-muted text-center mb-2">
+                <div className="mb-3 p-3 rounded-lg bg-elevated border border-border">
                   {!anyPrediction ? (
-                    <>📣 Tu primer pronóstico se guarda en <span className="text-accent font-semibold">todas tus ligas</span></>
-                  ) : selectedLeagueId != null ? (
-                    <>Vas a actualizar solo en <span className="text-accent font-semibold">{myLeagueList.find((l) => l.id === selectedLeagueId)?.name ?? 'esta liga'}</span></>
+                    <p className="text-xs-s text-muted mb-2 text-center">
+                      📣 Tu primer pronóstico se guarda en <span className="text-accent font-semibold">todas tus ligas</span>
+                    </p>
                   ) : (
-                    <>Vas a actualizar en <span className="text-accent font-semibold">todas tus ligas</span></>
+                    <>
+                      <div className="flex items-center justify-between mb-2">
+                        <p className="text-xs-s font-semibold text-text">Aplicar a</p>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setTargetLeagueIds((prev) =>
+                              prev.size === myLeagueList.length
+                                ? new Set(selectedLeagueId != null ? [selectedLeagueId] : [])
+                                : new Set(myLeagueList.map((l) => l.id)),
+                            );
+                          }}
+                          className="text-xs-s text-accent font-semibold"
+                        >
+                          {targetLeagueIds.size === myLeagueList.length ? 'Solo esta liga' : 'Todas las ligas'}
+                        </button>
+                      </div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {myLeagueList.map((league) => {
+                          const checked = targetLeagueIds.has(league.id);
+                          return (
+                            <button
+                              key={league.id}
+                              type="button"
+                              onClick={() => toggleTargetLeague(league.id)}
+                              className={cn(
+                                'flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs-s font-semibold border transition-colors',
+                                checked
+                                  ? 'bg-accent text-accent-on border-accent'
+                                  : 'bg-card border-border text-muted hover:text-text',
+                              )}
+                            >
+                              {checked && <CheckCircle2 size={12} />}
+                              {league.name}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </>
                   )}
-                </p>
+                </div>
               )}
-              <Button fullWidth size="lg" onClick={handleSave} loading={upsertMutation.isPending}>
-                {existingPrediction ? 'Actualizar pronóstico' : 'Guardar pronóstico'}
+              <Button
+                fullWidth
+                size="lg"
+                onClick={handleSave}
+                loading={upsertMutation.isPending}
+                disabled={
+                  upsertMutation.isPending ||
+                  (!!anyPrediction && myLeagueList.length > 1 && targetLeagueIds.size === 0)
+                }
+              >
+                {!!anyPrediction && targetLeagueIds.size > 1
+                  ? `Guardar en ${targetLeagueIds.size === myLeagueList.length ? 'todas las ligas' : `${targetLeagueIds.size} ligas`}`
+                  : existingPrediction
+                    ? 'Actualizar pronóstico'
+                    : 'Guardar pronóstico'}
               </Button>
               {saveError && (
                 <p className="text-xs-s text-red-400 mt-2 text-center">{saveError}</p>
@@ -572,18 +737,12 @@ export function MatchDetailPage() {
           )}
         </div>
       ) : existingPrediction && (
-        // Show user's prediction with points for live/finished matches
-        <div className="mx-4 mt-4 p-4 rounded-lg bg-accent-soft border border-accent-border">
-          <p className="text-xs-s text-accent font-semibold mb-1">Tu pronóstico</p>
-          <div className="flex items-center justify-between">
-            <span className="text-base-s font-display font-bold text-text">
-              {existingPrediction.homeScore} – {existingPrediction.awayScore}
-            </span>
-            {existingPrediction.points !== null && (
-              <span className="text-sm-s font-bold text-accent">+{existingPrediction.points} pts</span>
-            )}
-          </div>
-        </div>
+        <MyPredictionPanel
+          predsByLeague={predsByLeague ?? []}
+          fallbackHome={existingPrediction.homeScore}
+          fallbackAway={existingPrediction.awayScore}
+          fallbackPoints={existingPrediction.points}
+        />
       )}
 
       {/* League picker + league-mates' predictions — surface this prominently

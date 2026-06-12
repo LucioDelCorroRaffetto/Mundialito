@@ -356,6 +356,9 @@ export function TournamentPredictionsPage() {
   });
   const [openSection, setOpenSection] = useState<string | null>(null);
   const [initialised, setInitialised] = useState(false);
+  // Ligas destino del próximo Guardar. Default: solo la liga seleccionada,
+  // para que cambiar un pick no contamine otras ligas sin querer.
+  const [targetLeagueIds, setTargetLeagueIds] = useState<Set<number>>(new Set());
 
   const { data: teamsData, isLoading: teamsLoading } = useTeams();
   // Filter out internal placeholder teams (TBD for knockout slots, PO1/PO2 for intercontinental playoffs)
@@ -384,6 +387,9 @@ export function TournamentPredictionsPage() {
       surpriseEliminatedTeamId: null,
       bestDefenseTeamId: null,
     });
+    if (selectedLeagueId != null) {
+      setTargetLeagueIds(new Set([selectedLeagueId]));
+    }
   }, [selectedLeagueId]);
 
   // Populate picks from server data once loaded
@@ -408,29 +414,66 @@ export function TournamentPredictionsPage() {
 
   const handleSave = async () => {
     if (!selectedLeagueId) return;
-    // First time saving across any league → propagate to all leagues (omit
-    // leagueId). Once at least one prediction exists, scope the save to the
-    // selected league so the user can override per league.
-    const propagateToAllLeagues = !hasAnyTournamentPrediction;
+    // Caso primera vez SIN ligas extra elegidas: si nunca guardó nada y
+    // no abrió el selector multi-liga, se propaga a TODAS (compatibilidad
+    // con el flujo histórico). En cualquier otro caso usamos targetLeagueIds.
+    const useAllShortcut =
+      !hasAnyTournamentPrediction &&
+      targetLeagueIds.size <= 1 &&
+      myLeagues.length > 1;
+
+    const targets = useAllShortcut
+      ? myLeagues.map((l) => l.id)
+      : Array.from(targetLeagueIds);
+
+    if (targets.length === 0) {
+      toast.error('Elegí al menos una liga para guardar');
+      return;
+    }
+
+    const body = {
+      championTeamId: picks.championTeamId,
+      runnerUpTeamId: picks.runnerUpTeamId,
+      thirdPlaceTeamId: picks.thirdPlaceTeamId,
+      topScorerPlayerId: picks.topScorerPlayerId,
+      revelationTeamId: picks.revelationTeamId,
+      surpriseEliminatedTeamId: picks.surpriseEliminatedTeamId,
+      bestDefenseTeamId: picks.bestDefenseTeamId,
+    };
+
     try {
-      await upsertMutation.mutateAsync({
-        ...(propagateToAllLeagues ? {} : { leagueId: selectedLeagueId }),
-        championTeamId: picks.championTeamId,
-        runnerUpTeamId: picks.runnerUpTeamId,
-        thirdPlaceTeamId: picks.thirdPlaceTeamId,
-        topScorerPlayerId: picks.topScorerPlayerId,
-        revelationTeamId: picks.revelationTeamId,
-        surpriseEliminatedTeamId: picks.surpriseEliminatedTeamId,
-        bestDefenseTeamId: picks.bestDefenseTeamId,
-      });
+      // Guardamos en serie por liga — el backend acepta leagueId por request.
+      // Cada call escribe solo en esa liga; las demás quedan intactas.
+      for (const leagueId of targets) {
+        await upsertMutation.mutateAsync({ ...body, leagueId });
+      }
       toast.success(
-        propagateToAllLeagues && myLeagues.length > 1
+        targets.length === myLeagues.length && myLeagues.length > 1
           ? '¡Pronósticos guardados en todas tus ligas!'
-          : '¡Pronósticos guardados!',
+          : targets.length > 1
+            ? `¡Pronósticos guardados en ${targets.length} ligas!`
+            : '¡Pronósticos guardados!',
       );
     } catch {
       toast.error('Error al guardar los pronósticos');
     }
+  };
+
+  const toggleTargetLeague = (id: number) => {
+    setTargetLeagueIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleAllTargetLeagues = () => {
+    setTargetLeagueIds((prev) =>
+      prev.size === myLeagues.length
+        ? new Set(selectedLeagueId != null ? [selectedLeagueId] : [])
+        : new Set(myLeagues.map((l) => l.id)),
+    );
   };
 
   const setField = (field: keyof LocalPicks) => (id: number) => {
@@ -589,7 +632,13 @@ export function TournamentPredictionsPage() {
         <div className="mx-4 mb-4 flex items-center gap-2 px-3 py-2 rounded-lg bg-orange-500/15 border border-orange-500/30">
           <Clock size={14} className="text-orange-400 flex-shrink-0" />
           <p className="text-xs-s text-orange-400 font-semibold">
-            Solo podés cambiarlos hasta el 11 Jun, 15:55 (AR)
+            {`Solo podés cambiarlos hasta el ${OPENING_LOCK_UTC.toLocaleString('es-AR', {
+              day: '2-digit',
+              month: 'short',
+              hour: '2-digit',
+              minute: '2-digit',
+              timeZone: 'America/Argentina/Buenos_Aires',
+            })} (AR)`}
           </p>
         </div>
       )}
@@ -714,6 +763,49 @@ export function TournamentPredictionsPage() {
         </div>
       )}
 
+      {/* Multi-league "apply to" picker — solo si está en >1 ligas y hay
+          cambios sin guardar. Por default arranca tildada la liga activa,
+          así editar un pick NO contamina otras ligas si el usuario no
+          opta por broadcastearlo. */}
+      {!isTournamentLocked && isDirty && myLeagues.length > 1 && (
+        <div className="px-4 mt-4">
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-xs-s font-semibold text-text">Aplicar cambios a</p>
+            <button
+              type="button"
+              onClick={toggleAllTargetLeagues}
+              className="text-xs-s text-accent font-semibold"
+            >
+              {targetLeagueIds.size === myLeagues.length ? 'Solo esta liga' : 'Todas las ligas'}
+            </button>
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {myLeagues.map((league) => {
+              const checked = targetLeagueIds.has(league.id);
+              return (
+                <button
+                  key={league.id}
+                  type="button"
+                  onClick={() => toggleTargetLeague(league.id)}
+                  className={cn(
+                    'flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs-s font-semibold border transition-colors',
+                    checked
+                      ? 'bg-accent text-accent-on border-accent'
+                      : 'bg-card border-border text-muted hover:text-text',
+                  )}
+                >
+                  {checked && <CheckCircle2 size={12} />}
+                  {league.name}
+                </button>
+              );
+            })}
+          </div>
+          {targetLeagueIds.size === 0 && (
+            <p className="text-xs-s text-orange-400 mt-2">Elegí al menos una liga.</p>
+          )}
+        </div>
+      )}
+
       {/* Save button — hidden once the tournament is locked */}
       {!isTournamentLocked && (
         <div className="px-4 mt-4">
@@ -730,8 +822,16 @@ export function TournamentPredictionsPage() {
               </span>
             </motion.div>
           ) : (
-            <Button fullWidth size="lg" onClick={handleSave} loading={saving} disabled={saving}>
-              Guardar pronósticos
+            <Button
+              fullWidth
+              size="lg"
+              onClick={handleSave}
+              loading={saving}
+              disabled={saving || (isDirty && myLeagues.length > 1 && targetLeagueIds.size === 0)}
+            >
+              {isDirty && myLeagues.length > 1 && targetLeagueIds.size > 1
+                ? `Guardar en ${targetLeagueIds.size === myLeagues.length ? 'todas las ligas' : `${targetLeagueIds.size} ligas`}`
+                : 'Guardar pronósticos'}
             </Button>
           )}
         </div>

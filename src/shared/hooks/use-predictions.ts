@@ -56,6 +56,30 @@ export function useMyPredictionForMatch(
   });
 }
 
+export interface MyPredictionByLeagueRow {
+  leagueId: number;
+  leagueName: string;
+  homeScore: number | null;
+  awayScore: number | null;
+  points: number | null;
+}
+
+/** Mis pronósticos para un partido, agrupados por liga. Devuelve TODAS las
+ *  ligas (no personales) — las que no tienen pronóstico vienen con scores
+ *  null. Usado por la vista divergente del match-detail. */
+export function useMyPredictionByLeague(matchId: number | undefined) {
+  return useQuery({
+    queryKey: ['prediction', 'by-league', matchId],
+    queryFn: async () => {
+      const { data } = await apiClient.get<{ data: MyPredictionByLeagueRow[] }>(
+        `/predictions/match/${matchId}/mine-by-league`,
+      );
+      return data.data;
+    },
+    enabled: matchId !== undefined,
+  });
+}
+
 export interface UpsertPredictionInput {
   matchId: number;
   homeScore: number;
@@ -86,6 +110,7 @@ export function useUpsertPrediction() {
     onSuccess: ({ matchId }) => {
       qc.invalidateQueries({ queryKey: ['predictions', 'mine'] });
       qc.invalidateQueries({ queryKey: ['prediction', matchId] });
+      qc.invalidateQueries({ queryKey: ['prediction', 'by-league', matchId] });
       qc.invalidateQueries({ queryKey: ['predictions', 'league-match', matchId] });
       qc.invalidateQueries({ queryKey: ['leagues', 'mine'] });
       qc.invalidateQueries({ queryKey: ['leagues', 'standings'] });

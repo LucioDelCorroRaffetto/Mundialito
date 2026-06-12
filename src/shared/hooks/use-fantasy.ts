@@ -81,6 +81,22 @@ export function useUserFantasyTeam(userId: number | null, round?: string | null)
   });
 }
 
+/** Puntos del usuario por round (lee de la cache fantasy_round_scores).
+ *  Devuelve solo los rounds que ya tienen score; el cliente completa con 0. */
+export function useUserFantasyPointsByRound(userId: number | null) {
+  return useQuery({
+    queryKey: ['fantasy', 'points-by-round', userId],
+    queryFn: async () => {
+      const { data } = await apiClient.get<{ data: { round: string; points: number }[] }>(
+        `/fantasy/team/${userId}/points-by-round`,
+      );
+      return data.data;
+    },
+    enabled: userId != null,
+    staleTime: 30_000,
+  });
+}
+
 /** Tabla de posiciones fantasy global (o de una liga si se pasa leagueId). */
 export function useFantasyStandings(leagueId?: number) {
   return useQuery({
