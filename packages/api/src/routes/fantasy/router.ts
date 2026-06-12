@@ -3,6 +3,7 @@ import { authGuard } from '../../middleware/auth-guard.js';
 import { validate } from '../../middleware/validate.js';
 import { getMyTeamHandler } from './handlers/get-my-team.js';
 import { getUserFantasyTeamHandler } from './handlers/get-user-fantasy-team.js';
+import { getUserPointsByRoundHandler } from './handlers/get-user-points-by-round.js';
 import { ensureMyTeamHandler, ensureMyTeamSchema } from './handlers/ensure-my-team.js';
 import { updateSquadHandler, updateSquadSchema } from './handlers/update-squad.js';
 import { getFantasyStandingsHandler } from './handlers/get-fantasy-standings.js';
@@ -23,6 +24,9 @@ fantasyRouter.put('/squad', validate(updateSquadSchema), (req, res, next) =>
 );
 fantasyRouter.get('/standings', (req, res, next) => getFantasyStandingsHandler(req, res).catch(next));
 fantasyRouter.get('/team/:userId', (req, res, next) => getUserFantasyTeamHandler(req, res).catch(next));
+fantasyRouter.get('/team/:userId/points-by-round', (req, res, next) =>
+  getUserPointsByRoundHandler(req, res).catch(next),
+);
 
 // Fantasy rounds + per-round lineups
 fantasyRouter.get('/rounds', (req, res, next) => getFantasyRoundsHandler(req, res).catch(next));

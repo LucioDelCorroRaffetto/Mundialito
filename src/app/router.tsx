@@ -37,6 +37,7 @@ const LeaderboardPage = lazyWithReload(() => import('@/pages/leaderboard').then(
 const TournamentPredictionsPage = lazyWithReload(() => import('@/pages/tournament-predictions').then((m) => ({ default: m.TournamentPredictionsPage })));
 const UserProfilePage = lazyWithReload(() => import('@/pages/user-profile').then((m) => ({ default: m.UserProfilePage })));
 const HelpPage = lazyWithReload(() => import('@/pages/help').then((m) => ({ default: m.HelpPage })));
+const StatsPage = lazyWithReload(() => import('@/pages/stats').then((m) => ({ default: m.StatsPage })));
 
 /**
  * Minimal full-bleed fallback shown while a lazy page chunk is downloading.
@@ -85,6 +86,7 @@ export const router = createBrowserRouter([
       { path: '/achievements', element: <Page><AchievementsPage /></Page> },
       { path: '/leaderboard', element: <Page><LeaderboardPage /></Page> },
       { path: '/tournament', element: <Page><TournamentPredictionsPage /></Page> },
+      { path: '/stats', element: <Page><StatsPage /></Page> },
       { path: '/u/:userId', element: <Page><UserProfilePage /></Page> },
       { path: '/admin', element: <Page><RequireAdmin><AdminPage /></RequireAdmin></Page> },
     ],

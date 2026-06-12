@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom';
-import { Home, Users, User, Calendar, BarChart2, Star, Trophy } from 'lucide-react';
+import { Home, Users, User, Calendar, BarChart2, Star, Trophy, Goal } from 'lucide-react';
 import { cn } from '@/shared/lib/cn';
 
 const BASE_TABS = [
@@ -8,6 +8,7 @@ const BASE_TABS = [
   { to: '/leaderboard', label: 'Global',   Icon: BarChart2 },
   { to: '/tournament',  label: 'Copa',     Icon: Star },
   { to: '/fantasy',     label: 'Fantasy',  Icon: Trophy },
+  { to: '/stats',       label: 'Stats',    Icon: Goal },
   { to: '/leagues',     label: 'Ligas',    Icon: Users },
   { to: '/profile',     label: 'Perfil',   Icon: User },
 ];

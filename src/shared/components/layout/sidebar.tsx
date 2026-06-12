@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom';
-import { Home, Trophy, Users, User, Calendar, BarChart2, Star } from 'lucide-react';
+import { Home, Trophy, Users, User, Calendar, BarChart2, Star, Goal } from 'lucide-react';
 import { cn } from '@/shared/lib/cn';
 import { Logo } from '@/shared/components/logo';
 
@@ -10,6 +10,7 @@ const baseNavItems = [
   { to: '/leaderboard', label: 'Global',          Icon: BarChart2 },
   { to: '/tournament',  label: 'Copa',            Icon: Star },
   { to: '/fantasy',     label: 'Fantasy',         Icon: Trophy },
+  { to: '/stats',       label: 'Estadísticas',    Icon: Goal },
   { to: '/profile',     label: 'Perfil',          Icon: User },
 ];
 

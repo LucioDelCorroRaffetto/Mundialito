@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Plus, Search, Trophy, ChevronRight, AlertCircle, Sparkles } from 'lucide-react';
+import { Plus, Search, Trophy, ChevronRight, AlertCircle, Sparkles, Bell, Volume2, X } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useMatches } from '@/shared/hooks/use-matches';
 import { useMyLeagues } from '@/shared/hooks/use-leagues';
@@ -9,6 +9,10 @@ import { useTeamMap } from '@/shared/hooks/use-teams';
 import { useMyPredictions } from '@/shared/hooks/use-predictions';
 import { useMyFantasyTeam } from '@/shared/hooks/use-fantasy';
 import { usePwaInstall } from '@/shared/hooks/use-pwa-install';
+import { usePushNotifications } from '@/shared/hooks/use-push';
+import { useThemeStore } from '@/theme/theme-store';
+import { play } from '@/shared/lib/sounds';
+import { toast } from 'sonner';
 import { useAuthStore } from '@/shared/stores/auth-store';
 import type { Match, Team } from '@/shared/types/api';
 import { Button } from '@/shared/components/ui/button';
@@ -259,6 +263,120 @@ const PLACEHOLDER_TEAM: Team = {
   confederation: null,
 };
 
+/**
+ * Banner para activar push + sonidos. Aparece si falta alguno de los dos
+ * (y el usuario no lo descartó). Se descarta en localStorage por separado
+ * para no insistir si el usuario rechazó explícitamente.
+ *
+ * Cómo funciona:
+ *  - "Activar notificaciones" pide permiso al browser y suscribe push.
+ *  - "Activar sonidos" tildea el flag global y dispara un chime de test
+ *    para que el usuario confirme que escucha (verificación end-to-end).
+ *  - Si el browser bloqueó las notifs en settings, mostramos un mensaje
+ *    distinto orientando a habilitarlo manualmente.
+ */
+const NOTIF_SOUND_DISMISS_KEY = 'home.notifSoundBanner.dismissed';
+
+function NotifSoundBanner() {
+  const { isSubscribed, isLoading, subscribe } = usePushNotifications();
+  const soundEnabled = useThemeStore((s) => s.soundEnabled);
+  const setSoundEnabled = useThemeStore((s) => s.setSoundEnabled);
+  const [dismissed, setDismissed] = useState(() => {
+    try {
+      return localStorage.getItem(NOTIF_SOUND_DISMISS_KEY) === '1';
+    } catch {
+      return false;
+    }
+  });
+  const [working, setWorking] = useState(false);
+
+  const supportsPush =
+    typeof window !== 'undefined' && 'serviceWorker' in navigator && 'PushManager' in window;
+  const permissionDenied =
+    supportsPush && typeof Notification !== 'undefined' && Notification.permission === 'denied';
+
+  // Nada pendiente o ya descartado → no mostrar.
+  const allGood = (isSubscribed || !supportsPush) && soundEnabled;
+  if (isLoading || allGood || dismissed) return null;
+
+  const handleEnableNotifs = async () => {
+    if (!supportsPush) {
+      toast.error('Este navegador no soporta notificaciones push');
+      return;
+    }
+    if (permissionDenied) {
+      toast.error('Habilitalas desde la configuración del navegador');
+      return;
+    }
+    setWorking(true);
+    try {
+      await subscribe();
+      toast.success('¡Notificaciones activadas!');
+    } catch {
+      toast.error('No se pudieron activar las notificaciones');
+    } finally {
+      setWorking(false);
+    }
+  };
+
+  const handleEnableSound = () => {
+    setSoundEnabled(true);
+    // Test inmediato — si el usuario no escucha, sabe en el acto que tiene
+    // el volumen apagado en el sistema (verificación end-to-end del sonido).
+    play('chime');
+    toast.success('Sonidos activados — sonó un chime de prueba');
+  };
+
+  const handleDismiss = () => {
+    try {
+      localStorage.setItem(NOTIF_SOUND_DISMISS_KEY, '1');
+    } catch {
+      /* localStorage no disponible (private mode) — sólo afecta esta sesión */
+    }
+    setDismissed(true);
+  };
+
+  return (
+    <div className="relative mb-4 rounded-xl bg-gradient-to-br from-accent/15 to-accent/5 border border-accent/30 p-4">
+      <button
+        type="button"
+        onClick={handleDismiss}
+        aria-label="Descartar"
+        className="absolute top-2 right-2 p-1 rounded-md text-muted hover:text-text hover:bg-elevated"
+      >
+        <X size={14} />
+      </button>
+      <p className="text-sm font-bold text-text mb-1">No te pierdas un solo partido</p>
+      <p className="text-xs text-muted mb-3">
+        Activá notificaciones para enterarte de partidos y goles, y sonidos para celebrar tus aciertos.
+      </p>
+      <div className="flex flex-col sm:flex-row gap-2">
+        {!isSubscribed && supportsPush && (
+          <button
+            type="button"
+            onClick={handleEnableNotifs}
+            disabled={working || permissionDenied}
+            className="flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-accent text-accent-on text-sm font-semibold disabled:opacity-60"
+          >
+            <Bell size={14} />
+            {permissionDenied ? 'Habilitar en el navegador' : 'Activar notificaciones'}
+          </button>
+        )}
+        {!soundEnabled && (
+          <button
+            type="button"
+            onClick={handleEnableSound}
+            className="flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-elevated border border-border text-text text-sm font-semibold hover:border-accent-border"
+          >
+            <Volume2 size={14} />
+            Activar sonidos
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function HomePage() {
   // Refetch every 60s so the home auto-rotates to the next match when the
   // worker flips one from scheduled → live/finished, even if the user
@@ -334,6 +452,9 @@ export function HomePage() {
           <span className="text-emerald-400 font-semibold">Instalar</span>
         </button>
       )}
+
+      {/* Notificaciones + sonidos — solo si falta alguno y no se descartó */}
+      <NotifSoundBanner />
 
       {/* Two-column layout on desktop */}
       <div className="md:grid md:grid-cols-[1fr_300px] md:gap-6 lg:grid-cols-[1fr_340px]">

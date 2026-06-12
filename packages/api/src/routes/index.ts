@@ -12,6 +12,7 @@ import { pushRouter } from './push/router.js';
 import { achievementsRouter } from './achievements/router.js';
 import { adminRouter } from './admin/router.js';
 import { usersRouter } from './users/router.js';
+import { statsRouter } from './stats/router.js';
 
 export const apiRouter = Router();
 
@@ -28,3 +29,4 @@ apiRouter.use('/push', pushRouter);
 apiRouter.use('/achievements', achievementsRouter);
 apiRouter.use('/admin', adminRouter);
 apiRouter.use('/users', usersRouter);
+apiRouter.use('/stats', statsRouter);
