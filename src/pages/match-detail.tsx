@@ -948,57 +948,94 @@ function MatchEvents({
     );
   }
 
-  // Modo preferido: timeline con minutos, dos columnas claras (local /
-  // visitante). Cuando un lado no tiene eventos sale "—" para que se vea
-  // explícitamente que ese equipo no marcó / no fue amonestado.
+  // Timeline minuto-a-minuto al estilo FIFA: una sola columna con el
+  // minuto centrado y los eventos pivoteando izquierda/derecha según el
+  // equipo. Eventos en orden descendente (lo más reciente arriba) +
+  // marcadores de fin de período intercalados.
   if (hasTimeline) {
-    const homeEvents = timeline.filter((e) => e.teamCode === homeTeamCode);
-    const awayEvents = timeline.filter((e) => e.teamCode !== homeTeamCode);
+    // Ordenamos descendente: período mayor + minuto mayor arriba. Es el
+    // orden natural para alguien que abre el partido en vivo.
+    const sorted = [...timeline].sort((a, b) => {
+      const pa = a.period ?? 99, pb = b.period ?? 99;
+      if (pa !== pb) return pb - pa;
+      const ma = a.minute ?? 999, mb = b.minute ?? 999;
+      return mb - ma;
+    });
 
-    const EventRow = ({ ev, alignRight }: { ev: MatchTimelineEvent; alignRight: boolean }) => {
+    // Marcadores de transición de período: "Entretiempo" entre el último
+    // evento del 1T y el primero del 2T, etc. Construimos la lista
+    // intercalando eventos + marcadores.
+    type Row =
+      | { kind: 'event'; ev: MatchTimelineEvent }
+      | { kind: 'marker'; id: string; label: string };
+
+    const rows: Row[] = [];
+    let lastPeriod: number | null = null;
+    for (const ev of sorted) {
+      if (lastPeriod != null && ev.period != null && ev.period !== lastPeriod) {
+        // Transición de período → marcador.
+        const label =
+          lastPeriod === 2 ? 'Entretiempo'
+          : lastPeriod === 3 ? 'Fin del 1° tiempo extra'
+          : lastPeriod === 4 ? 'Fin del 2° tiempo extra'
+          : 'Inicio';
+        rows.push({ kind: 'marker', id: `m-${ev.id}`, label });
+      }
+      rows.push({ kind: 'event', ev });
+      lastPeriod = ev.period;
+    }
+    rows.push({ kind: 'marker', id: 'kick-off', label: 'Inicio del juego' });
+
+    const EventSide = ({ ev }: { ev: MatchTimelineEvent }) => {
       const cfg = EVENT_LABEL[ev.type];
+      const isHome = ev.teamCode === homeTeamCode;
       return (
         <div
           className={cn(
-            'flex items-center gap-2 text-sm-s py-1',
-            alignRight ? 'flex-row-reverse text-right' : 'flex-row',
+            'flex items-center gap-2 text-sm-s min-w-0',
+            isHome ? 'flex-row' : 'flex-row-reverse',
           )}
         >
-          <span className="text-xs-s font-bold text-muted tabular-nums w-9 flex-shrink-0">
-            {formatMinute(ev.minute, ev.period)}
-          </span>
-          <span className="flex-shrink-0 text-sm" aria-label={cfg.label}>{cfg.icon}</span>
-          <span className="font-medium text-text truncate flex-1 min-w-0">{ev.playerName}</span>
+          <span className="flex-shrink-0 text-sm leading-none" aria-label={cfg.label}>{cfg.icon}</span>
+          <span className="font-medium text-text truncate">{ev.playerName}</span>
         </div>
       );
     };
 
     return (
       <div className="mx-4 mt-3 p-4 rounded-lg bg-elevated border border-border">
-        <p className="text-sm-s font-semibold text-text mb-3">
-          {status === 'live' ? 'Eventos del partido (en vivo)' : 'Resumen del partido'}
+        <p className="text-xs-s text-muted font-bold uppercase tracking-wider mb-3">
+          Minuto a minuto
         </p>
-        <div className="grid grid-cols-[1fr_auto_1fr] gap-3">
-          {/* Local */}
-          <div className="flex flex-col">
-            <p className="text-xs-s text-muted font-bold uppercase tracking-wider mb-1.5">Local</p>
-            {homeEvents.length === 0 ? (
-              <span className="text-xs-s text-muted">—</span>
-            ) : (
-              homeEvents.map((ev) => <EventRow key={ev.id} ev={ev} alignRight={false} />)
-            )}
-          </div>
-          {/* Separador */}
-          <div className="w-px bg-border" />
-          {/* Visitante */}
-          <div className="flex flex-col text-right">
-            <p className="text-xs-s text-muted font-bold uppercase tracking-wider mb-1.5">Visitante</p>
-            {awayEvents.length === 0 ? (
-              <span className="text-xs-s text-muted">—</span>
-            ) : (
-              awayEvents.map((ev) => <EventRow key={ev.id} ev={ev} alignRight={true} />)
-            )}
-          </div>
+        <div className="flex flex-col">
+          {rows.map((row) => {
+            if (row.kind === 'marker') {
+              return (
+                <div key={row.id} className="flex items-center gap-2 py-2 text-[10px] font-bold text-accent uppercase tracking-wider">
+                  <div className="flex-1 h-px bg-border" />
+                  <span>{row.label}</span>
+                  <div className="flex-1 h-px bg-border" />
+                </div>
+              );
+            }
+            const ev = row.ev;
+            const isHome = ev.teamCode === homeTeamCode;
+            return (
+              <div
+                key={ev.id}
+                className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 py-1.5 border-b border-border/40 last:border-b-0"
+              >
+                {/* Local */}
+                <div className="min-w-0">{isHome && <EventSide ev={ev} />}</div>
+                {/* Minuto */}
+                <span className="text-xs-s font-bold text-muted tabular-nums px-2 flex-shrink-0">
+                  {formatMinute(ev.minute, ev.period)}
+                </span>
+                {/* Visitante */}
+                <div className="min-w-0 text-right">{!isHome && <EventSide ev={ev} />}</div>
+              </div>
+            );
+          })}
         </div>
       </div>
     );
