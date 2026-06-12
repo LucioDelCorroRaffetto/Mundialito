@@ -19,6 +19,7 @@ import {
   useMyTournamentPredictions,
 } from '@/shared/hooks/use-tournament-predictions';
 import { useMyLeagues } from '@/shared/hooks/use-leagues';
+import { useTournamentForecast } from '@/shared/hooks/use-forecasts';
 import { SkeletonList } from '@/shared/components/skeleton';
 import { toast } from 'sonner';
 import type { Player, Team } from '@/shared/types/api';
@@ -321,6 +322,56 @@ function TopScorerCard({
   );
 }
 
+/**
+ * Top candidatos a clasificar a R32 — output del Monte Carlo del Oloráculo
+ * sobre la fase de grupos.
+ *
+ * No reemplaza al pick del usuario; es un baseline estadístico de
+ * referencia. Colapsable para no comerse pantalla en mobile. Cuando el
+ * bracket del knockout esté seteado en BD, este componente se podrá
+ * extender a probabilidades de avance por fase.
+ */
+function ForecastTopCandidates() {
+  const { data, isLoading } = useTournamentForecast();
+  const [expanded, setExpanded] = useState(false);
+  if (isLoading || !data || data.length === 0) return null;
+
+  const top = data.slice(0, expanded ? 12 : 6);
+
+  return (
+    <div className="mx-4 mb-3 p-3 rounded-xl bg-elevated border border-border">
+      <div className="flex items-center justify-between mb-2">
+        <div>
+          <p className="text-sm-s font-semibold text-text">📊 Modelo estadístico</p>
+          <p className="text-[10px] text-muted">Más probables de clasificar a R32 (Monte Carlo)</p>
+        </div>
+        <button
+          type="button"
+          onClick={() => setExpanded((v) => !v)}
+          className="text-xs-s text-accent font-semibold"
+        >
+          {expanded ? 'Ver menos' : 'Ver más'}
+        </button>
+      </div>
+      <div className="flex flex-col gap-1.5">
+        {top.map((row, i) => {
+          const r32Pct = (row.reachR32 * 100).toFixed(0);
+          const topPct = (row.topOfGroup * 100).toFixed(0);
+          return (
+            <div key={row.teamId} className="flex items-center gap-2 text-xs-s">
+              <span className="w-4 text-muted text-right font-bold tabular-nums">{i + 1}</span>
+              <span className="w-5">{row.teamFlag}</span>
+              <span className="flex-1 text-text font-semibold truncate">{row.teamName}</span>
+              <span className="text-muted">1° {topPct}%</span>
+              <span className="text-accent font-bold w-12 text-right">{r32Pct}%</span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 export function TournamentPredictionsPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -619,6 +670,9 @@ export function TournamentPredictionsPage() {
           </div>
         </div>
       )}
+
+      {/* Modelo Oloráculo — top 5 candidatos al campeonato según Monte Carlo */}
+      <ForecastTopCandidates />
 
       {/* Lock / urgency banner */}
       {isTournamentLocked ? (

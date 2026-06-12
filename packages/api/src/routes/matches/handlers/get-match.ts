@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import { eq, and, gt, or } from 'drizzle-orm';
 import { db } from '../../../db/index.js';
-import { matches, playerMatchStats, players, teams } from '../../../db/schema/index.js';
+import { matches, playerMatchStats, players, teams, matchEvents } from '../../../db/schema/index.js';
 import { NotFoundError } from '../../../lib/errors.js';
 
 export async function getMatchHandler(req: Request, res: Response) {
@@ -42,5 +42,32 @@ export async function getMatchHandler(req: Request, res: Response) {
       ),
     );
 
-  return res.json({ ...match, events: stats });
+  // Timeline minuto-a-minuto — para mostrar "⚽ 23' Quiñones" en la UI.
+  // Ordenado cronológicamente: período asc, minuto asc, id asc (estable).
+  const timeline = await db
+    .select({
+      id: matchEvents.id,
+      type: matchEvents.type,
+      minute: matchEvents.minute,
+      period: matchEvents.period,
+      playerId: matchEvents.playerId,
+      playerName: players.name,
+      teamId: matchEvents.teamId,
+      teamCode: teams.code,
+    })
+    .from(matchEvents)
+    .innerJoin(players, eq(matchEvents.playerId, players.id))
+    .innerJoin(teams, eq(matchEvents.teamId, teams.id))
+    .where(eq(matchEvents.matchId, id));
+
+  // Sort en memoria — son ~30 rows; period/minute pueden ser null.
+  timeline.sort((a, b) => {
+    const pa = a.period ?? 99, pb = b.period ?? 99;
+    if (pa !== pb) return pa - pb;
+    const ma = a.minute ?? 999, mb = b.minute ?? 999;
+    if (ma !== mb) return ma - mb;
+    return a.id - b.id;
+  });
+
+  return res.json({ ...match, events: stats, timeline });
 }

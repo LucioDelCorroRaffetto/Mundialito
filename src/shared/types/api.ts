@@ -32,6 +32,8 @@ export interface Match {
   awayScore: number | null;
   // Solo lo devuelve GET /matches/:id (no la lista). Acumulados por jugador.
   events?: MatchEvent[];
+  // Timeline minuto-a-minuto: cada gol/asist/tarjeta en su instante.
+  timeline?: MatchTimelineEvent[];
 }
 
 export interface MatchEvent {
@@ -44,6 +46,19 @@ export interface MatchEvent {
   yellowCards: number;
   redCard: boolean;
   shirtNumber: number | null;
+}
+
+/** Evento individual con minuto — para el timeline en match-detail. */
+export interface MatchTimelineEvent {
+  id: number;
+  type: 'goal' | 'assist' | 'yellow' | 'red';
+  minute: number | null;
+  /** 1=1T, 2=2T, 3=ET1, 4=ET2, 5=penales (normalizado por el sync). */
+  period: number | null;
+  playerId: number;
+  playerName: string;
+  teamId: number;
+  teamCode: string;
 }
 
 export interface Prediction {

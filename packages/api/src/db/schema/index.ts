@@ -14,3 +14,4 @@ export * from './achievements.js';
 export * from './user-login-days.js';
 export * from './league-position-history.js';
 export * from './fantasy-lineups.js';
+export * from './match-events.js';

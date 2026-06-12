@@ -11,6 +11,7 @@ import { sharePredictionCard } from '@/shared/lib/generate-prediction-card';
 import { TeamFlag } from '@/shared/components/ui/team-flag';
 import { useAuthStore } from '@/shared/stores/auth-store';
 import { useUpsertPrediction, useLeagueMatchPredictions, useMyPredictionForMatch, useMyPredictionByLeague } from '@/shared/hooks/use-predictions';
+import { useMatchForecast } from '@/shared/hooks/use-forecasts';
 import { apiClient } from '@/shared/lib/api-client';
 import type { LeagueMemberPrediction } from '@/shared/hooks/use-predictions';
 import { useHaptic } from '@/shared/hooks/use-haptic';
@@ -180,6 +181,51 @@ function LeaguePredictionsSection({
 }
 
 /**
+ * Card "Modelo sugiere" — probabilidades del Oloráculo (Poisson + Elo).
+ *
+ * No reemplaza al pronóstico del usuario; es info estadística adicional.
+ * Si el endpoint falla (modelo no disponible), no rendereamos nada para
+ * no ensuciar la UI.
+ */
+function ForecastPanel({ matchId, homeCode, awayCode }: { matchId: number; homeCode: string; awayCode: string }) {
+  const { data, isLoading } = useMatchForecast(matchId);
+  if (isLoading || !data) return null;
+
+  const homePct = Math.round(data.homeWin * 100);
+  const drawPct = Math.round(data.draw * 100);
+  const awayPct = Math.round(data.awayWin * 100);
+  const top = data.topScores[0];
+  const topPct = Math.round((top?.prob ?? 0) * 100);
+
+  return (
+    <div className="mx-4 mt-3 p-4 rounded-lg bg-elevated border border-border">
+      <div className="flex items-center justify-between mb-2">
+        <p className="text-sm-s font-semibold text-text">📊 Modelo estadístico</p>
+        <span className="text-[10px] font-bold text-muted bg-card border border-border px-2 py-0.5 rounded-full">
+          Poisson + Elo
+        </span>
+      </div>
+      {/* Probability bar */}
+      <div className="flex h-2 rounded-full overflow-hidden mb-2">
+        <div className="bg-accent" style={{ width: `${homePct}%` }} />
+        <div className="bg-muted/50" style={{ width: `${drawPct}%` }} />
+        <div className="bg-orange-400" style={{ width: `${awayPct}%` }} />
+      </div>
+      <div className="flex items-center justify-between text-xs-s">
+        <span className="text-accent font-bold">{homeCode} {homePct}%</span>
+        <span className="text-muted font-semibold">Empate {drawPct}%</span>
+        <span className="text-orange-400 font-bold">{awayCode} {awayPct}%</span>
+      </div>
+      {top && (
+        <p className="text-xs-s text-muted mt-2 text-center">
+          Marcador más probable: <span className="text-text font-semibold">{top.home} – {top.away}</span> ({topPct}%)
+        </p>
+      )}
+    </div>
+  );
+}
+
+/**
  * Card de "Mi pronóstico" para partidos live/finished/saved.
  * Si el usuario tiene el MISMO marcador en todas las ligas → muestra una sola
  * línea como antes. Si hay divergencia → muestra mini-listado por liga,
@@ -210,15 +256,23 @@ function MyPredictionPanel({
   const isDivergent = uniqueScores.size > 1;
 
   if (!isDivergent || withScores.length <= 1) {
+    const hasScore = fallbackHome != null && fallbackAway != null;
     return (
-      <div className="mx-4 mt-4 p-4 rounded-lg bg-accent-soft border border-accent-border">
-        <p className="text-xs-s text-accent font-semibold mb-1">Tu pronóstico</p>
-        <div className="flex items-center justify-between">
-          <span className="text-base-s font-display font-bold text-text">
-            {fallbackHome ?? '—'} – {fallbackAway ?? '—'}
-          </span>
-          {fallbackPoints !== null && (
-            <span className="text-sm-s font-bold text-accent">+{fallbackPoints} pts</span>
+      <div className="mx-4 mt-4 px-4 py-3 rounded-xl bg-accent-soft border border-accent-border flex items-center gap-4">
+        <div className="flex-1 min-w-0">
+          <p className="text-xs-s text-accent font-semibold uppercase tracking-wider">Tu pronóstico</p>
+          <p className="text-2xl font-display font-bold text-text leading-tight tabular-nums">
+            {hasScore ? `${fallbackHome} – ${fallbackAway}` : '—'}
+          </p>
+        </div>
+        <div className="flex-shrink-0 text-right">
+          {fallbackPoints !== null ? (
+            <>
+              <p className="text-xs-s text-muted">Sumaste</p>
+              <p className="text-lg font-bold text-accent leading-tight">+{fallbackPoints} pts</p>
+            </>
+          ) : (
+            <p className="text-xs-s text-muted leading-snug max-w-[100px]">Se computa al terminar el partido</p>
           )}
         </div>
       </div>
@@ -591,11 +645,27 @@ export function MatchDetailPage() {
       </div>
 
       {/* Live/finished events — goles, asistencias, tarjetas */}
-      <MatchEvents events={match.events} homeTeamCode={homeTeamDisplay.code} status={match.status} />
+      <MatchEvents
+        events={match.events}
+        timeline={match.timeline}
+        homeTeamCode={homeTeamDisplay.code}
+        status={match.status}
+      />
 
       {/* Points preview */}
       {match.status === 'scheduled' && !teamsAreTbd && (
         <PointsPreview home={homeScore} away={awayScore} />
+      )}
+
+      {/* Modelo sugiere — probabilidades del Oloráculo (Poisson + Elo).
+          Solo en scheduled, con equipos reales. No reemplaza al pronóstico
+          del usuario; sirve de referencia estadística. */}
+      {match.status === 'scheduled' && !teamsAreTbd && matchId !== undefined && (
+        <ForecastPanel
+          matchId={matchId}
+          homeCode={homeTeamDisplay.code}
+          awayCode={awayTeamDisplay.code}
+        />
       )}
 
       {/* TBD block — teams not yet determined */}
@@ -804,24 +874,44 @@ export function MatchDetailPage() {
 
 // ─── Live events block ────────────────────────────────────────────────────────
 
-import type { MatchEvent } from '@/shared/types/api';
+import type { MatchEvent, MatchTimelineEvent } from '@/shared/types/api';
+
+/** Formatea el minuto sumando 45 cuando el evento es del 2T y el feed
+ *  emite el minuto absoluto crudo. FIFA ya da minutos en escala 0-90+,
+ *  así que solo etiquetamos con el sufijo "'" estándar.
+ *  ET1/ET2/penales se muestran con prefijo claro. */
+function formatMinute(minute: number | null, period: number | null): string {
+  if (minute == null) return '?';
+  if (period === 3 || period === 4) return `ET ${minute}'`;
+  if (period === 5) return 'Penales';
+  return `${minute}'`;
+}
+
+const EVENT_LABEL: Record<MatchTimelineEvent['type'], { icon: string; label: string }> = {
+  goal:   { icon: '⚽', label: 'Gol' },
+  assist: { icon: '🅰️', label: 'Asistencia' },
+  yellow: { icon: '🟨', label: 'Amarilla' },
+  red:    { icon: '🟥', label: 'Roja' },
+};
 
 function MatchEvents({
   events,
+  timeline,
   homeTeamCode,
   status,
 }: {
   events?: MatchEvent[];
+  timeline?: MatchTimelineEvent[];
   homeTeamCode: string;
   status: 'scheduled' | 'live' | 'finished';
 }) {
   if (status === 'scheduled') return null;
 
-  // Match terminado pero todavía sin eventos cargados (FIFA sync se corre
-  // en background al pasar a 'finished' — puede tardar unos minutos, o
-  // fallar si el feed externo todavía no expuso los datos del partido).
-  // Antes la sección desaparecía sin más; ahora damos feedback claro.
-  if (!events || events.length === 0) {
+  const hasTimeline = timeline && timeline.length > 0;
+  const hasAggregated = events && events.length > 0;
+
+  // Match terminado pero todavía sin nada cargado — placeholder claro.
+  if (!hasTimeline && !hasAggregated) {
     if (status === 'live') return null;
     return (
       <div className="mx-4 mt-3 p-4 rounded-lg bg-elevated border border-border">
@@ -834,12 +924,46 @@ function MatchEvents({
     );
   }
 
-  // Para cada jugador con stat, expandimos a "filas" de evento: 1 por gol,
-  // 1 por amarilla, 1 por roja. Mostramos asistencias agregadas a su gol más
-  // probable (no tenemos timeline minutado en stats agregados, pero sí podemos
-  // decir "Player X — 2 goles" / "Player Y — amarilla").
+  // Modo preferido: timeline con minutos. Render cronológico, agrupando
+  // por equipo a la izquierda/derecha pero conservando el minuto.
+  if (hasTimeline) {
+    return (
+      <div className="mx-4 mt-3 p-4 rounded-lg bg-elevated border border-border">
+        <p className="text-sm-s font-semibold text-text mb-3">
+          {status === 'live' ? 'Eventos del partido (en vivo)' : 'Resumen del partido'}
+        </p>
+        <div className="flex flex-col gap-1.5">
+          {timeline.map((ev) => {
+            const isHome = ev.teamCode === homeTeamCode;
+            const cfg = EVENT_LABEL[ev.type];
+            return (
+              <div
+                key={ev.id}
+                className={cn(
+                  'flex items-center gap-2 text-sm-s',
+                  isHome ? 'flex-row' : 'flex-row-reverse text-right',
+                )}
+              >
+                <span className="text-xs-s font-bold text-muted tabular-nums w-12 flex-shrink-0">
+                  {formatMinute(ev.minute, ev.period)}
+                </span>
+                <span className="flex-shrink-0" aria-label={cfg.label}>{cfg.icon}</span>
+                <span className="font-medium text-text truncate flex-1">{ev.playerName}</span>
+                <span className="text-[10px] font-bold text-muted bg-card border border-border px-1.5 py-0.5 rounded">
+                  {ev.teamCode}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
+  // Fallback (eventos agregados sin minuto, p.ej. partidos sincronizados
+  // antes de que existiera la tabla match_events).
   const items: { kind: 'goal' | 'yellow' | 'red'; player: string; team: string; count?: number }[] = [];
-  for (const e of events) {
+  for (const e of events!) {
     if (e.goals > 0) items.push({ kind: 'goal', player: e.playerName, team: e.teamCode, count: e.goals });
     if (e.yellowCards > 0) items.push({ kind: 'yellow', player: e.playerName, team: e.teamCode, count: e.yellowCards });
     if (e.redCard) items.push({ kind: 'red', player: e.playerName, team: e.teamCode });

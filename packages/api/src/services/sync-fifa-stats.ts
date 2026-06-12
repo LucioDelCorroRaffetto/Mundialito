@@ -31,13 +31,39 @@
  */
 import { eq, and, inArray } from 'drizzle-orm';
 import { db } from '../db/index.js';
-import { matches, players, playerMatchStats, teams } from '../db/schema/index.js';
+import { matches, players, playerMatchStats, teams, matchEvents } from '../db/schema/index.js';
 import { recomputeAllFantasyPoints } from './fantasy-scoring-service.js';
 import { notifyAdmin } from '../lib/notify-admin.js';
 
 const FIFA_BASE = 'https://api.fifa.com/api/v3';
 const FIFA_COMPETITION_ID = '17';   // FIFA World Cup
 const FIFA_SEASON_ID = '285023';     // WC 2026 (verified empirically)
+
+/**
+ * FIFA usa nombres en inglés ("Korea Republic", "Czechia") mientras que
+ * nuestra BD tiene nombres en español ("Corea del Sur", "Chequia"). Sin
+ * este mapping el resolver no podía ubicar el team y el sync devolvía
+ * matched=0 para todos los partidos donde el nombre no era trivialmente
+ * el mismo. Codes ISO van primero — son estables y FIFA los publica.
+ */
+const FIFA_NAME_TO_CODE: Record<string, string> = {
+  'korea republic': 'KOR',
+  'south korea':    'KOR',
+  'czechia':        'CZE',
+  'czech republic': 'CZE',
+  'united states':  'USA',
+  'usa':            'USA',
+  'cape verde islands': 'CPV',
+  'cape verde':     'CPV',
+  "cote d'ivoire":  'CIV',
+  'ivory coast':    'CIV',
+  'iran':           'IRN',
+  'ir iran':        'IRN',
+  'dpr korea':      'PRK',
+  'north korea':    'PRK',
+  'curacao':        'CUW',
+  'curaçao':        'CUW',
+};
 
 interface FifaLocaleString {
   Locale: string;
@@ -144,6 +170,7 @@ interface RosterPlayer {
   id: number;
   name: string;
   teamId: number;
+  position: string | null;
   fifaIdPlayer: string | null;
 }
 
@@ -188,6 +215,7 @@ async function doSync(matchId: number): Promise<SyncStatsResult> {
       id: players.id,
       name: players.name,
       teamId: players.teamId,
+      position: players.position,
       fifaIdPlayer: players.fifaIdPlayer,
     })
     .from(players)
@@ -212,7 +240,20 @@ async function doSync(matchId: number): Promise<SyncStatsResult> {
     .select({ id: teams.id, name: teams.name, code: teams.code })
     .from(teams)
     .where(inArray(teams.id, teamIds));
-  const teamIdByNorm = new Map(teamRows.map((t) => [normName(t.name), t.id] as const));
+  // Indexamos por (a) nombre normalizado de la BD ("méxico" → "mexico"),
+  // (b) code ISO ("MEX") y (c) alias en inglés de FIFA mapeados via
+  // FIFA_NAME_TO_CODE → code → team_id. Sin (b) y (c) los partidos con
+  // nombres distintos entre español/inglés terminaban con matched=0.
+  const teamIdByCode = new Map(teamRows.map((t) => [t.code.toUpperCase(), t.id] as const));
+  const teamIdByNorm = new Map<string, number>();
+  for (const t of teamRows) {
+    teamIdByNorm.set(normName(t.name), t.id);
+    teamIdByNorm.set(t.code.toLowerCase(), t.id);
+  }
+  for (const [aliasNorm, code] of Object.entries(FIFA_NAME_TO_CODE)) {
+    const id = teamIdByCode.get(code);
+    if (id != null) teamIdByNorm.set(aliasNorm, id);
+  }
   // Lazy-populated as we observe (IdPlayer, IdTeam) pairs.
   const teamIdByFifaIdTeam = new Map<string, number>();
 
@@ -246,6 +287,14 @@ async function doSync(matchId: number): Promise<SyncStatsResult> {
     const parsed = parseDescription(desc);
     if (!parsed) return null;
 
+    // Heurística para desambiguar por contexto del evento:
+    //  - goles → casi nunca un GK; descarto GKs cuando el candidato
+    //    ambiguo es uno (caso "RAÚL Jiménez FWD" vs "RAÚL Rangel GK").
+    //  - tarjeta roja a GK puede pasar pero es raro; lo mismo.
+    // Asistencias/amarillas dejan todos los candidatos porque cualquiera
+    // los puede recibir.
+    const eventDiscardsGK = GOAL_TYPES.has(ev.Type) || RED_TYPES.has(ev.Type);
+
     // Resolve the team. Three sources in order of confidence:
     //   1. ev.IdTeam → previously-seen mapping in `teamIdByFifaIdTeam`.
     //   2. parsed country ("FODEN (England)") → name match.
@@ -267,12 +316,18 @@ async function doSync(matchId: number): Promise<SyncStatsResult> {
     const teamRoster = rosterByTeam.get(targetTeamId) ?? [];
     const surnameNorm = normName(parsed.surname);
     // Match by surname (or last token) on the roster. Reject ambiguous.
-    const candidates = teamRoster.filter((rp) => {
+    let candidates = teamRoster.filter((rp) => {
       const tokens = normName(rp.name).split(' ');
       const last = tokens[tokens.length - 1];
       return last === surnameNorm || normName(rp.name).includes(surnameNorm);
     });
     if (candidates.length === 0) return null;
+    // Desambiguar con la heurística de posición: si el evento es un gol
+    // o roja y hay un solo no-GK entre los candidatos, ese gana.
+    if (candidates.length > 1 && eventDiscardsGK) {
+      const nonGK = candidates.filter((c) => c.position !== 'GK');
+      if (nonGK.length === 1) candidates = nonGK;
+    }
     if (candidates.length > 1) {
       // Ambiguous (Williams brothers, Hernández brothers, …): refuse.
       // Surface in unmatched so the admin can patch fifaIdPlayer manually.
@@ -289,6 +344,27 @@ async function doSync(matchId: number): Promise<SyncStatsResult> {
     return winner;
   }
 
+  // Eventos individuales con minuto — para el timeline en la UI. Solo
+  // guardamos los 4 tipos relevantes (gol/asistencia/amarilla/roja);
+  // fouls y substituciones quedan fuera.
+  interface TimelineEvent {
+    playerId: number;
+    teamId: number;
+    type: 'goal' | 'assist' | 'yellow' | 'red';
+    minute: number | null;
+    period: number | null;
+  }
+  const timeline: TimelineEvent[] = [];
+
+  function parseMinute(raw: string | null | undefined): number | null {
+    if (!raw) return null;
+    // FIFA emite "45+3'" o "67'" — extraemos el número base y le sumamos
+    // los descuentos si vienen.
+    const m = raw.match(/(\d+)(?:\+(\d+))?/);
+    if (!m) return null;
+    return Number(m[1]) + (m[2] ? Number(m[2]) : 0);
+  }
+
   for (const ev of events) {
     const player = await resolvePlayer(ev);
     if (!player) {
@@ -302,10 +378,31 @@ async function doSync(matchId: number): Promise<SyncStatsResult> {
     }
     const bucket = ensureBucket(player.id);
     bucket.played = true;
-    if (GOAL_TYPES.has(ev.Type)) bucket.goals += 1;
-    else if (ASSIST_TYPES.has(ev.Type)) bucket.assists += 1;
-    else if (YELLOW_TYPES.has(ev.Type)) bucket.yellow += 1;
-    else if (RED_TYPES.has(ev.Type)) bucket.red = true;
+    let eventType: TimelineEvent['type'] | null = null;
+    if (GOAL_TYPES.has(ev.Type)) { bucket.goals += 1; eventType = 'goal'; }
+    else if (ASSIST_TYPES.has(ev.Type)) { bucket.assists += 1; eventType = 'assist'; }
+    else if (YELLOW_TYPES.has(ev.Type)) { bucket.yellow += 1; eventType = 'yellow'; }
+    else if (RED_TYPES.has(ev.Type)) { bucket.red = true; eventType = 'red'; }
+
+    if (eventType) {
+      // FIFA usa períodos impares (3=1T, 5=2T, 7=ET1, 9=ET2, 11=penales).
+      // Normalizamos a 1..5 para que el frontend no conozca esa convención.
+      const fifaPeriod = ev.Period ?? null;
+      const normalizedPeriod =
+        fifaPeriod === 3 ? 1
+        : fifaPeriod === 5 ? 2
+        : fifaPeriod === 7 ? 3
+        : fifaPeriod === 9 ? 4
+        : fifaPeriod === 11 ? 5
+        : null;
+      timeline.push({
+        playerId: player.id,
+        teamId: player.teamId,
+        type: eventType,
+        minute: parseMinute(ev.MatchMinute),
+        period: normalizedPeriod,
+      });
+    }
     // Type 5 substitution — sub-in (IdPlayer) and sub-out (IdSubPlayer)
     // both played. The sub-out player may have ZERO other events in the
     // timeline (a quiet defender), so resolving them only via the cached
@@ -356,7 +453,25 @@ async function doSync(matchId: number): Promise<SyncStatsResult> {
     }
   }
 
-  // 6. Upsert player_match_stats.
+  // 6. Reescribir timeline de eventos para este partido. Borramos todos
+  // los rows previos y volvemos a insertar — barato porque son ~30 rows
+  // por partido y evita lidiar con upserts compuestos sin clave única
+  // natural (un jugador puede tener 2 goles en distintos minutos).
+  await db.delete(matchEvents).where(eq(matchEvents.matchId, matchId));
+  if (timeline.length > 0) {
+    await db.insert(matchEvents).values(
+      timeline.map((e) => ({
+        matchId,
+        playerId: e.playerId,
+        teamId: e.teamId,
+        type: e.type,
+        minute: e.minute,
+        period: e.period,
+      })),
+    );
+  }
+
+  // 7. Upsert player_match_stats.
   let upserted = 0;
   for (const [playerId, b] of stats) {
     await db

@@ -44,5 +44,10 @@ services:
         sync: false
       - key: TURSO_AUTH_TOKEN
         sync: false
-      - key: API_FOOTBALL_KEY
+      # API_BASE_URL apunta al servicio mundialito-api. El worker hace ping
+      # a /sync para que el API corra la cascada football-data → ESPN → FIFA
+      # stats. La key vieja API_FOOTBALL_KEY ya no se usa (free tier sin WC 2026).
+      - key: API_BASE_URL
+        value: https://mundialito-d2jk.onrender.com
+      - key: SYNC_SECRET
         sync: false
