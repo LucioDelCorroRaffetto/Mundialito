@@ -315,11 +315,53 @@ async function doSync(matchId: number): Promise<SyncStatsResult> {
 
     const teamRoster = rosterByTeam.get(targetTeamId) ?? [];
     const surnameNorm = normName(parsed.surname);
-    // Match by surname (or last token) on the roster. Reject ambiguous.
+    // FIFA surname puede tener varias palabras ("HWANG Inbeom", "H G OH").
+    // Tomamos el último token como "core surname" para estrategias 3-5.
+    const surnameTokens = surnameNorm.split(' ');
+    const surnameLast = surnameTokens[surnameTokens.length - 1];
+    // Variante "colapsada" del nombre del jugador (guiones eliminados sin
+    // espacio): "In-beom" → "inbeom". Resuelve nombres asiáticos donde
+    // FIFA omite los guiones que sí están en nuestra BD.
+    const collapseHyphen = (s: string): string => {
+      const woHyphen = s
+        .toLowerCase()
+        .normalize('NFD')
+        // eslint-disable-next-line no-misleading-character-class
+        .replace(/[̀-ͯ]/g, '')
+        .replace(/['’`´ʹ]/g, '')
+        .replace(/-/g, '')
+        .replace(/[.,]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+      return woHyphen;
+    };
+    // Match estrategias (OR): cualquiera que dispare cuenta.
+    //  1. último token del roster == FIFA surname completo (caso "Messi").
+    //  2. nombre del roster incluye FIFA surname (caso "Salah" en
+    //     "Mohamed Salah").
+    //  3. último token del roster == último token de FIFA surname
+    //     (recorta nombres del medio: "HWANG Inbeom" → "inbeom" vs
+    //     roster last "...beom" tras colapsar guiones).
+    //  4. último token de la versión sin guion del roster == último token
+    //     de FIFA surname ("Hwang In-beom" → colapsa a "inbeom").
+    //  5. primer token del roster == último token de FIFA surname (orden
+    //     asiático: el apellido va primero en el roster pero FIFA lo
+    //     pone al final: "Oh Hyeon-gyu" + "H G OH").
     let candidates = teamRoster.filter((rp) => {
-      const tokens = normName(rp.name).split(' ');
+      const norm = normName(rp.name);
+      const tokens = norm.split(' ');
       const last = tokens[tokens.length - 1];
-      return last === surnameNorm || normName(rp.name).includes(surnameNorm);
+      const first = tokens[0];
+      const collapsed = collapseHyphen(rp.name);
+      const collapsedTokens = collapsed.split(' ');
+      const collapsedLast = collapsedTokens[collapsedTokens.length - 1];
+      return (
+        last === surnameNorm
+        || norm.includes(surnameNorm)
+        || last === surnameLast
+        || collapsedLast === surnameLast
+        || first === surnameLast
+      );
     });
     if (candidates.length === 0) return null;
     // Desambiguar con la heurística de posición: si el evento es un gol
