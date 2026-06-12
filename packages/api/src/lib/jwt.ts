@@ -7,7 +7,11 @@ export interface JwtPayload {
 }
 
 export function signAccess(payload: JwtPayload): string {
-  return jwt.sign(payload, JWT_ACCESS_SECRET, { expiresIn: '15m' });
+  // 15m era muy agresivo: usuarios con la pestaña abierta veían 401 en
+  // consola y un breve flash de errores antes del refresh automático.
+  // 1h es el sweet spot — sigue siendo corto frente al refresh (30d) y
+  // evita el ruido en sesiones normales.
+  return jwt.sign(payload, JWT_ACCESS_SECRET, { expiresIn: '1h' });
 }
 
 export function signRefresh(payload: JwtPayload): string {

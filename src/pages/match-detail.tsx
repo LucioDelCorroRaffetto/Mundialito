@@ -924,37 +924,57 @@ function MatchEvents({
     );
   }
 
-  // Modo preferido: timeline con minutos. Render cronológico, agrupando
-  // por equipo a la izquierda/derecha pero conservando el minuto.
+  // Modo preferido: timeline con minutos, dos columnas claras (local /
+  // visitante). Cuando un lado no tiene eventos sale "—" para que se vea
+  // explícitamente que ese equipo no marcó / no fue amonestado.
   if (hasTimeline) {
+    const homeEvents = timeline.filter((e) => e.teamCode === homeTeamCode);
+    const awayEvents = timeline.filter((e) => e.teamCode !== homeTeamCode);
+
+    const EventRow = ({ ev, alignRight }: { ev: MatchTimelineEvent; alignRight: boolean }) => {
+      const cfg = EVENT_LABEL[ev.type];
+      return (
+        <div
+          className={cn(
+            'flex items-center gap-2 text-sm-s py-1',
+            alignRight ? 'flex-row-reverse text-right' : 'flex-row',
+          )}
+        >
+          <span className="text-xs-s font-bold text-muted tabular-nums w-9 flex-shrink-0">
+            {formatMinute(ev.minute, ev.period)}
+          </span>
+          <span className="flex-shrink-0 text-sm" aria-label={cfg.label}>{cfg.icon}</span>
+          <span className="font-medium text-text truncate flex-1 min-w-0">{ev.playerName}</span>
+        </div>
+      );
+    };
+
     return (
       <div className="mx-4 mt-3 p-4 rounded-lg bg-elevated border border-border">
         <p className="text-sm-s font-semibold text-text mb-3">
           {status === 'live' ? 'Eventos del partido (en vivo)' : 'Resumen del partido'}
         </p>
-        <div className="flex flex-col gap-1.5">
-          {timeline.map((ev) => {
-            const isHome = ev.teamCode === homeTeamCode;
-            const cfg = EVENT_LABEL[ev.type];
-            return (
-              <div
-                key={ev.id}
-                className={cn(
-                  'flex items-center gap-2 text-sm-s',
-                  isHome ? 'flex-row' : 'flex-row-reverse text-right',
-                )}
-              >
-                <span className="text-xs-s font-bold text-muted tabular-nums w-12 flex-shrink-0">
-                  {formatMinute(ev.minute, ev.period)}
-                </span>
-                <span className="flex-shrink-0" aria-label={cfg.label}>{cfg.icon}</span>
-                <span className="font-medium text-text truncate flex-1">{ev.playerName}</span>
-                <span className="text-[10px] font-bold text-muted bg-card border border-border px-1.5 py-0.5 rounded">
-                  {ev.teamCode}
-                </span>
-              </div>
-            );
-          })}
+        <div className="grid grid-cols-[1fr_auto_1fr] gap-3">
+          {/* Local */}
+          <div className="flex flex-col">
+            <p className="text-xs-s text-muted font-bold uppercase tracking-wider mb-1.5">Local</p>
+            {homeEvents.length === 0 ? (
+              <span className="text-xs-s text-muted">—</span>
+            ) : (
+              homeEvents.map((ev) => <EventRow key={ev.id} ev={ev} alignRight={false} />)
+            )}
+          </div>
+          {/* Separador */}
+          <div className="w-px bg-border" />
+          {/* Visitante */}
+          <div className="flex flex-col text-right">
+            <p className="text-xs-s text-muted font-bold uppercase tracking-wider mb-1.5">Visitante</p>
+            {awayEvents.length === 0 ? (
+              <span className="text-xs-s text-muted">—</span>
+            ) : (
+              awayEvents.map((ev) => <EventRow key={ev.id} ev={ev} alignRight={true} />)
+            )}
+          </div>
         </div>
       </div>
     );
