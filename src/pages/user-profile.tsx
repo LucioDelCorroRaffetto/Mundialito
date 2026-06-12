@@ -370,7 +370,11 @@ export function UserProfilePage() {
             <StatCard
               icon={<Target size={16} />}
               label="Aciertos"
-              value={profile.stats.correctResults}
+              // Aciertos = todos los pronósticos que sumaron puntos
+              // (exactos + ganador correcto sin marcador exacto). Antes solo
+              // contaba los parciales, lo que producía "0 aciertos · 100%
+              // precisión" cuando todos los aciertos eran exactos.
+              value={profile.stats.exactScores + profile.stats.correctResults}
               accentClass="text-violet-400"
             />
             <StatCard

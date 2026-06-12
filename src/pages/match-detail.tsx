@@ -815,7 +815,24 @@ function MatchEvents({
   homeTeamCode: string;
   status: 'scheduled' | 'live' | 'finished';
 }) {
-  if (status === 'scheduled' || !events || events.length === 0) return null;
+  if (status === 'scheduled') return null;
+
+  // Match terminado pero todavía sin eventos cargados (FIFA sync se corre
+  // en background al pasar a 'finished' — puede tardar unos minutos, o
+  // fallar si el feed externo todavía no expuso los datos del partido).
+  // Antes la sección desaparecía sin más; ahora damos feedback claro.
+  if (!events || events.length === 0) {
+    if (status === 'live') return null;
+    return (
+      <div className="mx-4 mt-3 p-4 rounded-lg bg-elevated border border-border">
+        <p className="text-sm-s font-semibold text-text mb-1">Resumen del partido</p>
+        <p className="text-xs-s text-muted leading-snug">
+          Los goles y tarjetas se cargan automáticamente cuando el feed
+          oficial los publica. A veces tarda unos minutos tras el final.
+        </p>
+      </div>
+    );
+  }
 
   // Para cada jugador con stat, expandimos a "filas" de evento: 1 por gol,
   // 1 por amarilla, 1 por roja. Mostramos asistencias agregadas a su gol más
