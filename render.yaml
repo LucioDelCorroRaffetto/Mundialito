@@ -1,17 +1,22 @@
+version: "1"
 services:
   # ── API ─────────────────────────────────────────────────────────────────────
   - type: web
-    name: mundialito-api
-    runtime: docker
-    dockerfilePath: ./packages/api/Dockerfile
-    dockerContext: ./packages/api
+    name: Mundialito
+    runtime: node
+    repo: https://github.com/LucioDelCorroRaffetto/Mundialito
     plan: free
+    region: virginia
+    rootDir: packages/api
+    buildCommand: yarn install --production=false && yarn build
+    startCommand: npm start
     healthCheckPath: /health
+    autoDeployTrigger: commit
     envVars:
       - key: NODE_ENV
         value: production
       - key: PORT
-        value: 3000
+        sync: false
       - key: TURSO_DATABASE_URL
         sync: false
       - key: TURSO_AUTH_TOKEN
@@ -24,19 +29,30 @@ services:
         sync: false
       - key: VAPID_PRIVATE_KEY
         sync: false
-      - key: VAPID_EMAIL
-        value: mailto:delcorroraffetto@gmail.com
+      - key: VAPID_SUBJECT
+        sync: false
       - key: ALLOWED_ORIGINS
         sync: false
+      - key: ADMIN_USER_IDS
+        sync: false
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: FOOTBALL_DATA_API_KEY
+        sync: false
+      - key: API_FOOTBALL_KEY
+        sync: false
 
-  # ── Worker (Cron Job — free tier) ────────────────────────────────────────────
+  # ── Worker (Cron Job — cada 2 min) ──────────────────────────────────────────
   - type: cron
     name: mundialito-worker
-    runtime: docker
-    dockerfilePath: ./packages/worker/Dockerfile
+    runtime: node
+    repo: https://github.com/LucioDelCorroRaffetto/Mundialito
     plan: free
-    schedule: "*/2 * * * *"
+    region: virginia
+    rootDir: packages/worker
+    buildCommand: yarn install --production=false && yarn build
     startCommand: node dist/run-once.js
+    schedule: "*/2 * * * *"
     envVars:
       - key: NODE_ENV
         value: production
@@ -44,9 +60,6 @@ services:
         sync: false
       - key: TURSO_AUTH_TOKEN
         sync: false
-      # API_BASE_URL apunta al servicio mundialito-api. El worker hace ping
-      # a /sync para que el API corra la cascada football-data → ESPN → FIFA
-      # stats. La key vieja API_FOOTBALL_KEY ya no se usa (free tier sin WC 2026).
       - key: API_BASE_URL
         value: https://mundialito-d2jk.onrender.com
       - key: SYNC_SECRET

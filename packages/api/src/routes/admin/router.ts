@@ -9,6 +9,7 @@ import { updatePlayerStatsHandler } from './handlers/update-player-stats.js';
 import { syncPlayerStatsHandler } from './handlers/sync-player-stats.js';
 import { diagnoseFifaHandler } from './handlers/diagnose-fifa.js';
 import { finalizeFantasyHandler } from './handlers/finalize-fantasy.js';
+import { syncAllFinishedStatsHandler } from './handlers/sync-all-finished-stats.js';
 
 export const adminRouter = Router();
 
@@ -40,4 +41,10 @@ adminRouter.get('/diagnostics/fifa-self-test', (req, res, next) =>
 // Call once when the fantasy season closes.
 adminRouter.post('/finalize-fantasy', (req, res, next) =>
   finalizeFantasyHandler(req, res).catch(next),
+);
+
+// Re-runs FIFA stats sync for all finished matches. Use ?force=false to skip
+// matches that already have stats. Useful for backfills or after alias fixes.
+adminRouter.post('/sync-all-finished-stats', (req, res, next) =>
+  syncAllFinishedStatsHandler(req, res).catch(next),
 );
