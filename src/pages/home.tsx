@@ -97,6 +97,9 @@ function useCountdown(targetUtc: string, onEnded?: () => void) {
 
 function CountdownTiles({ targetUtc, onEnded }: { targetUtc: string; onEnded?: () => void }) {
   const { days, hours, mins, secs } = useCountdown(targetUtc, onEnded);
+  // Each tile re-mounts its inner number on value change (via `key={value}`)
+  // so framer's enter animation runs — a soft fade + slide that feels like
+  // a flip clock without the gimmick.
   return (
     <div className="flex items-center justify-center gap-2">
       {[
@@ -107,11 +110,20 @@ function CountdownTiles({ targetUtc, onEnded }: { targetUtc: string; onEnded?: (
       ].map(({ value, label }) => (
         <div
           key={label}
-          className="relative flex flex-col items-center gap-0.5 bg-card/80 backdrop-blur-sm border border-accent/30 rounded-xl px-3 py-2.5 min-w-[64px] shadow-[0_0_20px_-8px] shadow-accent/40"
+          className="relative flex flex-col items-center gap-0.5 bg-card/80 backdrop-blur-sm border border-accent/30 rounded-xl px-3 py-2.5 min-w-[64px] shadow-[0_0_20px_-8px] shadow-accent/40 overflow-hidden"
         >
-          <span className="text-3xl font-display font-black text-accent tabular-nums leading-none">
-            {String(value).padStart(2, '0')}
-          </span>
+          <div className="relative h-[1.875rem] w-full flex items-center justify-center">
+            <motion.span
+              key={value}
+              initial={{ y: -8, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: 8, opacity: 0 }}
+              transition={{ duration: 0.25, ease: 'easeOut' }}
+              className="absolute text-3xl font-display font-black text-accent tabular-nums leading-none"
+            >
+              {String(value).padStart(2, '0')}
+            </motion.span>
+          </div>
           <span className="text-[10px] text-muted uppercase tracking-wider font-bold mt-1">{label}</span>
         </div>
       ))}

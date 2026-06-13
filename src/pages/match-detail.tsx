@@ -603,7 +603,12 @@ export function MatchDetailPage() {
           <div className="flex flex-col items-center gap-2">
             {match.status === 'live' && (
               <span className="flex items-center gap-1.5 mb-1">
-                <span className="w-2 h-2 rounded-full bg-red-400 animate-pulse" />
+                {/* Heartbeat dot — concentric ping ring on top of a solid
+                    dot reads more "live broadcast" than a single pulse. */}
+                <span className="relative inline-flex w-2.5 h-2.5">
+                  <span className="absolute inset-0 rounded-full bg-red-400/60 animate-ping" />
+                  <span className="relative inline-flex w-2.5 h-2.5 rounded-full bg-red-500" />
+                </span>
                 <span className="text-xs-s font-bold text-red-400 uppercase tracking-wider">En Vivo</span>
               </span>
             )}
@@ -613,11 +618,33 @@ export function MatchDetailPage() {
                 <span className="text-base-s font-bold text-text">{teamDisplayCode(homeTeamDisplay.code)}</span>
                 <span className="text-xs text-muted text-center leading-tight max-w-[120px] line-clamp-2 break-words">{shortTeamName(homeTeamDisplay.name)}</span>
               </div>
+              {/* Wrap home / away scores in their own motion.spans keyed by
+                  value so each goal triggers a pop animation. Wrap the
+                  whole scoreline in a flex container so the pop on either
+                  side doesn't shift the layout. */}
               <span className={cn(
-                'text-4xl font-display font-bold tabular-nums',
+                'text-4xl font-display font-bold tabular-nums flex items-baseline gap-1.5',
                 match.status === 'live' ? 'text-red-400' : 'text-text'
               )}>
-                {match.homeScore ?? '—'} – {match.awayScore ?? '—'}
+                <motion.span
+                  key={`h-${match.homeScore ?? '—'}`}
+                  initial={{ scale: 1.6, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  transition={{ duration: 0.4, ease: [0.34, 1.56, 0.64, 1] }}
+                  className="inline-block"
+                >
+                  {match.homeScore ?? '—'}
+                </motion.span>
+                <span>–</span>
+                <motion.span
+                  key={`a-${match.awayScore ?? '—'}`}
+                  initial={{ scale: 1.6, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  transition={{ duration: 0.4, ease: [0.34, 1.56, 0.64, 1] }}
+                  className="inline-block"
+                >
+                  {match.awayScore ?? '—'}
+                </motion.span>
               </span>
               <div className="flex flex-col items-center gap-1">
                 <TeamFlag code={awayTeamDisplay.code} emoji={awayTeamDisplay.flag} size={48} />
@@ -996,10 +1023,20 @@ function MatchEvents({
 
     const isSub = (type: MatchTimelineEvent['type']) => type === 'sub_in' || type === 'sub_out';
 
-    const EventSide = ({ ev }: { ev: MatchTimelineEvent }) => {
+    const EventSide = ({ ev, highlight = false }: { ev: MatchTimelineEvent; highlight?: boolean }) => {
       const cfg = EVENT_LABEL[ev.type];
       const isHome = ev.teamCode === homeTeamCode;
       const sub = isSub(ev.type);
+      // Fresh goals get a brief celebration on the ball: scale-up + rotate.
+      // Run it once on mount (initial→animate); not infinite, otherwise it
+      // turns into a distraction while the user reads the rest of the list.
+      const ballMotion = highlight
+        ? {
+            initial: { scale: 0.4, rotate: -180 },
+            animate: { scale: 1.15, rotate: 0 },
+            transition: { duration: 0.55, ease: [0.34, 1.56, 0.64, 1] },
+          }
+        : {};
       return (
         <div
           className={cn(
@@ -1008,13 +1045,27 @@ function MatchEvents({
             sub ? 'text-xs-s text-muted' : 'text-sm-s',
           )}
         >
-          <span className={cn('flex-shrink-0 leading-none', sub ? 'text-xs' : 'text-sm')} aria-label={cfg.label}>{cfg.icon}</span>
-          <span className={cn('truncate', sub ? 'text-muted' : 'font-medium text-text')}>
+          <motion.span
+            {...ballMotion}
+            className={cn('flex-shrink-0 leading-none inline-block', sub ? 'text-xs' : 'text-sm')}
+            aria-label={cfg.label}
+          >
+            {cfg.icon}
+          </motion.span>
+          <span className={cn('truncate', sub ? 'text-muted' : 'font-medium text-text', highlight && 'text-accent')}>
             {ev.playerName}{ev.type === 'own_goal' ? <span className="ml-1 text-[10px] text-red-400 font-bold">(OG)</span> : null}
           </span>
         </div>
       );
     };
+
+    // While the match is live, the freshest item (rows[0] event, since
+    // we sort desc) gets a ring + soft pulse so a returning viewer can
+    // immediately spot what's new. Goals also get a brief icon wiggle.
+    const freshEventId =
+      status === 'live'
+        ? sorted.find((e) => !isSub(e.type))?.id ?? sorted[0]?.id ?? null
+        : null;
 
     return (
       <div className="mx-4 mt-3 p-4 rounded-lg bg-elevated border border-border">
@@ -1022,36 +1073,48 @@ function MatchEvents({
           Minuto a minuto
         </p>
         <div className="flex flex-col">
-          {rows.map((row) => {
+          {rows.map((row, i) => {
             if (row.kind === 'marker') {
               return (
-                <div key={row.id} className="flex items-center gap-2 py-2 text-[10px] font-bold text-accent uppercase tracking-wider">
-                  <div className="flex-1 h-px bg-border" />
+                <motion.div
+                  key={row.id}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ delay: Math.min(i * 0.025, 0.4), duration: 0.2 }}
+                  className="flex items-center gap-2 py-2 text-[10px] font-bold text-accent uppercase tracking-wider"
+                >
+                  <div className="flex-1 h-px bg-gradient-to-r from-transparent via-accent/30 to-accent/40" />
                   <span>{row.label}</span>
-                  <div className="flex-1 h-px bg-border" />
-                </div>
+                  <div className="flex-1 h-px bg-gradient-to-l from-transparent via-accent/30 to-accent/40" />
+                </motion.div>
               );
             }
             const ev = row.ev;
             const isHome = ev.teamCode === homeTeamCode;
             const sub = isSub(ev.type);
+            const isFresh = ev.id === freshEventId;
+            const isGoal = ev.type === 'goal' || ev.type === 'own_goal';
             return (
-              <div
+              <motion.div
                 key={ev.id}
+                initial={{ opacity: 0, x: isHome ? -10 : 10 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: Math.min(i * 0.025, 0.4), duration: 0.25, ease: 'easeOut' }}
                 className={cn(
-                  'grid grid-cols-[1fr_auto_1fr] items-center gap-2 border-b border-border/40 last:border-b-0',
+                  'grid grid-cols-[1fr_auto_1fr] items-center gap-2 border-b border-border/40 last:border-b-0 rounded-md transition-colors',
                   sub ? 'py-1' : 'py-1.5',
+                  isFresh && !sub && 'bg-accent/5 ring-1 ring-accent/30 border-transparent',
                 )}
               >
                 {/* Local */}
-                <div className="min-w-0">{isHome && <EventSide ev={ev} />}</div>
+                <div className="min-w-0">{isHome && <EventSide ev={ev} highlight={isFresh && isGoal} />}</div>
                 {/* Minuto */}
-                <span className={cn('font-bold text-muted tabular-nums px-2 flex-shrink-0', sub ? 'text-[10px]' : 'text-xs-s')}>
+                <span className={cn('font-bold tabular-nums px-2 flex-shrink-0', sub ? 'text-[10px] text-muted' : 'text-xs-s', isFresh && !sub ? 'text-accent' : 'text-muted')}>
                   {formatMinute(ev.minute, ev.period)}
                 </span>
                 {/* Visitante */}
-                <div className="min-w-0 text-right">{!isHome && <EventSide ev={ev} />}</div>
-              </div>
+                <div className="min-w-0 text-right">{!isHome && <EventSide ev={ev} highlight={isFresh && isGoal} />}</div>
+              </motion.div>
             );
           })}
         </div>
