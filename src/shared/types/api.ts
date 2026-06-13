@@ -51,7 +51,7 @@ export interface MatchEvent {
 /** Evento individual con minuto — para el timeline en match-detail. */
 export interface MatchTimelineEvent {
   id: number;
-  type: 'goal' | 'assist' | 'yellow' | 'red' | 'sub_in' | 'sub_out';
+  type: 'goal' | 'own_goal' | 'assist' | 'yellow' | 'red' | 'sub_in' | 'sub_out';
   minute: number | null;
   /** 1=1T, 2=2T, 3=ET1, 4=ET2, 5=penales (normalizado por el sync). */
   period: number | null;

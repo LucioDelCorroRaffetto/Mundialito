@@ -1,19 +1,19 @@
+import { useState, useEffect } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { RouterProvider } from 'react-router-dom';
 import { Toaster } from 'sonner';
 import { GoogleOAuthProvider } from '@react-oauth/google';
+import axios from 'axios';
 import { ThemeProvider } from '@/theme/theme-provider';
 import { router } from './router';
 import { useApiWakeup } from '@/shared/hooks/use-api-wakeup';
 import { ApiWakeupScreen } from '@/shared/components/api-wakeup-screen';
+import { useAuthStore } from '@/shared/stores/auth-store';
 
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      // 2-minute stale window: returning users see instant cached content
-      // (reduces LCP on revisits dramatically — no spinner on nav)
       staleTime: 1000 * 60 * 2,
-      // Keep unused cache for 10 minutes so back-navigation is instant
       gcTime: 1000 * 60 * 10,
       refetchOnWindowFocus: false,
       retry: 1,
@@ -22,6 +22,58 @@ const queryClient = new QueryClient({
 });
 
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID ?? '';
+const BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3000/api/v1';
+
+/** Decodifica el exp de un JWT sin verificar firma. */
+function jwtExpiry(token: string): number | null {
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1]));
+    return typeof payload.exp === 'number' ? payload.exp : null;
+  } catch {
+    return null;
+  }
+}
+
+/** True si el token expira en menos de 60 segundos (o ya expiró). */
+function isExpiredOrExpiring(token: string): boolean {
+  const exp = jwtExpiry(token);
+  if (exp == null) return true;
+  return exp - Date.now() / 1000 < 60;
+}
+
+/**
+ * Refresca el access token de forma proactiva al montar la app si el
+ * almacenado está expirado o a punto de expirar. Esto evita que los
+ * queries iniciales (auth/me, leagues/mine, etc.) reciban un 401 y
+ * generen ruido en la consola.
+ */
+function useEagerTokenRefresh() {
+  const [ready, setReady] = useState(false);
+  const { token, user, login } = useAuthStore();
+
+  useEffect(() => {
+    async function tryRefresh() {
+      const storedRefresh = localStorage.getItem('mundialito_refresh');
+      if (token && isExpiredOrExpiring(token) && storedRefresh) {
+        try {
+          const { data } = await axios.post(`${BASE_URL}/auth/refresh`, {
+            refreshToken: storedRefresh,
+          });
+          if (user) login(user, data.accessToken);
+          localStorage.setItem('mundialito_refresh', data.refreshToken);
+        } catch {
+          // Refresh falló → el interceptor de api-client lo manejará
+          // en la primera request real; no rompemos el flujo aquí.
+        }
+      }
+      setReady(true);
+    }
+    tryRefresh();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  return ready;
+}
 
 function AppWithWakeup() {
   const wakeup = useApiWakeup();
@@ -29,11 +81,17 @@ function AppWithWakeup() {
     <>
       <RouterProvider router={router} />
       <Toaster position="top-center" richColors />
-      {/* The screen sits above everything via z-[9999]. It shows only when
-          the health ping takes > 2 s, then fades out once the API responds. */}
       <ApiWakeupScreen visible={wakeup === 'waking'} />
     </>
   );
+}
+
+function AppReady() {
+  const ready = useEagerTokenRefresh();
+  // Espera el check de token antes de montar el router para evitar
+  // 401s en los queries iniciales.
+  if (!ready) return null;
+  return <AppWithWakeup />;
 }
 
 export function Providers() {
@@ -41,7 +99,7 @@ export function Providers() {
     <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
       <ThemeProvider>
         <QueryClientProvider client={queryClient}>
-          <AppWithWakeup />
+          <AppReady />
         </QueryClientProvider>
       </ThemeProvider>
     </GoogleOAuthProvider>

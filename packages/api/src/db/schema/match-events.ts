@@ -25,7 +25,7 @@ export const matchEvents = sqliteTable(
     matchId: integer('match_id').notNull().references(() => matches.id, { onDelete: 'cascade' }),
     playerId: integer('player_id').notNull().references(() => players.id, { onDelete: 'cascade' }),
     teamId: integer('team_id').notNull().references(() => teams.id, { onDelete: 'cascade' }),
-    type: text('type', { enum: ['goal', 'assist', 'yellow', 'red', 'sub_in', 'sub_out'] }).notNull(),
+    type: text('type', { enum: ['goal', 'own_goal', 'assist', 'yellow', 'red', 'sub_in', 'sub_out'] }).notNull(),
     minute: integer('minute'),  // null = no se publicó el minuto en el feed
     period: integer('period'),  // 1=1T, 2=2T, 3=ET1, 4=ET2, 5=penales
   },

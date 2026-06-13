@@ -162,11 +162,14 @@ export interface SyncStatsResult {
   skipped?: string;
 }
 
-// Event-type sets.
-const GOAL_TYPES = new Set([0, 39, 41]);
-const ASSIST_TYPES = new Set([1]);
-const YELLOW_TYPES = new Set([2]);
-const RED_TYPES = new Set([3]);
+// Event-type sets. FIFA Type 34 = OwnGoal (acreditado al jugador que marca
+// en contra, no al equipo que anota). Lo tratamos separado para mostrarlo
+// con ícono distinto y NO sumar al bucket.goals del jugador.
+const GOAL_TYPES     = new Set([0, 39, 41]);
+const OWN_GOAL_TYPES = new Set([34]);
+const ASSIST_TYPES   = new Set([1]);
+const YELLOW_TYPES   = new Set([2]);
+const RED_TYPES      = new Set([3]);
 
 const inFlight = new Set<number>();
 
@@ -363,6 +366,8 @@ async function doSync(matchId: number): Promise<SyncStatsResult> {
     //  - tarjeta roja a GK puede pasar pero es raro; lo mismo.
     // Asistencias/amarillas dejan todos los candidatos porque cualquiera
     // los puede recibir.
+    // Own goals SÍ pueden ser de un GK (arquero que mete en su propio arco),
+    // así que no los incluimos en eventDiscardsGK.
     const eventDiscardsGK = GOAL_TYPES.has(ev.Type) || RED_TYPES.has(ev.Type);
 
     // Resolve the team. Three sources in order of confidence:
@@ -461,7 +466,7 @@ async function doSync(matchId: number): Promise<SyncStatsResult> {
   interface TimelineEvent {
     playerId: number;
     teamId: number;
-    type: 'goal' | 'assist' | 'yellow' | 'red' | 'sub_in' | 'sub_out';
+    type: 'goal' | 'own_goal' | 'assist' | 'yellow' | 'red' | 'sub_in' | 'sub_out';
     minute: number | null;
     period: number | null;
   }
@@ -491,6 +496,10 @@ async function doSync(matchId: number): Promise<SyncStatsResult> {
     bucket.played = true;
     let eventType: TimelineEvent['type'] | null = null;
     if (GOAL_TYPES.has(ev.Type)) { bucket.goals += 1; eventType = 'goal'; }
+    // Own goals NO suman al bucket.goals del jugador (el gol va al marcador
+    // del equipo contrario, que ya maneja sync-scores). Solo se registran
+    // en el timeline para mostrarlo con ícono propio (⚽ (OG)).
+    else if (OWN_GOAL_TYPES.has(ev.Type)) { eventType = 'own_goal'; }
     else if (ASSIST_TYPES.has(ev.Type)) { bucket.assists += 1; eventType = 'assist'; }
     else if (YELLOW_TYPES.has(ev.Type)) { bucket.yellow += 1; eventType = 'yellow'; }
     else if (RED_TYPES.has(ev.Type)) { bucket.red = true; eventType = 'red'; }

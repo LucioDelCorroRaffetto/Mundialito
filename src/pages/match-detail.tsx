@@ -917,12 +917,13 @@ function formatMinute(minute: number | null, period: number | null): string {
 }
 
 const EVENT_LABEL: Record<MatchTimelineEvent['type'], { icon: string; label: string }> = {
-  goal:    { icon: '⚽', label: 'Gol' },
-  assist:  { icon: '🅰️', label: 'Asistencia' },
-  yellow:  { icon: '🟨', label: 'Amarilla' },
-  red:     { icon: '🟥', label: 'Roja' },
-  sub_in:  { icon: '🔼', label: 'Entra' },
-  sub_out: { icon: '🔽', label: 'Sale' },
+  goal:     { icon: '⚽', label: 'Gol' },
+  own_goal: { icon: '⚽', label: 'Gol en contra' },
+  assist:   { icon: '🅰️', label: 'Asistencia' },
+  yellow:   { icon: '🟨', label: 'Amarilla' },
+  red:      { icon: '🟥', label: 'Roja' },
+  sub_in:   { icon: '🔼', label: 'Entra' },
+  sub_out:  { icon: '🔽', label: 'Sale' },
 };
 
 function MatchEvents({
@@ -1008,7 +1009,9 @@ function MatchEvents({
           )}
         >
           <span className={cn('flex-shrink-0 leading-none', sub ? 'text-xs' : 'text-sm')} aria-label={cfg.label}>{cfg.icon}</span>
-          <span className={cn('truncate', sub ? 'text-muted' : 'font-medium text-text')}>{ev.playerName}</span>
+          <span className={cn('truncate', sub ? 'text-muted' : 'font-medium text-text')}>
+            {ev.playerName}{ev.type === 'own_goal' ? <span className="ml-1 text-[10px] text-red-400 font-bold">(OG)</span> : null}
+          </span>
         </div>
       );
     };
