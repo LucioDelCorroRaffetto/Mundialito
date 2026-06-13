@@ -24,32 +24,31 @@ interface TeamFlagProps {
 export function TeamFlag({ code, emoji, size = 24, className }: TeamFlagProps) {
   const [errored, setErrored] = useState(false);
 
-  // Height-driven sizing: every flag shares the same visual height; width
-  // flows from the country's natural aspect ratio. This is how FIFA, BBC
-  // and ESPN render flags inline — Switzerland looks like a small square,
-  // Qatar like a wide stripe, but both feel like flags rather than tiny
-  // images stranded inside a big square box.
-  //
-  // We request a flagcdn width sized to the *widest* aspect (~3:2) so the
-  // image stays sharp even for unusually wide flags like Qatar.
-  const flagWidth = Math.round(size * 1.5);
-  const src    = getFlagUrl(code, snapFlagWidth(flagWidth));
-  const src2x  = getFlagUrl2x(code, snapFlagWidth(flagWidth));
+  // Fixed 3:2 footprint with object-cover — same shape and size for every
+  // country. This is how FIFA / ESPN / BBC render flags in compact lists:
+  // wide flags like Qatar get a slight side-crop, square ones like
+  // Switzerland get a slight top/bottom crop, and all three of Argentina /
+  // Brazil / etc. land naturally. Visually consistent, no orphan flag.
+  const w = size;
+  const h = Math.round(size * 0.67);
+
+  const src    = getFlagUrl(code, size);
+  const src2x  = getFlagUrl2x(code, size);
 
   const containerCls = cn(
-    'inline-flex items-center flex-shrink-0',
+    'inline-flex items-center justify-center flex-shrink-0 rounded-[2px] overflow-hidden',
     className,
   );
 
-  // Emoji fallback uses a square footprint so the line-height stays
-  // predictable even if the code has no flagcdn mapping.
+  // Emoji fallback occupies the same 3:2 box so the surrounding layout
+  // stays put when flagcdn has no mapping for this code.
   if (!src || errored) {
     return (
       <span
         role="img"
         aria-label={code}
-        className={cn(containerCls, 'justify-center')}
-        style={{ width: size, height: size, fontSize: Math.round(size * 0.95), lineHeight: 1 }}
+        className={containerCls}
+        style={{ width: w, height: h, fontSize: Math.round(h * 1.05), lineHeight: 1 }}
       >
         {emoji ?? code}
       </span>
@@ -57,32 +56,20 @@ export function TeamFlag({ code, emoji, size = 24, className }: TeamFlagProps) {
   }
 
   return (
-    <span className={containerCls} style={{ height: size }}>
+    <span className={containerCls} style={{ width: w, height: h }}>
       <img
         src={src}
         srcSet={src2x ? `${src} 1x, ${src2x} 2x` : undefined}
         alt={code}
         /**
-         * Height-locked, width auto: lets each flag render at its real
-         * ratio so Switzerland is small-square and Qatar is wide-stripe.
-         * drop-shadow gives a soft edge without the boxy frame.
+         * object-cover fills the 3:2 box for every aspect ratio. Tiny
+         * inner shadow gives the chip definition against light cards
+         * without the heavy outer border the original had.
          */
-        className="h-full w-auto object-contain drop-shadow-[0_1px_2px_rgba(0,0,0,0.25)]"
-        style={{ height: size }}
+        className="w-full h-full object-cover shadow-[inset_0_0_0_1px_rgba(0,0,0,0.08)]"
         onError={() => setErrored(true)}
         loading="eager"
       />
     </span>
   );
-}
-
-/** Internal helper — snaps to the valid flagcdn widths for a sharp PNG. */
-function snapFlagWidth(target: number): 16 | 20 | 24 | 32 | 40 | 48 | 64 {
-  if (target <= 16) return 16;
-  if (target <= 20) return 20;
-  if (target <= 24) return 24;
-  if (target <= 32) return 32;
-  if (target <= 40) return 40;
-  if (target <= 48) return 48;
-  return 64;
 }
