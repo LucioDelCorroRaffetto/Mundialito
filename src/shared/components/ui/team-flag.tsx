@@ -27,23 +27,27 @@ export function TeamFlag({ code, emoji, size = 24, className }: TeamFlagProps) {
   const src    = getFlagUrl(code, size);
   const src2x  = getFlagUrl2x(code, size);
 
-  // Container dimensions — 3:2 ratio for all flags
+  // Square container so we don't squash square flags (Switzerland 1:1)
+  // nor stretch ultra-wide ones (Qatar 28:11). object-contain inside
+  // keeps each flag at its natural ratio centered on the box.
   const w = size;
-  const h = Math.round(size * 0.67);
+  const h = size;
 
   const containerCls = cn(
-    'inline-flex items-center justify-center flex-shrink-0 rounded-sm overflow-hidden shadow-sm',
+    'inline-flex items-center justify-center flex-shrink-0',
     className,
   );
 
-  // No mapping for this code, or image errored → emoji fallback
+  // No mapping for this code, or image errored → emoji fallback.
+  // Emoji is rendered slightly smaller so it doesn't visually dominate
+  // the line vs. neighbouring real flag images.
   if (!src || errored) {
     return (
       <span
         role="img"
         aria-label={code}
         className={containerCls}
-        style={{ width: w, height: h, fontSize: Math.round(h * 1.1) }}
+        style={{ width: w, height: h, fontSize: Math.round(h * 0.95), lineHeight: 1 }}
       >
         {emoji ?? code}
       </span>
@@ -56,13 +60,13 @@ export function TeamFlag({ code, emoji, size = 24, className }: TeamFlagProps) {
         src={src}
         srcSet={src2x ? `${src} 1x, ${src2x} 2x` : undefined}
         alt={code}
-        width={w}
-        height={h}
         /**
-         * object-contain: shows the entire flag without cropping,
-         * even for square or portrait-ratio flags like Switzerland (1:1).
+         * object-contain on a square box shows the entire flag without
+         * cropping for any aspect ratio (square Switzerland, ultra-wide
+         * Qatar, standard 3:2). The drop-shadow gives the flag a clean
+         * edge without the boxy rounded-rectangle look from before.
          */
-        className="w-full h-full object-contain"
+        className="max-w-full max-h-full object-contain drop-shadow-[0_1px_2px_rgba(0,0,0,0.25)]"
         onError={() => setErrored(true)}
         loading="eager"
       />
