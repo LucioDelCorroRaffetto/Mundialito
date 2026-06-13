@@ -7,6 +7,7 @@ import { loginHandler, loginSchema } from './handlers/login.js';
 import { meHandler } from './handlers/me.js';
 import { refreshHandler, refreshSchema } from './handlers/refresh.js';
 import { googleAuthHandler } from './handlers/google.js';
+import { deleteAccountHandler, deleteAccountSchema } from './handlers/delete-account.js';
 
 export const authRouter = Router();
 
@@ -35,4 +36,8 @@ authRouter.get('/me', authGuard, (req, res, next) => {
 
 authRouter.post('/refresh', credLimit, validate(refreshSchema), (req, res, next) => {
   refreshHandler(req, res).catch(next);
+});
+
+authRouter.delete('/me', authGuard, validate(deleteAccountSchema), (req, res, next) => {
+  deleteAccountHandler(req, res).catch(next);
 });

@@ -7,7 +7,7 @@ import { useAuthStore } from '@/shared/stores/auth-store';
 import { accentList, type ThemeMode } from '@/theme/palettes';
 import { usePushNotifications } from '@/shared/hooks/use-push';
 import { apiClient } from '@/shared/lib/api-client';
-import { useUpdateUsername, useUpdateAvatar } from '@/shared/hooks/use-auth';
+import { useUpdateUsername, useUpdateAvatar, useDeleteAccount } from '@/shared/hooks/use-auth';
 import { useAdminProfile } from '@/shared/hooks/use-user-profile';
 import { Link } from 'react-router-dom';
 import { AvatarPicker } from '@/shared/components/ui/image-picker';
@@ -40,10 +40,29 @@ export function SettingsPage() {
   const { isSubscribed, isLoading: pushLoading, subscribe, unsubscribe } = usePushNotifications();
   const updateUsername = useUpdateUsername();
   const updateAvatar = useUpdateAvatar();
+  const deleteAccount = useDeleteAccount();
   const { data: adminPointer } = useAdminProfile();
   const [editingUsername, setEditingUsername] = useState(false);
   const [usernameInput, setUsernameInput] = useState('');
   const [sendingTest, setSendingTest] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState('');
+
+  const handleDeleteAccount = async () => {
+    try {
+      await deleteAccount.mutateAsync(deleteConfirm.trim());
+      // Wipe local auth state + persisted refresh token before navigating
+      // so the next render doesn't fire authed queries with a now-invalid
+      // session.
+      localStorage.removeItem('mundialito_refresh');
+      logout();
+      toast.success('Cuenta eliminada. Te vamos a extrañar 🥲');
+      navigate('/login', { replace: true });
+    } catch (e: unknown) {
+      const err = e as { response?: { data?: { error?: { message?: string } } } };
+      toast.error(err?.response?.data?.error?.message ?? 'No se pudo eliminar la cuenta');
+    }
+  };
 
   const handleSendTest = async () => {
     setSendingTest(true);
@@ -371,6 +390,76 @@ export function SettingsPage() {
         >
           Cerrar sesión
         </button>
+
+        {/* Account deletion — kept visually quieter than logout and behind
+            a confirm-by-typing-username modal so it's hard to trigger by
+            accident. Permanent: ligas heredan admin al miembro más
+            antiguo; predictions, fantasy, logros, etc. se borran. */}
+        <section className="mt-6 pt-6 border-t border-border">
+          <p className="text-xs-s font-semibold text-muted uppercase tracking-wider mb-2">Zona peligrosa</p>
+          <button
+            onClick={() => { setDeleteConfirm(''); setDeleteOpen(true); }}
+            className="w-full text-left py-3 px-4 rounded-lg bg-card border border-border hover:border-red-500/40 transition-colors"
+          >
+            <p className="text-sm-s font-semibold text-red-400">Eliminar cuenta</p>
+            <p className="text-xs-s text-muted mt-0.5">
+              Borrá tu cuenta y todos tus datos para siempre.
+            </p>
+          </button>
+        </section>
+
+        {deleteOpen && (
+          <div
+            role="dialog"
+            aria-modal="true"
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4"
+            onClick={(e) => {
+              if (e.target === e.currentTarget && !deleteAccount.isPending) setDeleteOpen(false);
+            }}
+          >
+            <div className="w-full max-w-md rounded-xl bg-card border border-border p-5 shadow-xl">
+              <p className="text-base-s font-display font-bold text-red-400">Eliminar cuenta</p>
+              <p className="text-sm-s text-text mt-2">
+                Esta acción es <span className="font-semibold">permanente</span>.
+                Se borran tus pronósticos, fantasy, logros y notificaciones.
+              </p>
+              <p className="text-xs-s text-muted mt-2 leading-snug">
+                Las ligas que administrás se transfieren al miembro más antiguo. Si sos el único miembro, la liga también se borra.
+              </p>
+              <label className="block mt-4 text-xs-s text-muted">
+                Para confirmar, escribí{' '}
+                <span className="font-mono text-text">{user?.username}</span>:
+              </label>
+              <input
+                type="text"
+                value={deleteConfirm}
+                onChange={(e) => setDeleteConfirm(e.target.value)}
+                disabled={deleteAccount.isPending}
+                autoFocus
+                className="mt-1 w-full px-3 py-2 rounded-lg border border-border bg-elevated text-text text-sm focus:outline-none focus:border-red-400"
+              />
+              <div className="mt-5 flex items-center gap-2 justify-end">
+                <button
+                  onClick={() => setDeleteOpen(false)}
+                  disabled={deleteAccount.isPending}
+                  className="px-3 py-2 rounded-lg bg-elevated border border-border text-text text-sm-s font-semibold disabled:opacity-50"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleDeleteAccount}
+                  disabled={
+                    deleteAccount.isPending ||
+                    deleteConfirm.trim().toLowerCase() !== (user?.username ?? '').toLowerCase()
+                  }
+                  className="px-3 py-2 rounded-lg bg-red-500 text-white text-sm-s font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {deleteAccount.isPending ? 'Eliminando…' : 'Eliminar cuenta'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Author credit — untouched layout. The 🏛️ in front of "Mundialito
             2026" doubles as a discreet shortcut to the Presidente's profile

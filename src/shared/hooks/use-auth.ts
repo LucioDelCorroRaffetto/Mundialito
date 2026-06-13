@@ -77,6 +77,14 @@ export function useUpdateAvatar() {
   });
 }
 
+export function useDeleteAccount() {
+  return useMutation({
+    mutationFn: async (confirmUsername: string) => {
+      await apiClient.delete('/auth/me', { data: { confirmUsername } });
+    },
+  });
+}
+
 export function useMe() {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   return useQuery({
