@@ -6,6 +6,7 @@ import { errorHandler } from './middleware/error-handler.js';
 import { apiRouter } from './routes/index.js';
 import { syncScores } from './services/sync-scores.js';
 import { syncScoresFromEspn } from './services/sync-espn.js';
+import { invalidateForecastCache } from './services/forecast-service.js';
 
 export const app = express();
 
@@ -58,6 +59,7 @@ app.post('/sync', async (req, res) => {
     };
   }
 
+  if (result.synced > 0) invalidateForecastCache();
   return res.json({ data: result });
 });
 app.use('/api/v1', apiRouter);
