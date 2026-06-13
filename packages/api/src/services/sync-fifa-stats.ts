@@ -457,12 +457,11 @@ async function doSync(matchId: number): Promise<SyncStatsResult> {
   }
 
   // Eventos individuales con minuto — para el timeline en la UI. Solo
-  // guardamos los 4 tipos relevantes (gol/asistencia/amarilla/roja);
-  // fouls y substituciones quedan fuera.
+  // guardamos gol/asist/amarilla/roja + sustituciones (sub_in/sub_out).
   interface TimelineEvent {
     playerId: number;
     teamId: number;
-    type: 'goal' | 'assist' | 'yellow' | 'red';
+    type: 'goal' | 'assist' | 'yellow' | 'red' | 'sub_in' | 'sub_out';
     minute: number | null;
     period: number | null;
   }
@@ -496,32 +495,39 @@ async function doSync(matchId: number): Promise<SyncStatsResult> {
     else if (YELLOW_TYPES.has(ev.Type)) { bucket.yellow += 1; eventType = 'yellow'; }
     else if (RED_TYPES.has(ev.Type)) { bucket.red = true; eventType = 'red'; }
 
+    const fifaPeriod = ev.Period ?? null;
+    const normalizedPeriod =
+      fifaPeriod === 3 ? 1
+      : fifaPeriod === 5 ? 2
+      : fifaPeriod === 7 ? 3
+      : fifaPeriod === 9 ? 4
+      : fifaPeriod === 11 ? 5
+      : null;
+    const minute = parseMinute(ev.MatchMinute);
+
     if (eventType) {
-      // FIFA usa períodos impares (3=1T, 5=2T, 7=ET1, 9=ET2, 11=penales).
-      // Normalizamos a 1..5 para que el frontend no conozca esa convención.
-      const fifaPeriod = ev.Period ?? null;
-      const normalizedPeriod =
-        fifaPeriod === 3 ? 1
-        : fifaPeriod === 5 ? 2
-        : fifaPeriod === 7 ? 3
-        : fifaPeriod === 9 ? 4
-        : fifaPeriod === 11 ? 5
-        : null;
       timeline.push({
         playerId: player.id,
         teamId: player.teamId,
         type: eventType,
-        minute: parseMinute(ev.MatchMinute),
+        minute,
         period: normalizedPeriod,
       });
     }
-    // Type 5 substitution — sub-in (IdPlayer) and sub-out (IdSubPlayer)
-    // both played. The sub-out player may have ZERO other events in the
-    // timeline (a quiet defender), so resolving them only via the cached
-    // rosterByFifaId would miss them and cost them the clean-sheet bonus.
-    // Parse the "replace SURNAME (out)" fragment from the description as
-    // a fallback resolver.
+
+    // Type 5 substitution — sub-in (IdPlayer) and sub-out (IdSubPlayer).
+    // Emitimos dos eventos de timeline (sub_in + sub_out) y marcamos como
+    // played al sub-out (que puede no tener otros eventos en el feed).
     if (ev.Type === 5) {
+      // sub_in: el jugador principal ya resuelto arriba es el que entra
+      timeline.push({
+        playerId: player.id,
+        teamId: player.teamId,
+        type: 'sub_in',
+        minute,
+        period: normalizedPeriod,
+      });
+
       let subOut: RosterPlayer | null = null;
       if (ev.IdSubPlayer && rosterByFifaId.has(ev.IdSubPlayer)) {
         subOut = rosterByFifaId.get(ev.IdSubPlayer)!;
@@ -547,8 +553,14 @@ async function doSync(matchId: number): Promise<SyncStatsResult> {
         }
       }
       if (subOut) {
-        const b2 = ensureBucket(subOut.id);
-        b2.played = true;
+        ensureBucket(subOut.id).played = true;
+        timeline.push({
+          playerId: subOut.id,
+          teamId: subOut.teamId,
+          type: 'sub_out',
+          minute,
+          period: normalizedPeriod,
+        });
       }
     }
   }

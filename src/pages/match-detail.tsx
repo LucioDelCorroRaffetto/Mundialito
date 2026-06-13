@@ -917,10 +917,12 @@ function formatMinute(minute: number | null, period: number | null): string {
 }
 
 const EVENT_LABEL: Record<MatchTimelineEvent['type'], { icon: string; label: string }> = {
-  goal:   { icon: '⚽', label: 'Gol' },
-  assist: { icon: '🅰️', label: 'Asistencia' },
-  yellow: { icon: '🟨', label: 'Amarilla' },
-  red:    { icon: '🟥', label: 'Roja' },
+  goal:    { icon: '⚽', label: 'Gol' },
+  assist:  { icon: '🅰️', label: 'Asistencia' },
+  yellow:  { icon: '🟨', label: 'Amarilla' },
+  red:     { icon: '🟥', label: 'Roja' },
+  sub_in:  { icon: '🔼', label: 'Entra' },
+  sub_out: { icon: '🔽', label: 'Sale' },
 };
 
 function MatchEvents({
@@ -991,18 +993,22 @@ function MatchEvents({
     }
     rows.push({ kind: 'marker', id: 'kick-off', label: 'Inicio del juego' });
 
+    const isSub = (type: MatchTimelineEvent['type']) => type === 'sub_in' || type === 'sub_out';
+
     const EventSide = ({ ev }: { ev: MatchTimelineEvent }) => {
       const cfg = EVENT_LABEL[ev.type];
       const isHome = ev.teamCode === homeTeamCode;
+      const sub = isSub(ev.type);
       return (
         <div
           className={cn(
-            'flex items-center gap-2 text-sm-s min-w-0',
+            'flex items-center gap-1.5 min-w-0',
             isHome ? 'flex-row' : 'flex-row-reverse',
+            sub ? 'text-xs-s text-muted' : 'text-sm-s',
           )}
         >
-          <span className="flex-shrink-0 text-sm leading-none" aria-label={cfg.label}>{cfg.icon}</span>
-          <span className="font-medium text-text truncate">{ev.playerName}</span>
+          <span className={cn('flex-shrink-0 leading-none', sub ? 'text-xs' : 'text-sm')} aria-label={cfg.label}>{cfg.icon}</span>
+          <span className={cn('truncate', sub ? 'text-muted' : 'font-medium text-text')}>{ev.playerName}</span>
         </div>
       );
     };
@@ -1025,15 +1031,19 @@ function MatchEvents({
             }
             const ev = row.ev;
             const isHome = ev.teamCode === homeTeamCode;
+            const sub = isSub(ev.type);
             return (
               <div
                 key={ev.id}
-                className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 py-1.5 border-b border-border/40 last:border-b-0"
+                className={cn(
+                  'grid grid-cols-[1fr_auto_1fr] items-center gap-2 border-b border-border/40 last:border-b-0',
+                  sub ? 'py-1' : 'py-1.5',
+                )}
               >
                 {/* Local */}
                 <div className="min-w-0">{isHome && <EventSide ev={ev} />}</div>
                 {/* Minuto */}
-                <span className="text-xs-s font-bold text-muted tabular-nums px-2 flex-shrink-0">
+                <span className={cn('font-bold text-muted tabular-nums px-2 flex-shrink-0', sub ? 'text-[10px]' : 'text-xs-s')}>
                   {formatMinute(ev.minute, ev.period)}
                 </span>
                 {/* Visitante */}

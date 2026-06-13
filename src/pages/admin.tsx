@@ -288,6 +288,19 @@ function MatchAdminRow({ match, teamMap }: { match: Match; teamMap: Map<number, 
   const [saved, setSaved] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [statsOpen, setStatsOpen] = useState(false);
+  const [fifaSynced, setFifaSynced] = useState(false);
+
+  const fifaSyncMutation = useMutation({
+    mutationFn: async () => {
+      await apiClient.post(`/admin/matches/${match.id}/sync-player-stats`);
+    },
+    onSuccess: () => {
+      setFifaSynced(true);
+      setTimeout(() => setFifaSynced(false), 3000);
+      queryClient.invalidateQueries({ queryKey: ['admin', 'player-stats', match.id] });
+      queryClient.invalidateQueries({ queryKey: ['match', match.id] });
+    },
+  });
 
   const mutation = useMutation({
     mutationFn: async (payload: UpdateMatchPayload) => {
@@ -418,6 +431,23 @@ function MatchAdminRow({ match, teamMap }: { match: Match; teamMap: Map<number, 
         </Button>
       </form>
 
+      {/* FIFA stats re-sync — solo para partidos finalizados */}
+      {match.status === 'finished' && (
+        <div className="flex items-center justify-between gap-2 pt-1">
+          <p className="text-xs text-muted">Re-sync stats FIFA (goles/asist/tarjetas)</p>
+          <Button
+            size="sm"
+            variant="secondary"
+            loading={fifaSyncMutation.isPending}
+            onClick={() => fifaSyncMutation.mutate()}
+            className={cn('flex-shrink-0 flex items-center gap-1 text-xs', fifaSynced && 'text-green-400')}
+          >
+            {fifaSynced ? <CheckCircle2 size={12} /> : <RefreshCw size={12} className={fifaSyncMutation.isPending ? 'animate-spin' : ''} />}
+            {fifaSynced ? 'OK' : 'FIFA'}
+          </Button>
+        </div>
+      )}
+
       {/* Player stats — collapsible */}
       <div className="-mx-4 -mb-4 border-t border-border">
         <button
@@ -446,6 +476,12 @@ interface SyncResult {
   matchesChecked: number;
 }
 
+interface BulkFifaResult {
+  total: number;
+  succeeded: number;
+  failed: number;
+}
+
 function SyncScoresButton() {
   const queryClient = useQueryClient();
   const [result, setResult] = useState<SyncResult | null>(null);
@@ -462,7 +498,7 @@ function SyncScoresButton() {
   });
 
   return (
-    <div className="mx-4 mb-4 p-4 rounded-xl bg-card border border-border flex flex-col gap-3">
+    <div className="mx-4 mb-2 p-4 rounded-xl bg-card border border-border flex flex-col gap-3">
       <div className="flex items-center justify-between gap-3">
         <div>
           <p className="text-sm font-semibold text-text">Sincronizar marcadores</p>
@@ -489,6 +525,51 @@ function SyncScoresButton() {
         <div className="flex items-center gap-2 text-xs text-red-400">
           <AlertCircle size={13} />
           {(syncMutation.error as { response?: { data?: { error?: { message?: string } } } })?.response?.data?.error?.message ?? 'Error al sincronizar'}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SyncAllFifaButton() {
+  const [result, setResult] = useState<BulkFifaResult | null>(null);
+
+  const mutation = useMutation({
+    mutationFn: async () => {
+      const { data } = await apiClient.post<{ data: BulkFifaResult }>('/admin/sync-all-finished-stats');
+      return data.data;
+    },
+    onSuccess: (data) => setResult(data),
+  });
+
+  return (
+    <div className="mx-4 mb-4 p-4 rounded-xl bg-card border border-border flex flex-col gap-3">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <p className="text-sm font-semibold text-text">Re-sync stats FIFA (bulk)</p>
+          <p className="text-xs text-muted mt-0.5">Vuelve a correr el sync de goles/asist/tarjetas para todos los partidos finalizados</p>
+        </div>
+        <Button
+          size="sm"
+          variant="secondary"
+          loading={mutation.isPending}
+          onClick={() => { setResult(null); mutation.mutate(); }}
+          className="flex-shrink-0 flex items-center gap-1.5"
+        >
+          <RefreshCw size={14} className={mutation.isPending ? 'animate-spin' : ''} />
+          Re-sync
+        </Button>
+      </div>
+      {result && (
+        <div className="flex items-center gap-2 text-xs text-green-400">
+          <CheckCircle2 size={13} />
+          <span>{result.succeeded}/{result.total} ok{result.failed > 0 ? ` · ${result.failed} fallido${result.failed !== 1 ? 's' : ''}` : ''}</span>
+        </div>
+      )}
+      {mutation.isError && (
+        <div className="flex items-center gap-2 text-xs text-red-400">
+          <AlertCircle size={13} />
+          {(mutation.error as { response?: { data?: { error?: { message?: string } } } })?.response?.data?.error?.message ?? 'Error'}
         </div>
       )}
     </div>
@@ -530,6 +611,7 @@ export function AdminPage() {
 
       {/* Sync scores */}
       <SyncScoresButton />
+      <SyncAllFifaButton />
 
       {/* Filters */}
       <div className="px-4 pb-4 flex flex-col gap-3">

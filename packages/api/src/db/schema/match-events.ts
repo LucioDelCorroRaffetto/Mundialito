@@ -15,9 +15,8 @@ import { teams } from './teams.js';
  * GROUP BY en hot paths. La duplicación cuesta poco — el sync escribe
  * ambas tablas en la misma corrida.
  *
- * Tipo de eventos: 'goal', 'assist', 'yellow', 'red'. (substitution,
- * fouls neutros, etc. NO se guardan — solo lo que el usuario quiere ver
- * en la pantalla del partido).
+ * Tipo de eventos: 'goal', 'assist', 'yellow', 'red', 'sub_in', 'sub_out'.
+ * SQLite no enforce el enum a nivel DB; la restricción vive solo en el tipo TS.
  */
 export const matchEvents = sqliteTable(
   'match_events',
@@ -26,7 +25,7 @@ export const matchEvents = sqliteTable(
     matchId: integer('match_id').notNull().references(() => matches.id, { onDelete: 'cascade' }),
     playerId: integer('player_id').notNull().references(() => players.id, { onDelete: 'cascade' }),
     teamId: integer('team_id').notNull().references(() => teams.id, { onDelete: 'cascade' }),
-    type: text('type', { enum: ['goal', 'assist', 'yellow', 'red'] }).notNull(),
+    type: text('type', { enum: ['goal', 'assist', 'yellow', 'red', 'sub_in', 'sub_out'] }).notNull(),
     minute: integer('minute'),  // null = no se publicó el minuto en el feed
     period: integer('period'),  // 1=1T, 2=2T, 3=ET1, 4=ET2, 5=penales
   },
