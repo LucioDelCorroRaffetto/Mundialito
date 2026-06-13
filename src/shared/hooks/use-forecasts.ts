@@ -19,6 +19,11 @@ export interface TournamentForecastRow {
   teamFlag: string;
   group: string;
   reachR32: number;
+  reachR16: number;
+  reachQF: number;
+  reachSF: number;
+  reachFinal: number;
+  winTournament: number;
   expectedPoints: number;
   topOfGroup: number;
 }

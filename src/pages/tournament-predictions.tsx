@@ -322,28 +322,34 @@ function TopScorerCard({
   );
 }
 
+const FORECAST_ROUNDS = [
+  { key: 'reachR32' as const,     label: 'R32' },
+  { key: 'reachR16' as const,     label: 'R16' },
+  { key: 'reachQF' as const,      label: 'QF'  },
+  { key: 'reachSF' as const,      label: 'SF'  },
+  { key: 'reachFinal' as const,   label: 'Final' },
+  { key: 'winTournament' as const, label: '🏆' },
+];
+
+function pct(v: number) { return (v * 100).toFixed(0) + '%'; }
+
 /**
- * Top candidatos a clasificar a R32 — output del Monte Carlo del Oloráculo
- * sobre la fase de grupos.
- *
- * No reemplaza al pick del usuario; es un baseline estadístico de
- * referencia. Colapsable para no comerse pantalla en mobile. Cuando el
- * bracket del knockout esté seteado en BD, este componente se podrá
- * extender a probabilidades de avance por fase.
+ * Modelo estadístico completo — Monte Carlo del Oloráculo con bracket
+ * de knockout (R32 → Final). Ordenado por % de ganar el torneo.
  */
 function ForecastTopCandidates() {
   const { data, isLoading } = useTournamentForecast();
   const [expanded, setExpanded] = useState(false);
   if (isLoading || !data || data.length === 0) return null;
 
-  const top = data.slice(0, expanded ? 12 : 6);
+  const top = data.slice(0, expanded ? 20 : 8);
 
   return (
-    <div className="mx-4 mb-3 p-3 rounded-xl bg-elevated border border-border">
-      <div className="flex items-center justify-between mb-2">
+    <div className="mx-4 mb-3 rounded-xl bg-elevated border border-border overflow-hidden">
+      <div className="flex items-center justify-between px-3 pt-3 pb-2">
         <div>
-          <p className="text-sm-s font-semibold text-text">📊 Modelo estadístico</p>
-          <p className="text-[10px] text-muted">Más probables de clasificar a R32 (Monte Carlo)</p>
+          <p className="text-sm-s font-semibold text-text">Oloráculo</p>
+          <p className="text-[10px] text-muted">Monte Carlo · Poisson + Elo · 5 000 simulaciones</p>
         </div>
         <button
           type="button"
@@ -353,20 +359,51 @@ function ForecastTopCandidates() {
           {expanded ? 'Ver menos' : 'Ver más'}
         </button>
       </div>
-      <div className="flex flex-col gap-1.5">
-        {top.map((row, i) => {
-          const r32Pct = (row.reachR32 * 100).toFixed(0);
-          const topPct = (row.topOfGroup * 100).toFixed(0);
-          return (
-            <div key={row.teamId} className="flex items-center gap-2 text-xs-s">
-              <span className="w-4 text-muted text-right font-bold tabular-nums">{i + 1}</span>
-              <span className="w-5">{row.teamFlag}</span>
-              <span className="flex-1 text-text font-semibold truncate">{row.teamName}</span>
-              <span className="text-muted">1° {topPct}%</span>
-              <span className="text-accent font-bold w-12 text-right">{r32Pct}%</span>
-            </div>
-          );
-        })}
+
+      {/* Header */}
+      <div className="grid text-[10px] font-semibold text-muted uppercase px-3 pb-1 border-b border-border"
+        style={{ gridTemplateColumns: '1.5rem 1.2rem 1fr repeat(6, 2.6rem)' }}>
+        <span>#</span>
+        <span />
+        <span>Equipo</span>
+        {FORECAST_ROUNDS.map((r) => (
+          <span key={r.key} className="text-center">{r.label}</span>
+        ))}
+      </div>
+
+      {/* Rows */}
+      <div className="flex flex-col divide-y divide-border">
+        {top.map((row, i) => (
+          <div
+            key={row.teamId}
+            className="grid items-center px-3 py-1.5 text-xs-s"
+            style={{ gridTemplateColumns: '1.5rem 1.2rem 1fr repeat(6, 2.6rem)' }}
+          >
+            <span className="text-muted font-bold tabular-nums">{i + 1}</span>
+            <span>{row.teamFlag}</span>
+            <span className="text-text font-semibold truncate pr-1">{row.teamName}</span>
+            {FORECAST_ROUNDS.map((r) => {
+              const val = row[r.key];
+              const isChamp = r.key === 'winTournament';
+              return (
+                <span
+                  key={r.key}
+                  className={`text-center tabular-nums font-semibold ${
+                    isChamp
+                      ? 'text-amber-500'
+                      : val >= 0.5
+                      ? 'text-emerald-500'
+                      : val >= 0.2
+                      ? 'text-text'
+                      : 'text-muted'
+                  }`}
+                >
+                  {pct(val)}
+                </span>
+              );
+            })}
+          </div>
+        ))}
       </div>
     </div>
   );
