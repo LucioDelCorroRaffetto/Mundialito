@@ -19,6 +19,7 @@ import { useMatch } from '@/shared/hooks/use-matches';
 import { play } from '@/shared/lib/sounds';
 import { useTeamMap } from '@/shared/hooks/use-teams';
 import { useMyLeagues } from '@/shared/hooks/use-leagues';
+import { getTeamColors, hexToRgba } from '@/shared/data/team-colors';
 
 /** Short display label for a team — hides internal 'TBD' code */
 function teamDisplayCode(code: string): string {
@@ -115,6 +116,20 @@ function ScoreInput({
       </div>
     </div>
   );
+}
+
+/**
+ * Etiqueta corta del sub-estado live para mostrar bajo el badge "EN VIVO".
+ * Devuelve null cuando no hay nada interesante que decir (in_play normal /
+ * sin info / partido ya terminado) — el caller no renderea nada.
+ */
+function liveStatusLabel(liveStatus: string | null | undefined): string | null {
+  switch (liveStatus) {
+    case 'half_time':         return 'Entretiempo';
+    case 'extra_time_break':  return 'Descanso del alargue';
+    case 'penalty_shootout':  return 'Penales';
+    default:                  return null;
+  }
 }
 
 function formatDate(utc: string) {
@@ -593,8 +608,43 @@ export function MatchDetailPage() {
         </div>
       </div>
 
-      {/* Score card */}
-      <div className="mx-4 p-4 rounded-xl bg-card border border-border shadow-card overflow-hidden">
+      {/* Score card.
+          Live/finished: lo tematizamos con un gradiente sutil que va del
+          primary del local al primary del visitante, para que el partido
+          en curso se "vista" con los colores de las dos selecciones sin
+          tapar el accent global del usuario (que sigue siendo el de
+          toda la app). Bordeamos con los mismos hues pero con un alpha
+          más alto para que la card se sienta integrada. */}
+      {(() => {
+        const isThemed = match.status === 'live' || match.status === 'finished';
+        const homeColors = getTeamColors(homeTeamDisplay.code);
+        const awayColors = getTeamColors(awayTeamDisplay.code);
+        // Alpha bajo en el fondo (~15%) para que el bg-card/text de Tailwind
+        // siga ganando contraste. El borde va con ~50% para que se note
+        // qué equipos están en juego sin gritar.
+        const themedStyle: React.CSSProperties | undefined = isThemed
+          ? {
+              backgroundImage: `linear-gradient(90deg, ${hexToRgba(homeColors.primary, 0.18)} 0%, ${hexToRgba(homeColors.primary, 0.04)} 45%, ${hexToRgba(awayColors.primary, 0.04)} 55%, ${hexToRgba(awayColors.primary, 0.18)} 100%)`,
+              borderColor: hexToRgba(homeColors.primary, 0.4),
+              // Sombra a juego — el shadow-card de Tailwind queda debajo.
+              boxShadow: `0 1px 0 ${hexToRgba(awayColors.primary, 0.3)} inset`,
+            }
+          : undefined;
+        return (
+      <div
+        className="mx-4 p-4 rounded-xl bg-card border border-border shadow-card overflow-hidden relative"
+        style={themedStyle}
+      >
+        {/* Overlay sutil que oscurece/aclara el fondo gradiente sin tapar
+            el contenido — mantiene el contraste del texto/marcador tanto
+            en modo claro como oscuro. */}
+        {isThemed && (
+          <div
+            aria-hidden
+            className="absolute inset-0 pointer-events-none bg-card/40 dark:bg-card/30 rounded-xl"
+          />
+        )}
+        <div className="relative">
         {match.status !== 'scheduled' ? (
           // Live / finished: muestra el marcador real si lo tenemos, o un
           // placeholder "—" mientras el sync no llegó todavía. Antes
@@ -602,15 +652,27 @@ export function MatchDetailPage() {
           // editar el pronóstico en partidos ya en vivo o terminados.
           <div className="flex flex-col items-center gap-2">
             {match.status === 'live' && (
-              <span className="flex items-center gap-1.5 mb-1">
-                {/* Heartbeat dot — concentric ping ring on top of a solid
-                    dot reads more "live broadcast" than a single pulse. */}
-                <span className="relative inline-flex w-2.5 h-2.5">
-                  <span className="absolute inset-0 rounded-full bg-red-400/60 animate-ping" />
-                  <span className="relative inline-flex w-2.5 h-2.5 rounded-full bg-red-500" />
+              <div className="flex flex-col items-center gap-0.5 mb-1">
+                <span className="flex items-center gap-1.5">
+                  {/* Heartbeat dot — concentric ping ring on top of a solid
+                      dot reads more "live broadcast" than a single pulse.
+                      Apagamos el ping cuando el juego está pausado
+                      (entretiempo / break del alargue) — sigue rojo fijo
+                      pero deja de "latir" para señalar que no hay acción. */}
+                  <span className="relative inline-flex w-2.5 h-2.5">
+                    {match.liveStatus !== 'half_time' && match.liveStatus !== 'extra_time_break' && (
+                      <span className="absolute inset-0 rounded-full bg-red-400/60 animate-ping" />
+                    )}
+                    <span className="relative inline-flex w-2.5 h-2.5 rounded-full bg-red-500" />
+                  </span>
+                  <span className="text-xs-s font-bold text-red-400 uppercase tracking-wider">En Vivo</span>
                 </span>
-                <span className="text-xs-s font-bold text-red-400 uppercase tracking-wider">En Vivo</span>
-              </span>
+                {liveStatusLabel(match.liveStatus) && (
+                  <span className="text-[10px] font-semibold text-muted uppercase tracking-wider">
+                    {liveStatusLabel(match.liveStatus)}
+                  </span>
+                )}
+              </div>
             )}
             <div className="flex items-center justify-around w-full gap-4">
               <div className="flex flex-col items-center gap-1">
@@ -686,7 +748,10 @@ export function MatchDetailPage() {
             <ScoreInput value={awayScore} onChange={updateAwayScore} team={awayTeamDisplay} />
           </div>
         )}
+        </div>
       </div>
+        );
+      })()}
 
       {/* Match info */}
       <div className="mx-4 mt-3 p-4 rounded-lg bg-elevated border border-border flex flex-col gap-2">
