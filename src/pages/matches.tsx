@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ChevronRight, Clock, CheckCircle2 } from 'lucide-react';
+import { ChevronRight, Clock, CheckCircle2, Check, X } from 'lucide-react';
 import { useMatches } from '@/shared/hooks/use-matches';
 import { useTeams, useTeamMap } from '@/shared/hooks/use-teams';
 import { useMyPredictions } from '@/shared/hooks/use-predictions';
@@ -69,7 +69,7 @@ function getTeam(teamMap: Map<number, Team> | undefined, id: number): Team {
   return teamMap?.get(id) ?? PLACEHOLDER_TEAM;
 }
 
-const STATUS_TABS = ['Todos', 'En vivo', 'Pendientes', 'Pronosticados'] as const;
+const STATUS_TABS = ['Todos', 'En vivo', 'Pendientes', 'Pronosticados', 'Terminados'] as const;
 type StatusTab = (typeof STATUS_TABS)[number];
 
 const WC_GROUPS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L'] as const;
@@ -137,6 +137,7 @@ export function MatchesPage() {
     if (statusFilter === 'En vivo') return m.status === 'live';
     if (statusFilter === 'Pronosticados') return predictedIds.has(m.id);
     if (statusFilter === 'Pendientes') return !predictedIds.has(m.id) && m.status === 'scheduled';
+    if (statusFilter === 'Terminados') return m.status === 'finished';
     return true;
   });
 
@@ -225,6 +226,12 @@ export function MatchesPage() {
             {STATUS_TABS.map((tab) => {
               const isActive = statusFilter === tab;
               const liveTab = tab === 'En vivo' && liveCount > 0;
+              const count =
+                tab === 'En vivo'
+                  ? liveCount
+                  : tab === 'Terminados'
+                    ? finishedCount
+                    : null;
               return (
                 <button
                   key={tab}
@@ -244,8 +251,8 @@ export function MatchesPage() {
                     <span className="w-1.5 h-1.5 rounded-full bg-red-200 animate-pulse" />
                   )}
                   {tab}
-                  {liveTab && (
-                    <span className="text-[10px] opacity-80">({liveCount})</span>
+                  {count !== null && count > 0 && (
+                    <span className="text-[10px] opacity-80">({count})</span>
                   )}
                 </button>
               );
@@ -268,76 +275,138 @@ export function MatchesPage() {
                   );
                   const homeTeam = getTeam(teamMap, match.homeTeamId);
                   const awayTeam = getTeam(teamMap, match.awayTeamId);
+                  const isLive = match.status === 'live';
+                  const isFinished = match.status === 'finished';
+                  const isScheduled = match.status === 'scheduled';
+                  // Distintos sub-estados live: en entretiempo o break del
+                  // alargue, mostramos "ENT" en vez del badge pulsante para
+                  // dejar claro que el partido está pausado.
+                  const isHalftime = isLive && (match.liveStatus === 'half_time' || match.liveStatus === 'extra_time_break');
+                  // Only meaningful once the match is finished and graded.
+                  const predictionHit =
+                    isFinished && prediction && prediction.points !== null
+                      ? prediction.points > 0
+                      : null;
                   return (
-                    <Link
+                    <motion.div
                       key={match.id}
-                      to={`/matches/${match.id}`}
-                      className="flex items-center gap-3 p-3 rounded-lg bg-card border border-border hover:border-accent-border transition-colors"
+                      initial={{ opacity: 0, y: 4 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.18 }}
                     >
-                      <div className="flex-shrink-0">
-                        {match.status === 'live' ? (
-                          <span className="w-2 h-2 rounded-full bg-red-400 animate-pulse block" />
-                        ) : prediction ? (
-                          <CheckCircle2 size={18} className="text-green-400" />
-                        ) : (
-                          <Clock size={18} className="text-muted" />
+                      <Link
+                        to={`/matches/${match.id}`}
+                        className={cn(
+                          'flex items-center gap-3 p-3 rounded-lg border transition-all',
+                          isLive &&
+                            'bg-card border-red-500/50 shadow-[0_0_0_1px_rgba(239,68,68,0.25),0_0_16px_-4px_rgba(239,68,68,0.45)] hover:border-red-500/70',
+                          isFinished &&
+                            'bg-card/60 border-border/60 opacity-70 hover:opacity-90 hover:border-accent-border',
+                          isScheduled &&
+                            'bg-card border-border hover:border-accent-border',
                         )}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs-s text-muted">
-                            {match.group ? `Grupo ${match.group}` : ROUND_LABELS[match.round]}
-                          </span>
-                          <span className="text-xs-s text-muted">·</span>
-                          {match.status === 'live' ? (
-                            <span className="flex items-center gap-1">
-                              <span className="w-2 h-2 rounded-full bg-red-400 animate-pulse" />
-                              <span className="text-xs-s font-bold text-red-400">EN VIVO</span>
-                            </span>
+                      >
+                        <div className="flex-shrink-0">
+                          {isLive ? (
+                            <span className={cn('w-2 h-2 rounded-full bg-red-400 block', !isHalftime && 'animate-pulse')} />
+                          ) : isFinished ? (
+                            predictionHit === true ? (
+                              <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-green-500/20 text-green-500">
+                                <Check size={12} strokeWidth={3} />
+                              </span>
+                            ) : predictionHit === false ? (
+                              <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-red-500/15 text-red-500">
+                                <X size={12} strokeWidth={3} />
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-elevated text-muted text-[9px] font-bold">
+                                FT
+                              </span>
+                            )
+                          ) : prediction ? (
+                            <CheckCircle2 size={18} className="text-green-400" />
                           ) : (
-                            <span className="text-xs-s text-muted">{formatTime(match.kickoffUtc)}</span>
+                            <Clock size={18} className="text-muted" />
                           )}
                         </div>
-                        <div className="flex items-center gap-2 mt-1">
-                          <span className="flex items-center gap-1.5 text-sm-s font-semibold text-text">
-                            {homeTeam.code !== 'TBD' && (
-                              <TeamFlag code={homeTeam.code} emoji={homeTeam.flag} size={20} />
-                            )}
-                            <span className={homeTeam.code === 'TBD' ? 'text-muted text-xs-s' : ''}>
-                              {teamDisplayLabel(homeTeam.code, match.matchNumber, 'home')}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs-s text-muted">
+                              {match.group ? `Grupo ${match.group}` : ROUND_LABELS[match.round]}
                             </span>
-                          </span>
-                          {(match.status === 'live' || match.status === 'finished') &&
-                          match.homeScore !== null ? (
-                            <span
+                            <span className="text-xs-s text-muted">·</span>
+                            {isLive ? (
+                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-red-500/15 border border-red-500/40">
+                                <span className={cn('w-1.5 h-1.5 rounded-full bg-red-400', !isHalftime && 'animate-pulse')} />
+                                <span className="text-[10px] font-bold text-red-600 dark:text-red-300 uppercase tracking-wider">
+                                  {isHalftime ? 'ENT' : 'En vivo'}
+                                </span>
+                              </span>
+                            ) : isFinished ? (
+                              <span className="inline-flex items-center px-1.5 py-0.5 rounded-full bg-elevated border border-border text-[10px] font-bold text-muted uppercase tracking-wider">
+                                Final
+                              </span>
+                            ) : (
+                              <span className="text-xs-s font-semibold text-accent tabular-nums">
+                                {formatTime(match.kickoffUtc)}
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2 mt-1">
+                            <span className="flex items-center gap-1.5 text-sm-s font-semibold text-text">
+                              {homeTeam.code !== 'TBD' && (
+                                <TeamFlag code={homeTeam.code} emoji={homeTeam.flag} size={20} />
+                              )}
+                              <span className={homeTeam.code === 'TBD' ? 'text-muted text-xs-s' : ''}>
+                                {teamDisplayLabel(homeTeam.code, match.matchNumber, 'home')}
+                              </span>
+                            </span>
+                            {(isLive || isFinished) && match.homeScore !== null ? (
+                              <span
+                                className={cn(
+                                  'font-display font-bold tabular-nums px-2',
+                                  isLive
+                                    ? 'text-lg-s text-red-500'
+                                    : 'text-sm-s text-muted',
+                                )}
+                              >
+                                {match.homeScore} – {match.awayScore}
+                              </span>
+                            ) : (
+                              <span className="text-xs-s font-bold text-muted">vs</span>
+                            )}
+                            <span className="flex items-center gap-1.5 text-sm-s font-semibold text-text">
+                              <span className={awayTeam.code === 'TBD' ? 'text-muted text-xs-s' : ''}>
+                                {teamDisplayLabel(awayTeam.code, match.matchNumber, 'away')}
+                              </span>
+                              {awayTeam.code !== 'TBD' && (
+                                <TeamFlag code={awayTeam.code} emoji={awayTeam.flag} size={20} />
+                              )}
+                            </span>
+                          </div>
+                          {prediction && (
+                            <p
                               className={cn(
-                                'text-base-s font-display font-bold tabular-nums px-2',
-                                match.status === 'live' ? 'text-red-400' : 'text-text',
+                                'text-xs-s font-semibold mt-0.5',
+                                predictionHit === true
+                                  ? 'text-green-500'
+                                  : predictionHit === false
+                                    ? 'text-muted'
+                                    : 'text-accent',
                               )}
                             >
-                              {match.homeScore} – {match.awayScore}
-                            </span>
-                          ) : (
-                            <span className="text-xs-s font-bold text-muted">vs</span>
+                              Tu pronóstico: {prediction.homeScore} – {prediction.awayScore}
+                              {prediction.points !== null && ` · +${prediction.points} pts`}
+                            </p>
                           )}
-                          <span className="flex items-center gap-1.5 text-sm-s font-semibold text-text">
-                            <span className={awayTeam.code === 'TBD' ? 'text-muted text-xs-s' : ''}>
-                              {teamDisplayLabel(awayTeam.code, match.matchNumber, 'away')}
-                            </span>
-                            {awayTeam.code !== 'TBD' && (
-                              <TeamFlag code={awayTeam.code} emoji={awayTeam.flag} size={20} />
-                            )}
-                          </span>
                         </div>
-                        {prediction && (
-                          <p className="text-xs-s text-accent font-semibold mt-0.5">
-                            Tu pronóstico: {prediction.homeScore} – {prediction.awayScore}
-                            {prediction.points !== null && ` · +${prediction.points} pts`}
-                          </p>
+                        {/* Hide the chevron CTA on finished matches — there's nothing
+                            actionable left to predict. */}
+                        {!isFinished && (
+                          <ChevronRight size={16} className="text-muted flex-shrink-0" />
                         )}
-                      </div>
-                      <ChevronRight size={16} className="text-muted flex-shrink-0" />
-                    </Link>
+                      </Link>
+                    </motion.div>
                   );
                 })}
               </motion.div>
