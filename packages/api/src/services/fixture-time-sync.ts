@@ -26,21 +26,28 @@ export interface FixtureSyncResult {
 
 /**
  * Fetches FIFA calendar for [from, to) and returns a map fifaIdMatch → ISO date.
- * `from` and `to` are Date objects; the FIFA API expects ISO without millis.
+ * `from` y `to` se redondean al inicio del día UTC: la API rechaza
+ * silenciosamente (responde `null` con HTTP 200) si las horas no son
+ * medianoche exacta. Partimos en chunks diarios para garantizar cobertura.
  */
+function startOfUtcDay(d: Date): Date {
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+}
+
 async function fetchFifaWindow(from: Date, to: Date): Promise<Map<string, string>> {
   const out = new Map<string, string>();
-  // FIFA acepta rangos de hasta varios días pero a veces devuelve incompleto;
-  // partimos en chunks diarios para garantizar cobertura.
-  for (let t = from.getTime(); t < to.getTime(); t += 24 * 3600 * 1000) {
+  const fromMidnight = startOfUtcDay(from).getTime();
+  // Para `to` redondeamos hacia ARRIBA, así una ventana de 48h desde las
+  // 16:50 UTC cubre HOY (16:50→00:00) + MAÑANA (00:00→24:00).
+  const toMidnight = startOfUtcDay(new Date(to.getTime() + 24 * 3600 * 1000 - 1)).getTime();
+  for (let t = fromMidnight; t < toMidnight; t += 24 * 3600 * 1000) {
     const start = new Date(t).toISOString().replace(/\.\d{3}Z$/, 'Z');
-    const end = new Date(Math.min(t + 24 * 3600 * 1000, to.getTime()))
-      .toISOString()
-      .replace(/\.\d{3}Z$/, 'Z');
+    const end = new Date(t + 24 * 3600 * 1000).toISOString().replace(/\.\d{3}Z$/, 'Z');
     const url = `${FIFA_BASE}?idCompetition=${FIFA_COMPETITION}&idSeason=${FIFA_SEASON}&from=${start}&to=${end}&language=en&count=30`;
     const res = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' } });
     if (!res.ok) continue;
     const data: any = await res.json();
+    if (!data) continue;
     const ms: any[] = data?.Results ?? [];
     for (const m of ms) {
       if (m?.IdMatch && m?.Date) out.set(m.IdMatch, m.Date);
