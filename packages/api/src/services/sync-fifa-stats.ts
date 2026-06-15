@@ -265,7 +265,11 @@ async function doSync(matchId: number): Promise<SyncStatsResult> {
   if (!m.fifaIdMatch || !m.fifaIdStage) {
     return { matched: 0, unmatched: [], upserted: 0, skipped: 'fifaIdMatch not mapped — run backfill' };
   }
-  if (m.status !== 'finished') {
+  // Allow both live and finished. doSync is idempotent (delete+insert on
+  // match_events, onConflictDoUpdate on player_match_stats) so repeated
+  // ticks during a live match progressively populate the timeline. We
+  // refuse scheduled because the FIFA feed has no events yet.
+  if (m.status !== 'finished' && m.status !== 'live') {
     return { matched: 0, unmatched: [], upserted: 0, skipped: `match status is ${m.status}` };
   }
 

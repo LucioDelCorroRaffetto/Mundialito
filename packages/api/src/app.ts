@@ -80,7 +80,10 @@ app.post('/sync', async (req, res) => {
   const fifaResults: Array<{ matchId: number; upserted: number; skipped?: string; error?: string }> = [];
   for (const m of liveMatches) {
     try {
-      const r = await syncFifaStatsForMatch(m.id);
+      // force: true bypasses the "already synced" short-circuit so live
+      // matches keep refreshing their timeline each tick. inFlight inside
+      // syncFifaStatsForMatch prevents concurrent re-entry.
+      const r = await syncFifaStatsForMatch(m.id, { force: true });
       fifaEventsSynced += r.upserted;
       fifaResults.push({ matchId: m.id, upserted: r.upserted, skipped: r.skipped });
       if (r.skipped) {
