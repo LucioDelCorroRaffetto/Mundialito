@@ -675,7 +675,7 @@ async function doSync(matchId: number): Promise<SyncStatsResult> {
     upserted++;
   }
 
-  // 7. Trigger fantasy recompute when we wrote something.
+  // 8. Trigger fantasy recompute when we wrote something.
   if (upserted > 0) {
     try {
       await recomputeAllFantasyPoints();
@@ -684,25 +684,42 @@ async function doSync(matchId: number): Promise<SyncStatsResult> {
     }
   }
 
+  // 9. Surface roster-drift errors to the admin via push. Live matches
+  // run this every 90s of cron — without a cooldown a single broken
+  // matcher fires 30+ identical notifications across a single match.
+  // 1h cooldown per matchId is enough to alert once and not spam.
   if (unmatched.length > 5) {
     console.error(
       `[sync-fifa-stats] match ${matchId}: ${unmatched.length} unmatched events. ` +
       `First few: ${unmatched.slice(0, 5).join('; ')}`,
     );
-    // Surface to the admin via push — the alternative is finding out by
-    // reading Render logs hours after the match.
-    notifyAdmin(
-      '⚠️ Stats sync con problemas',
-      `Match ${matchId}: ${unmatched.length} eventos sin resolver. Revisá logs.`,
-    ).catch((err) => console.error('[sync-fifa-stats] notify failed:', err));
+    if (shouldNotify(matchId, 'unmatched')) {
+      notifyAdmin(
+        '⚠️ Stats sync con problemas',
+        `Match ${matchId}: ${unmatched.length} eventos sin resolver. Revisá logs.`,
+      ).catch((err) => console.error('[sync-fifa-stats] notify failed:', err));
+    }
   } else if (events.length > 50 && upserted === 0) {
     // Sanity: a real WC match has ~150-200 events. Zero upserts means the
     // resolver couldn't match anyone — usually a roster drift.
-    notifyAdmin(
-      '🚨 Stats sync no escribió nada',
-      `Match ${matchId}: ${events.length} eventos FIFA pero 0 stats persistidas. Revisá.`,
-    ).catch((err) => console.error('[sync-fifa-stats] notify failed:', err));
+    if (shouldNotify(matchId, 'zero-upserts')) {
+      notifyAdmin(
+        '🚨 Stats sync no escribió nada',
+        `Match ${matchId}: ${events.length} eventos FIFA pero 0 stats persistidas. Revisá.`,
+      ).catch((err) => console.error('[sync-fifa-stats] notify failed:', err));
+    }
   }
 
   return { matched: stats.size, unmatched, upserted };
+}
+
+const NOTIFY_COOLDOWN_MS = 60 * 60 * 1000;
+const lastNotifiedAt = new Map<string, number>();
+function shouldNotify(matchId: number, kind: string): boolean {
+  const key = `${matchId}:${kind}`;
+  const now = Date.now();
+  const last = lastNotifiedAt.get(key) ?? 0;
+  if (now - last < NOTIFY_COOLDOWN_MS) return false;
+  lastNotifiedAt.set(key, now);
+  return true;
 }
