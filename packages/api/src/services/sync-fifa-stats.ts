@@ -327,9 +327,15 @@ async function doSync(matchId: number): Promise<SyncStatsResult> {
     teamIdByNorm.set(normName(t.name), t.id);
     teamIdByNorm.set(t.code.toLowerCase(), t.id);
   }
-  for (const [aliasNorm, code] of Object.entries(FIFA_NAME_TO_CODE)) {
+  // IMPORTANTE: las keys de FIFA_NAME_TO_CODE están escritas con apóstrofes
+  // y acentos ("cote d'ivoire", "türkiye", "curaçao"), pero el lookup posterior
+  // aplica normName() al país que llega del feed ("Côte d'Ivoire" →
+  // "cote divoire" sin apóstrofe). Sin re-normalizar la key acá los alias
+  // con apóstrofe/acento nunca matcheaban — el caso CIV-ECU quedó con goal
+  // perdido porque el resolver no pudo mapear "Côte d'Ivoire" a teamId.
+  for (const [alias, code] of Object.entries(FIFA_NAME_TO_CODE)) {
     const id = teamIdByCode.get(code);
-    if (id != null) teamIdByNorm.set(aliasNorm, id);
+    if (id != null) teamIdByNorm.set(normName(alias), id);
   }
   // Lazy-populated as we observe (IdPlayer, IdTeam) pairs.
   const teamIdByFifaIdTeam = new Map<string, number>();
