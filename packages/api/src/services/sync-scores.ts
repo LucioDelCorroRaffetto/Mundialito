@@ -279,8 +279,16 @@ export async function syncScores(options: SyncScoresOptions = {}): Promise<SyncS
 
       if (!statusChanged && !scoreChanged && !liveStatusChanged) continue;
 
-      // Build update payload
-      const updatePayload: Record<string, unknown> = { status: newStatus, liveStatus: newLiveStatus };
+      // Build update payload. Guard against spurious feed regressions on
+      // a match we already marked finished: if our row is 'finished' and
+      // the new payload would un-set full_time (e.g. a stray IN_PLAY tick
+      // hitting after FT), we keep the existing liveStatus instead of
+      // overwriting it. Same idea as the score-preservation branch below.
+      const effectiveLiveStatus =
+        ourMatch.status === 'finished' && newStatus === 'finished' && newLiveStatus !== 'full_time'
+          ? ourMatch.liveStatus
+          : newLiveStatus;
+      const updatePayload: Record<string, unknown> = { status: newStatus, liveStatus: effectiveLiveStatus };
       if (newHomeScore !== null) updatePayload.homeScore = newHomeScore;
       if (newAwayScore !== null) updatePayload.awayScore = newAwayScore;
 

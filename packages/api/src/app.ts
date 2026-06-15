@@ -77,27 +77,30 @@ app.post('/sync', async (req, res) => {
       return [] as { id: number }[];
     });
 
-  let fifaEventsSynced = 0;
-  const fifaResults: Array<{ matchId: number; upserted: number; skipped?: string; error?: string }> = [];
-  for (const m of liveMatches) {
-    try {
-      // force: true bypasses the "already synced" short-circuit so live
-      // matches keep refreshing their timeline each tick. inFlight inside
-      // syncFifaStatsForMatch prevents concurrent re-entry.
-      const r = await syncFifaStatsForMatch(m.id, { force: true });
-      fifaEventsSynced += r.upserted;
-      fifaResults.push({ matchId: m.id, upserted: r.upserted, skipped: r.skipped });
-      if (r.skipped) {
-        console.log(`[sync-live-fifa] match ${m.id}: skipped (${r.skipped})`);
-      } else {
-        console.log(`[sync-live-fifa] match ${m.id}: ${r.upserted} events synced`);
-      }
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      fifaResults.push({ matchId: m.id, upserted: 0, error: msg });
-      console.error(`[sync-live-fifa] match ${m.id}: ${msg}`);
-    }
-  }
+  // Sync in parallel — sequential awaits would multiply each FIFA request
+  // latency by the number of live matches and easily exceed cron-job.org's
+  // 30s ceiling on a slot with 3-4 simultaneous games. inFlight inside
+  // syncFifaStatsForMatch prevents per-match re-entry; cross-match calls
+  // are independent so concurrent is safe.
+  const fifaResults: Array<{ matchId: number; upserted: number; skipped?: string; error?: string }> =
+    await Promise.all(
+      liveMatches.map(async (m) => {
+        try {
+          const r = await syncFifaStatsForMatch(m.id, { force: true });
+          if (r.skipped) {
+            console.log(`[sync-live-fifa] match ${m.id}: skipped (${r.skipped})`);
+          } else {
+            console.log(`[sync-live-fifa] match ${m.id}: ${r.upserted} events synced`);
+          }
+          return { matchId: m.id, upserted: r.upserted, skipped: r.skipped };
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          console.error(`[sync-live-fifa] match ${m.id}: ${msg}`);
+          return { matchId: m.id, upserted: 0, error: msg };
+        }
+      }),
+    );
+  const fifaEventsSynced = fifaResults.reduce((acc, r) => acc + r.upserted, 0);
 
   // Safety net: catches matches the feeds left stuck (scheduled past
   // kickoff, live hours after FT). Runs last so it sees the latest

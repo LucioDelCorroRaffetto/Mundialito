@@ -48,11 +48,24 @@ export async function reconcileMatchStatuses(): Promise<ReconcileResult> {
   // 1. scheduled → live. The match kicked off 5+ min ago but no feed
   // bumped it. Cap at 12h ago so we don't accidentally "start" a match
   // that was postponed/cancelled (those should be handled manually).
+  //
+  // We also pull homeTeamId/awayTeamId and skip any row where either is
+  // null — those are KO-phase placeholder rows whose teams haven't been
+  // determined yet. Without this guard, the placeholder's kickoffUtc
+  // (from the original schedule) would trip the 5-min window the moment
+  // it passes, and we'd flip it to `live` even though no real match has
+  // been assigned to that slot.
   const stillScheduled = await db
-    .select({ id: matches.id, kickoffUtc: matches.kickoffUtc })
+    .select({
+      id: matches.id,
+      kickoffUtc: matches.kickoffUtc,
+      homeTeamId: matches.homeTeamId,
+      awayTeamId: matches.awayTeamId,
+    })
     .from(matches)
     .where(eq(matches.status, 'scheduled'));
   for (const m of stillScheduled) {
+    if (m.homeTeamId == null || m.awayTeamId == null) continue;
     const age = now - new Date(m.kickoffUtc).getTime();
     if (age < FIVE_MIN_MS || age > TWELVE_H_MS) continue;
     try {
