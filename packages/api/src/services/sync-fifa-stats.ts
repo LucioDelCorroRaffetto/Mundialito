@@ -590,14 +590,45 @@ async function doSync(matchId: number): Promise<SyncStatsResult> {
     }
   }
 
-  // 6. Reescribir timeline de eventos para este partido. Borramos todos
-  // los rows previos y volvemos a insertar — barato porque son ~30 rows
-  // por partido y evita lidiar con upserts compuestos sin clave única
-  // natural (un jugador puede tener 2 goles en distintos minutos).
-  await db.delete(matchEvents).where(eq(matchEvents.matchId, matchId));
-  if (timeline.length > 0) {
+  // 6. Reconciliar timeline de eventos. ANTES: borrábamos todo e
+  // insertábamos de nuevo cada tick. Eso era barato pero rompía los
+  // IDs en cada corrida — el frontend usa el id como key de React, así
+  // que cada poll en vivo remontaba toda la lista (perdía animaciones,
+  // hover, scroll). AHORA: usamos una clave natural y solo escribimos
+  // los deltas, así los eventos que no cambian preservan su id.
+  //
+  // La clave natural (type, minute, period, playerId) NO está enforced
+  // en la DB como UNIQUE. Sería ideal pero requiere migración. Dedupea
+  // en memoria — colisiones reales (mismo jugador, mismo minuto, mismo
+  // tipo, mismo período) son indistinguibles para el usuario.
+  type FpKey = string;
+  const fp = (e: { type: string; minute: number | null; period: number | null; playerId: number }): FpKey =>
+    `${e.type}:${e.minute ?? 'n'}:${e.period ?? 'n'}:${e.playerId}`;
+
+  const existing = await db
+    .select()
+    .from(matchEvents)
+    .where(eq(matchEvents.matchId, matchId));
+  const existingByKey = new Map(existing.map((e) => [fp(e), e]));
+  const newByKey = new Map<FpKey, TimelineEvent>();
+  for (const e of timeline) {
+    // Las colisiones de fp en el feed mismo (raras) colapsan acá; nos
+    // quedamos con la primera ocurrencia.
+    if (!newByKey.has(fp(e))) newByKey.set(fp(e), e);
+  }
+
+  const toInsert: TimelineEvent[] = [];
+  for (const [key, ev] of newByKey) {
+    if (!existingByKey.has(key)) toInsert.push(ev);
+  }
+  const toDelete: number[] = [];
+  for (const [key, row] of existingByKey) {
+    if (!newByKey.has(key)) toDelete.push(row.id);
+  }
+
+  if (toInsert.length > 0) {
     await db.insert(matchEvents).values(
-      timeline.map((e) => ({
+      toInsert.map((e) => ({
         matchId,
         playerId: e.playerId,
         teamId: e.teamId,
@@ -606,6 +637,9 @@ async function doSync(matchId: number): Promise<SyncStatsResult> {
         period: e.period,
       })),
     );
+  }
+  if (toDelete.length > 0) {
+    await db.delete(matchEvents).where(inArray(matchEvents.id, toDelete));
   }
 
   // 7. Upsert player_match_stats.
