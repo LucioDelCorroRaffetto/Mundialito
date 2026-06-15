@@ -16,6 +16,13 @@ export interface Team {
   confederation: string | null;
 }
 
+export type LiveStatus =
+  | 'in_play'
+  | 'half_time'
+  | 'extra_time_break'
+  | 'penalty_shootout'
+  | 'full_time';
+
 export interface Match {
   id: number;
   matchNumber: number;
@@ -28,6 +35,13 @@ export interface Match {
   group: string | null;
   round: string;
   status: 'scheduled' | 'live' | 'finished';
+  /**
+   * Sub-estado mientras está en vivo: 'in_play' | 'half_time' |
+   * 'extra_time_break' | 'penalty_shootout' | 'full_time' | null.
+   * Permite distinguir "Entretiempo" del juego activo en la UI sin
+   * inferirlo del timeline. Si el feed no lo aporta, queda null.
+   */
+  liveStatus: LiveStatus | null;
   homeScore: number | null;
   awayScore: number | null;
   // Solo lo devuelve GET /matches/:id (no la lista). Acumulados por jugador.

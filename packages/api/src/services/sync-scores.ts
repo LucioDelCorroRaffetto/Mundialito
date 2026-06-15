@@ -24,6 +24,13 @@ type FdStatus =
   | 'CANCELLED';
 
 type OurStatus = 'scheduled' | 'live' | 'finished';
+type OurLiveStatus =
+  | 'in_play'
+  | 'half_time'
+  | 'extra_time_break'
+  | 'penalty_shootout'
+  | 'full_time'
+  | null;
 
 interface FdScore {
   home: number | null;
@@ -74,12 +81,38 @@ function mapStatus(fdStatus: FdStatus): OurStatus {
   return 'scheduled';
 }
 
+/**
+ * Sub-estado dentro de un partido en curso. football-data.org expone:
+ *   IN_PLAY → "in_play" (jugándose, fase exacta no detallada)
+ *   PAUSED  → "half_time" (entretiempo o pausa entre ET1/ET2; el feed
+ *             no diferencia entre los dos, asumimos entretiempo de
+ *             tiempo regular salvo que `duration` indique extra/penales)
+ * Cuando `duration` es EXTRA_TIME y status PAUSED, lo etiquetamos
+ * extra_time_break (pausa entre los dos tiempos del alargue). Si el feed
+ * marca PENALTY_SHOOTOUT como duración con status IN_PLAY, mostramos
+ * "penalty_shootout".
+ */
+function mapLiveStatus(
+  fdStatus: FdStatus,
+  duration: FdDuration | undefined,
+): OurLiveStatus {
+  if (fdStatus === 'FINISHED') return 'full_time';
+  if (fdStatus === 'PAUSED') {
+    return duration === 'EXTRA_TIME' ? 'extra_time_break' : 'half_time';
+  }
+  if (fdStatus === 'IN_PLAY') {
+    return duration === 'PENALTY_SHOOTOUT' ? 'penalty_shootout' : 'in_play';
+  }
+  return null;
+}
+
 interface OurMatch {
   id: number;
   kickoffUtc: string;
   homeScore: number | null;
   awayScore: number | null;
   status: string;
+  liveStatus: string | null;
   homeTeamCode: string;
   awayTeamCode: string;
 }
@@ -208,6 +241,7 @@ export async function syncScores(options: SyncScoresOptions = {}): Promise<SyncS
       homeScore: matches.homeScore,
       awayScore: matches.awayScore,
       status: matches.status,
+      liveStatus: matches.liveStatus,
       homeTeamId: matches.homeTeamId,
       awayTeamId: matches.awayTeamId,
     })
@@ -220,6 +254,7 @@ export async function syncScores(options: SyncScoresOptions = {}): Promise<SyncS
     homeScore: m.homeScore,
     awayScore: m.awayScore,
     status: m.status,
+    liveStatus: m.liveStatus,
     homeTeamCode: m.homeTeamId != null ? (codeById.get(m.homeTeamId) ?? '') : '',
     awayTeamCode: m.awayTeamId != null ? (codeById.get(m.awayTeamId) ?? '') : '',
   }));
@@ -231,6 +266,7 @@ export async function syncScores(options: SyncScoresOptions = {}): Promise<SyncS
       if (!ourMatch) continue; // No corresponding match in our DB — skip
 
       const newStatus = mapStatus(fdMatch.status);
+      const newLiveStatus = mapLiveStatus(fdMatch.status, fdMatch.score.duration);
       const resolved = resolveFinalScore(fdMatch.score);
       const newHomeScore = resolved.home;
       const newAwayScore = resolved.away;
@@ -239,11 +275,12 @@ export async function syncScores(options: SyncScoresOptions = {}): Promise<SyncS
       const statusChanged = ourMatch.status !== newStatus;
       const scoreChanged =
         ourMatch.homeScore !== newHomeScore || ourMatch.awayScore !== newAwayScore;
+      const liveStatusChanged = ourMatch.liveStatus !== newLiveStatus;
 
-      if (!statusChanged && !scoreChanged) continue;
+      if (!statusChanged && !scoreChanged && !liveStatusChanged) continue;
 
       // Build update payload
-      const updatePayload: Record<string, unknown> = { status: newStatus };
+      const updatePayload: Record<string, unknown> = { status: newStatus, liveStatus: newLiveStatus };
       if (newHomeScore !== null) updatePayload.homeScore = newHomeScore;
       if (newAwayScore !== null) updatePayload.awayScore = newAwayScore;
 
@@ -259,6 +296,7 @@ export async function syncScores(options: SyncScoresOptions = {}): Promise<SyncS
       if (ourMatch.status === 'finished' && newStatus === 'scheduled') {
         updatePayload.homeScore = null;
         updatePayload.awayScore = null;
+        updatePayload.liveStatus = null;
         await db
           .update(predictions)
           .set({ points: null, updatedAt: sql`(datetime('now'))` })

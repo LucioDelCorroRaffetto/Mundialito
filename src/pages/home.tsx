@@ -475,24 +475,43 @@ export function HomePage() {
         <div className="flex flex-col gap-5">
           {/* Live matches banner — only when something's actually on. Sits
               above the countdown so it gets first attention. */}
-          {liveMatches.length > 0 && (
+          {liveMatches.length > 0 && (() => {
+            // Si TODOS los partidos en curso están en entretiempo, atenuamos
+            // la animación y el subtítulo lo refleja — evita prometer
+            // "directo" cuando en realidad están parados.
+            const halftimeCount = liveMatches.filter(
+              (m) => m.liveStatus === 'half_time' || m.liveStatus === 'extra_time_break',
+            ).length;
+            const allHalftime = halftimeCount === liveMatches.length;
+            const subtitle = allHalftime
+              ? liveMatches.length === 1 ? 'En entretiempo' : 'Todos en entretiempo'
+              : halftimeCount > 0
+                ? `${halftimeCount} en entretiempo · Tocá para seguirlos`
+                : 'Tocá para seguirlos en directo';
+            return (
             <Link
               to="/matches?filter=live"
               className="relative overflow-hidden flex items-center gap-3 p-3.5 rounded-xl bg-gradient-to-r from-red-500/20 via-red-500/15 to-red-500/20 border border-red-500/40 hover:border-red-500/60 transition-colors group"
             >
               <div className="w-9 h-9 rounded-lg bg-red-500/30 flex items-center justify-center flex-shrink-0 relative">
-                <span className="w-2 h-2 rounded-full bg-red-300 animate-pulse absolute" />
-                <span className="w-3.5 h-3.5 rounded-full bg-red-400/40 animate-ping" />
+                {!allHalftime && (
+                  <>
+                    <span className="w-2 h-2 rounded-full bg-red-300 animate-pulse absolute" />
+                    <span className="w-3.5 h-3.5 rounded-full bg-red-400/40 animate-ping" />
+                  </>
+                )}
+                {allHalftime && <span className="w-2 h-2 rounded-full bg-red-300 absolute" />}
               </div>
               <div className="flex-1">
                 <p className="text-sm font-bold text-red-700 dark:text-red-200 uppercase tracking-wide">
                   {liveMatches.length === 1 ? 'Un partido en vivo' : `${liveMatches.length} partidos en vivo`}
                 </p>
-                <p className="text-xs text-red-800/70 dark:text-red-200/70">Tocá para seguirlos en directo</p>
+                <p className="text-xs text-red-800/70 dark:text-red-200/70">{subtitle}</p>
               </div>
               <ChevronRight size={16} className="text-red-600 dark:text-red-300 flex-shrink-0 group-hover:translate-x-0.5 transition-transform" />
             </Link>
-          )}
+            );
+          })()}
 
           {/* Countdown */}
           <CountdownHero nextMatch={nextMatch} teamMap={teamMap} />

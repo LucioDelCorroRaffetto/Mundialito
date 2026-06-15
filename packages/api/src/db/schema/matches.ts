@@ -18,6 +18,22 @@ export const matches = sqliteTable('matches', {
   group: text('group'),
   round: text('round').notNull().default('group'), // 'group' | 'r32' | 'r16' | 'qf' | 'sf' | 'third' | 'final'
   status: text('status').notNull().default('scheduled'), // 'scheduled' | 'live' | 'finished'
+  /**
+   * Sub-estado mientras `status === 'live'`. Refleja la fase de juego que
+   * publica el feed de scores (football-data.org `PAUSED` ≡ entretiempo;
+   * ESPN `STATUS_HALFTIME` / `STATUS_END_PERIOD`). Permite al frontend
+   * distinguir "1° tiempo" / "Entretiempo" / "2° tiempo" en lugar de
+   * mostrar siempre "EN VIVO". Null mientras el partido no esté en curso
+   * o el feed no aporte detalle.
+   *
+   * Valores: 'in_play' | 'half_time' | 'extra_time_break' |
+   *          'penalty_shootout' | 'full_time'
+   *
+   * Nota de diseño: derivamos esto de los mismos feeds que ya consumimos
+   * para el score (sync-scores y sync-espn) — NO del timeline de FIFA,
+   * que se baja una sola vez al finalizar el partido (sync-fifa-stats).
+   */
+  liveStatus: text('live_status'),
   homeScore: integer('home_score'),
   awayScore: integer('away_score'),
   apiFixtureId: integer('api_fixture_id'), // nullable — API-Football fixture ID (no longer used in free tier)

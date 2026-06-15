@@ -51,11 +51,40 @@ interface EspnResponse {
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 type OurStatus = 'scheduled' | 'live' | 'finished';
+type OurLiveStatus =
+  | 'in_play'
+  | 'half_time'
+  | 'extra_time_break'
+  | 'penalty_shootout'
+  | 'full_time'
+  | null;
 
 function mapState(state: 'pre' | 'in' | 'post', completed: boolean): OurStatus {
   if (completed || state === 'post') return 'finished';
   if (state === 'in') return 'live';
   return 'scheduled';
+}
+
+/**
+ * Deriva el sub-estado a partir del `status.type.name` de ESPN. Los nombres
+ * que vimos en partidos en vivo de WC y otros torneos:
+ *   STATUS_FIRST_HALF / STATUS_SECOND_HALF / STATUS_IN_PROGRESS → in_play
+ *   STATUS_HALFTIME / STATUS_END_PERIOD                         → half_time
+ *   STATUS_END_OF_EXTRATIME / STATUS_HALFTIME_EXTRA             → extra_time_break
+ *   STATUS_SHOOTOUT                                             → penalty_shootout
+ *   STATUS_FINAL / STATUS_FULL_TIME                             → full_time
+ * `STATUS_END_PERIOD` también lo emite ESPN entre 1° y 2° tiempo regular,
+ * así que lo agrupamos con halftime. Si aparece un nombre nuevo, devolvemos
+ * 'in_play' para no romper la UI ("EN VIVO" sigue funcionando).
+ */
+function mapEspnLiveStatus(typeName: string, state: 'pre' | 'in' | 'post', completed: boolean): OurLiveStatus {
+  if (completed || state === 'post') return 'full_time';
+  if (state !== 'in') return null;
+  const n = typeName.toUpperCase();
+  if (n === 'STATUS_HALFTIME' || n === 'STATUS_END_PERIOD') return 'half_time';
+  if (n === 'STATUS_END_OF_EXTRATIME' || n === 'STATUS_HALFTIME_EXTRA') return 'extra_time_break';
+  if (n === 'STATUS_SHOOTOUT' || n.includes('PENALT')) return 'penalty_shootout';
+  return 'in_play';
 }
 
 interface OurMatch {
@@ -64,6 +93,7 @@ interface OurMatch {
   homeScore: number | null;
   awayScore: number | null;
   status: string;
+  liveStatus: string | null;
 }
 
 function findMatchByKickoff(ourMatches: OurMatch[], espnDate: string): OurMatch | undefined {
@@ -121,7 +151,7 @@ export async function syncScoresFromEspn(date: string): Promise<SyncScoresResult
 
   // Load our DB matches once
   const ourMatches = await db
-    .select({ id: matches.id, kickoffUtc: matches.kickoffUtc, homeScore: matches.homeScore, awayScore: matches.awayScore, status: matches.status })
+    .select({ id: matches.id, kickoffUtc: matches.kickoffUtc, homeScore: matches.homeScore, awayScore: matches.awayScore, status: matches.status, liveStatus: matches.liveStatus })
     .from(matches);
 
   for (const event of events) {
@@ -129,8 +159,9 @@ export async function syncScoresFromEspn(date: string): Promise<SyncScoresResult
       const ourMatch = findMatchByKickoff(ourMatches, event.date);
       if (!ourMatch) continue;
 
-      const { state, completed } = event.status.type;
+      const { state, completed, name: typeName } = event.status.type;
       const newStatus = mapState(state, completed);
+      const newLiveStatus = mapEspnLiveStatus(typeName ?? '', state, completed);
 
       // Extract scores
       const competition = event.competitions[0];
@@ -170,9 +201,10 @@ export async function syncScoresFromEspn(date: string): Promise<SyncScoresResult
 
       const statusChanged = ourMatch.status !== newStatus;
       const scoreChanged  = ourMatch.homeScore !== newHomeScore || ourMatch.awayScore !== newAwayScore;
-      if (!statusChanged && !scoreChanged) continue;
+      const liveStatusChanged = ourMatch.liveStatus !== newLiveStatus;
+      if (!statusChanged && !scoreChanged && !liveStatusChanged) continue;
 
-      const updatePayload: Record<string, unknown> = { status: newStatus };
+      const updatePayload: Record<string, unknown> = { status: newStatus, liveStatus: newLiveStatus };
       if (newHomeScore !== null) updatePayload.homeScore = newHomeScore;
       if (newAwayScore !== null) updatePayload.awayScore = newAwayScore;
 
