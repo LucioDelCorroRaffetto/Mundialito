@@ -477,6 +477,18 @@ async function doSync(matchId: number): Promise<SyncStatsResult> {
       const nonGK = candidates.filter((c) => c.position !== 'GK');
       if (nonGK.length === 1) candidates = nonGK;
     }
+    // Desambiguar por nombre completo cuando FIFA prefija con nombre o
+    // inicial. Caso típico: "Diego GOMEZ (Paraguay)" con dos GOMEZ en
+    // el plantel (Diego MID, Gustavo DEF). El first FIFA token ("diego")
+    // identifica al único. Funciona también con iniciales — "G. GOMEZ"
+    // → first="g", se descarta "Diego" (no startsWith) y queda "Gustavo".
+    if (candidates.length > 1 && surnameTokens.length >= 2 && surnameFirst.length >= 1) {
+      const byFirst = candidates.filter((c) => {
+        const cf = normName(c.name).split(' ')[0];
+        return cf === surnameFirst || cf.startsWith(surnameFirst) || surnameFirst.startsWith(cf);
+      });
+      if (byFirst.length === 1) candidates = byFirst;
+    }
     if (candidates.length > 1) {
       // Ambiguous (Williams brothers, Hernández brothers, …): refuse.
       // Surface in unmatched so the admin can patch fifaIdPlayer manually.
