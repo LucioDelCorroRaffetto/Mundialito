@@ -9,6 +9,7 @@ import { syncScores } from './services/sync-scores.js';
 import { syncScoresFromEspn } from './services/sync-espn.js';
 import { syncFifaStatsForMatch } from './services/sync-fifa-stats.js';
 import { reconcileMatchStatuses } from './services/reconcile-matches.js';
+import { syncFixtureTimes } from './services/fixture-time-sync.js';
 import { invalidateForecastCache } from './services/forecast-service.js';
 import { db } from './db/index.js';
 import { matches } from './db/schema/index.js';
@@ -47,6 +48,17 @@ app.post('/sync', async (req, res) => {
   }
 
   const today = new Date().toISOString().slice(0, 10);
+
+  // Pull fresh kickoff times from FIFA before any other sync. If a match
+  // was rescheduled (FIFA moves a game by hours, common close to kickoff)
+  // we want score+stat syncs to reason about the new time, and reconcile
+  // to flip the status based on it. Acotamos a 48h hacia adelante para
+  // mantener el costo en 2 requests a FIFA por tick. La sincronización
+  // completa del fixture queda en el script manual.
+  const fixtureTimes = await syncFixtureTimes(0, 48 * 3600 * 1000).catch((err) => {
+    console.error('[fixture-time-sync] failed:', err);
+    return { updated: 0, unchanged: 0, errors: [String(err)] };
+  });
 
   // Try primary (football-data.org), fall back to ESPN if it fails
   let result = await syncScores({ dateFrom: today, dateTo: today }).catch((err) => ({
@@ -113,9 +125,10 @@ app.post('/sync', async (req, res) => {
     result.synced > 0 ||
     fifaEventsSynced > 0 ||
     reconcile.startedAuto > 0 ||
-    reconcile.finishedAuto > 0;
+    reconcile.finishedAuto > 0 ||
+    fixtureTimes.updated > 0;
   if (shouldInvalidate) invalidateForecastCache();
-  return res.json({ data: { ...result, liveFifa: fifaResults, reconcile } });
+  return res.json({ data: { ...result, liveFifa: fifaResults, reconcile, fixtureTimes } });
 });
 app.use('/api/v1', apiRouter);
 
