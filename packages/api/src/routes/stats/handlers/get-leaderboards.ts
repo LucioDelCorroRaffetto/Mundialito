@@ -1,29 +1,32 @@
 import { Request, Response } from 'express';
-import { desc, eq, sql } from 'drizzle-orm';
+import { asc, desc, eq, sql } from 'drizzle-orm';
 import { db } from '../../../db/index.js';
 import { playerMatchStats, players, teams } from '../../../db/schema/index.js';
 
 /**
  * GET /stats/leaderboards
  * Devuelve cuatro tablas en una sola call:
- *   - topScorers   (goles, top 20)
- *   - topAssists   (asistencias, top 20)
- *   - topYellows   (amarillas acumuladas, top 20)
- *   - topReds      (rojas acumuladas, top 20)
+ *   - topScorers   (goles, top 50)
+ *   - topAssists   (asistencias, top 50)
+ *   - topYellows   (amarillas acumuladas, top 50)
+ *   - topReds      (rojas acumuladas, top 50)
  *
  * Se agrupa por jugador sumando todos los partidos. Si un jugador no
  * aparece en player_match_stats todavía, queda fuera (no inflamos con 0s).
+ *
+ * Tie-breaker: el orden secundario por nombre asegura que dos corridas
+ * consecutivas devuelvan los mismos 50 en el mismo orden. Sin esto, el
+ * SQLite no garantiza orden entre filas con igual `total` y truncar a 50
+ * puede dejar afuera goleadores de forma no determinística (típico:
+ * desfase de fase de grupos con 20+ jugadores empatados a 1 gol).
  *
  * No requiere auth — son datos públicos del torneo. La lectura es barata
  * y la cache de tanstack-query en el cliente se encarga del resto.
  */
 export async function getLeaderboardsHandler(_req: Request, res: Response) {
-  // Sub-query agrupada por jugador. Un solo barrido a player_match_stats
-  // por endpoint — cuatro selects independientes leen del mismo origen
-  // físico (SQLite, índice en match_id+player_id) y son sub-milisegundos.
   async function topBy(
     metric: 'goals' | 'assists' | 'yellow_cards' | 'red_card',
-    limit = 20,
+    limit = 50,
   ) {
     // `red_card` es boolean en el schema — sum(1) cuando es true.
     const valueExpr =
@@ -52,7 +55,7 @@ export async function getLeaderboardsHandler(_req: Request, res: Response) {
       .innerJoin(teams, eq(players.teamId, teams.id))
       .groupBy(playerMatchStats.playerId)
       .having(sql`${valueExpr} > 0`)
-      .orderBy(desc(valueExpr))
+      .orderBy(desc(valueExpr), asc(players.name))
       .limit(limit);
 
     return rows;

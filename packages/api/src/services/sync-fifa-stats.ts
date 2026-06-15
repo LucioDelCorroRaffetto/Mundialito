@@ -404,6 +404,15 @@ async function doSync(matchId: number): Promise<SyncStatsResult> {
     // Tomamos el último token como "core surname" para estrategias 3-5.
     const surnameTokens = surnameNorm.split(' ');
     const surnameLast = surnameTokens[surnameTokens.length - 1];
+    const surnameFirst = surnameTokens[0];
+    // "junior" / "jnr" / "jr" son intercambiables; FIFA suele abreviar.
+    // Sin esto, "VINI JR." (FIFA) no matcheaba a "Vinícius Júnior" (DB).
+    const canonSuffix = (t: string): string => {
+      if (t === 'junior' || t === 'jnr') return 'jr';
+      if (t === 'senior' || t === 'snr') return 'sr';
+      return t;
+    };
+    const surnameLastCanon = canonSuffix(surnameLast);
     // Variante "colapsada" del nombre del jugador (guiones eliminados sin
     // espacio): "In-beom" → "inbeom". Resuelve nombres asiáticos donde
     // FIFA omite los guiones que sí están en nuestra BD.
@@ -432,6 +441,11 @@ async function doSync(matchId: number): Promise<SyncStatsResult> {
     //  5. primer token del roster == último token de FIFA surname (orden
     //     asiático: el apellido va primero en el roster pero FIFA lo
     //     pone al final: "Oh Hyeon-gyu" + "H G OH").
+    //  6. apodo + sufijo "jr/junior": el último token canoniza al mismo
+    //     sufijo (Y) Y el primer token de FIFA es prefijo de algún token
+    //     del roster. Resuelve "VINI JR." (FIFA) → "Vinícius Júnior" (DB)
+    //     sin colisionar con otros "Junior" del mismo plantel — exige
+    //     coincidencia de prefijo del nombre corto, no sólo del sufijo.
     let candidates = teamRoster.filter((rp) => {
       const norm = normName(rp.name);
       const tokens = norm.split(' ');
@@ -440,12 +454,20 @@ async function doSync(matchId: number): Promise<SyncStatsResult> {
       const collapsed = collapseHyphen(rp.name);
       const collapsedTokens = collapsed.split(' ');
       const collapsedLast = collapsedTokens[collapsedTokens.length - 1];
+      const lastCanon = canonSuffix(last);
+      const suffixMatch =
+        surnameTokens.length >= 2 &&
+        surnameLastCanon === 'jr' &&
+        lastCanon === 'jr' &&
+        surnameFirst.length >= 3 &&
+        tokens.some((tok) => tok.startsWith(surnameFirst));
       return (
         last === surnameNorm
         || norm.includes(surnameNorm)
         || last === surnameLast
         || collapsedLast === surnameLast
         || first === surnameLast
+        || suffixMatch
       );
     });
     if (candidates.length === 0) return null;
