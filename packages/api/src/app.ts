@@ -8,6 +8,7 @@ import { apiRouter } from './routes/index.js';
 import { syncScores } from './services/sync-scores.js';
 import { syncScoresFromEspn } from './services/sync-espn.js';
 import { syncFifaStatsForMatch } from './services/sync-fifa-stats.js';
+import { reconcileMatchStatuses } from './services/reconcile-matches.js';
 import { invalidateForecastCache } from './services/forecast-service.js';
 import { db } from './db/index.js';
 import { matches } from './db/schema/index.js';
@@ -98,8 +99,19 @@ app.post('/sync', async (req, res) => {
     }
   }
 
+  // Safety net: catches matches the feeds left stuck (scheduled past
+  // kickoff, live hours after FT). Runs last so it sees the latest
+  // status from both feeds before deciding to force a transition.
+  const reconcile = await reconcileMatchStatuses().catch((err) => {
+    console.error('[reconcile-matches] failed:', err);
+    return { startedAuto: 0, finishedAuto: 0, skippedNoScore: 0, errors: [String(err)] };
+  });
+  if (reconcile.startedAuto > 0 || reconcile.finishedAuto > 0) {
+    invalidateForecastCache();
+  }
+
   if (result.synced > 0 || fifaEventsSynced > 0) invalidateForecastCache();
-  return res.json({ data: { ...result, liveFifa: fifaResults } });
+  return res.json({ data: { ...result, liveFifa: fifaResults, reconcile } });
 });
 app.use('/api/v1', apiRouter);
 
