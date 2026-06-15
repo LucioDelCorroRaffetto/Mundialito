@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { motion, useDragControls } from 'framer-motion';
-import { ChevronDown, Check, Trophy, LayoutList, Layers, Star, Crown, Shield, BarChart2, BookOpen, ChevronRight, Lock, CheckCircle2 } from 'lucide-react';
+import { ChevronDown, Check, Trophy, LayoutList, Layers, Crown, Shield, BarChart2, BookOpen, ChevronRight, Lock, CheckCircle2 } from 'lucide-react';
 import { cn } from '@/shared/lib/cn';
 import { useTeams } from '@/shared/hooks/use-teams';
 import { usePlayers } from '@/shared/hooks/use-players';
@@ -1391,124 +1391,6 @@ function LineupRow({
           title="Vicecapitán (x1.5 puntos)"
         >V</button>
       )}
-    </div>
-  );
-}
-
-// ─── Old lineup tab (kept for now but no longer shown on per-round tab) ───────
-// @ts-expect-error legacy component preserved as reference, no longer rendered
-
-function LineupTab({
-  squadPlayers,
-  starterIds,
-  captainId,
-  fantasyPointsById,
-  onToggleStarter,
-  onSetCaptain,
-}: {
-  squadPlayers: Player[];
-  starterIds: number[];
-  captainId: number | null;
-  fantasyPointsById: Map<number, number>;
-  onToggleStarter: (id: number) => void;
-  onSetCaptain: (id: number) => void;
-}) {
-  const starterSet = new Set(starterIds);
-
-  if (squadPlayers.length === 0) {
-    return (
-      <div className="mx-4 p-6 rounded-xl bg-card border border-border text-center">
-        <p className="text-sm-s text-muted">
-          Primero armá tu plantel en la pestaña <span className="font-semibold text-text">Plantel</span>.
-        </p>
-      </div>
-    );
-  }
-
-  const ORDER: Position[] = ['GK', 'DEF', 'MID', 'FWD'];
-  const byPosition = ORDER.map((pos) => ({
-    pos,
-    players: squadPlayers.filter((p) => p.position === pos),
-  })).filter((g) => g.players.length > 0);
-
-  return (
-    <div className="flex flex-col gap-3 px-4">
-      <div className="flex items-center justify-between p-3 rounded-xl bg-card border border-border">
-        <p className="text-xs-s text-muted">
-          Marcá <span className="font-semibold text-text">11 titulares</span> y elegí <span className="font-semibold text-text">1 capitán</span> (suma x2).
-        </p>
-        <span
-          className={cn(
-            'text-sm-s font-bold whitespace-nowrap',
-            starterIds.length === STARTERS_COUNT ? 'text-accent' : 'text-text'
-          )}
-        >
-          {starterIds.length}/{STARTERS_COUNT}
-        </span>
-      </div>
-
-      {byPosition.map(({ pos, players }) => (
-        <div key={pos} className="rounded-xl bg-card border border-border overflow-hidden">
-          <div className="px-4 py-2 border-b border-border bg-elevated flex items-center gap-2">
-            <span className={cn('text-xs-s font-bold px-2 py-0.5 rounded-full', POSITION_COLORS[pos])}>
-              {pos}
-            </span>
-            <span className="text-xs-s text-muted">{POSITION_LABELS[pos]}</span>
-          </div>
-          <ul>
-            {players.map((player, idx) => {
-              const isStarter = starterSet.has(player.id);
-              const isCaptain = captainId === player.id;
-              const isLast = idx === players.length - 1;
-              const pts = fantasyPointsById.get(player.id);
-              return (
-                <li key={player.id} className={cn('flex items-center gap-2 px-3 py-2.5', !isLast && 'border-b border-border')}>
-                  {/* Starter toggle */}
-                  <button
-                    onClick={() => onToggleStarter(player.id)}
-                    title={isStarter ? 'Pasar a suplentes' : 'Marcar como titular'}
-                    className={cn(
-                      'flex-shrink-0 px-2 py-1 rounded-md text-[10px] font-bold transition-colors border',
-                      isStarter
-                        ? 'bg-accent text-accent-on border-accent'
-                        : 'bg-elevated text-muted border-border'
-                    )}
-                  >
-                    {isStarter ? 'TITULAR' : 'SUPLENTE'}
-                  </button>
-
-                  <PlayerAvatar photoUrl={player.photoUrl} name={player.name} position={player.position} />
-
-                  <span className={cn('flex-1 text-sm-s font-medium truncate', isStarter ? 'text-text' : 'text-muted')}>
-                    {player.name}
-                  </span>
-
-                  {pts != null && (
-                    <span className="text-xs-s font-bold text-accent">{pts}</span>
-                  )}
-
-                  {/* Captain toggle */}
-                  <button
-                    onClick={() => onSetCaptain(player.id)}
-                    disabled={!isStarter}
-                    title={isCaptain ? 'Quitar capitán' : 'Hacer capitán'}
-                    className={cn(
-                      'flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center transition-colors',
-                      isCaptain
-                        ? 'bg-accent text-accent-on'
-                        : isStarter
-                          ? 'bg-elevated text-muted hover:text-text'
-                          : 'bg-elevated text-muted/30 cursor-not-allowed'
-                    )}
-                  >
-                    {isCaptain ? <Crown size={14} /> : <Star size={14} />}
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        </div>
-      ))}
     </div>
   );
 }

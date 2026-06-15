@@ -9,19 +9,25 @@
 // touch scores — the feeds own that. We only flip status (and recompute
 // predictions if we auto-finish a match that already has scores).
 
-import { eq, sql } from 'drizzle-orm';
+import { eq, sql, and, gte } from 'drizzle-orm';
 import { db } from '../db/index.js';
-import { matches, predictions } from '../db/schema/index.js';
+import { matches, predictions, matchEvents } from '../db/schema/index.js';
 import { calculatePoints } from '../lib/scoring.js';
 import { checkAchievements } from './achievement-service.js';
 import { recomputeAllFantasyPoints } from './fantasy-scoring-service.js';
 
 const FIVE_MIN_MS  = 5 * 60 * 1000;
 const TWELVE_H_MS  = 12 * 60 * 60 * 1000;
-// Even a knockout that goes to extra time + penalties wraps inside ~3h.
+// Hard cap: even a knockout with extra time + penalties wraps inside ~3h.
 // Anything still 'live' beyond this almost certainly means the feed never
 // published the final whistle, not that the match is actually still on.
 const FINISH_AGE_MS = 3.5 * 60 * 60 * 1000;
+// Fast path: match has been running 2h+ AND the timeline shows it reached
+// the end of the second half (period ≥ 2, minute ≥ 90). At that point
+// even if the feed hasn't posted FT, the only thing that can extend it is
+// extra time — and the match_events would then keep advancing (period 3
+// or 4), pushing us out of "wrapping" territory and back to the hard cap.
+const FAST_FINISH_AGE_MS = 2 * 60 * 60 * 1000;
 
 export interface ReconcileResult {
   startedAuto: number;
@@ -83,12 +89,42 @@ export async function reconcileMatchStatuses(): Promise<ReconcileResult> {
   let anyFinished = false;
   for (const m of stillLive) {
     const age = now - new Date(m.kickoffUtc).getTime();
-    if (age < FINISH_AGE_MS) continue;
+    // Both paths require a valid score on both sides — refusing to
+    // finalize with null scores avoids creating an empty 'finished' row
+    // that breaks standings + prediction scoring.
     if (m.homeScore == null || m.awayScore == null) {
-      console.warn(`[reconcile] match ${m.id} ${(age / 3600000).toFixed(1)}h past kickoff but score is null — NOT auto-finishing`);
-      result.skippedNoScore++;
+      if (age >= FINISH_AGE_MS) {
+        console.warn(`[reconcile] match ${m.id} ${(age / 3600000).toFixed(1)}h past kickoff but score is null — NOT auto-finishing`);
+        result.skippedNoScore++;
+      }
       continue;
     }
+
+    const overHardCap = age >= FINISH_AGE_MS;
+    let fastPath = false;
+    if (!overHardCap && age >= FAST_FINISH_AGE_MS) {
+      // Check whether the timeline reached the end of the 2nd half. If
+      // there's an event at period ≥ 2 with minute ≥ 90, the match is
+      // wrapping. (No further check needed — by the time we're 2h in,
+      // either the feed has stopped publishing because FT happened, or
+      // it kept publishing into ET/penalties — both cases produce events
+      // past the 90' mark.)
+      const wrappingEvent = await db
+        .select({ id: matchEvents.id })
+        .from(matchEvents)
+        .where(
+          and(
+            eq(matchEvents.matchId, m.id),
+            gte(matchEvents.period, 2),
+            gte(matchEvents.minute, 90),
+          ),
+        )
+        .limit(1)
+        .get();
+      if (wrappingEvent) fastPath = true;
+    }
+    if (!overHardCap && !fastPath) continue;
+
     try {
       await db
         .update(matches)
@@ -96,7 +132,8 @@ export async function reconcileMatchStatuses(): Promise<ReconcileResult> {
         .where(eq(matches.id, m.id));
       result.finishedAuto++;
       anyFinished = true;
-      console.log(`[reconcile] match ${m.id} auto live→finished (kickoff ${(age / 3600000).toFixed(1)}h ago, ${m.homeScore}-${m.awayScore})`);
+      const reason = overHardCap ? 'hard-cap' : 'fast-path (timeline reached 90+)';
+      console.log(`[reconcile] match ${m.id} auto live→finished via ${reason} (kickoff ${(age / 3600000).toFixed(1)}h ago, ${m.homeScore}-${m.awayScore})`);
       await scoreMatchPredictions(m.id, m.homeScore, m.awayScore);
     } catch (err) {
       result.errors.push(`auto-finish match ${m.id}: ${String(err)}`);

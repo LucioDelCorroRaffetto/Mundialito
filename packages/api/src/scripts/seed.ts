@@ -17,26 +17,14 @@ import { calcPredictionLock } from '../lib/match-helpers.js';
 import { sql } from 'drizzle-orm';
 
 /**
- * Seed del Mundial 2026.
+ * Seed del Mundial 2026 — bootstrap del schema con los 48 equipos,
+ * el fixture round-robin de fase de grupos (72 partidos, 12 grupos
+ * A–L) y los placeholders de la fase eliminatoria que después se
+ * concretan vía `update-wc2026-fixture.ts` cuando FIFA publica las
+ * llaves reales post-sorteo (5 dic 2025).
  *
- * NOTA sobre la fuente de datos (D2 del PLANNING):
- * - OpenFootball (https://github.com/openfootball/world-cup) historicamente
- *   publica el fixture de cada Mundial en `<year>/cup.txt` y la version JSON
- *   en https://github.com/openfootball/world-cup.json bajo `<year>/worldcup.json`.
- * - El fixture oficial del Mundial 2026 solo quedo definido despues del sorteo
- *   de la FIFA del 5 de diciembre de 2025, por lo que la disponibilidad en
- *   OpenFootball debe re-verificarse manualmente antes de un seed productivo.
- * - Este script genera un fixture PLACEHOLDER: 48 equipos confirmados +
- *   72 partidos de fase de grupos (12 grupos x 6 partidos round-robin).
- *   Las fases de Ronda de 32, R16, QF, SF, 3er puesto y Final NO se generan
- *   todavia porque dependen de la clasificacion real.
- *
- * TODO post-sorteo FIFA:
- *  - Reemplazar TEAMS_DATA con la asignacion real a los 12 grupos (A-L)
- *    seteando el campo `group` en cada team.
- *  - Reemplazar generateGroupStageFixtures() por el calendario oficial
- *    (fechas, sedes y ciudades reales).
- *  - Agregar las 32 llaves de la fase eliminatoria.
+ * Idempotente: si ya hay datos no toca nada. Para refrescar la prod
+ * con el fixture oficial, correr update-wc2026-fixture.ts (no este).
  */
 
 type TeamSeed = {

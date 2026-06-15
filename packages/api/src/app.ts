@@ -106,11 +106,12 @@ app.post('/sync', async (req, res) => {
     console.error('[reconcile-matches] failed:', err);
     return { startedAuto: 0, finishedAuto: 0, skippedNoScore: 0, errors: [String(err)] };
   });
-  if (reconcile.startedAuto > 0 || reconcile.finishedAuto > 0) {
-    invalidateForecastCache();
-  }
-
-  if (result.synced > 0 || fifaEventsSynced > 0) invalidateForecastCache();
+  const shouldInvalidate =
+    result.synced > 0 ||
+    fifaEventsSynced > 0 ||
+    reconcile.startedAuto > 0 ||
+    reconcile.finishedAuto > 0;
+  if (shouldInvalidate) invalidateForecastCache();
   return res.json({ data: { ...result, liveFifa: fifaResults, reconcile } });
 });
 app.use('/api/v1', apiRouter);
