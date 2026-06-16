@@ -1088,9 +1088,18 @@ function MatchEvents({
 
     const isSub = (type: MatchTimelineEvent['type']) => type === 'sub_in' || type === 'sub_out';
 
+    // Para gol en contra el `teamCode` del evento es el equipo del autor
+    // del gol (quien la mete en su propio arco). Pero quien suma al
+    // marcador es el equipo CONTRARIO, así que el evento se debe mostrar
+    // del lado opuesto en el timeline (donde está la celebración real).
+    const displaySideIsHome = (ev: MatchTimelineEvent): boolean => {
+      const playersTeamIsHome = ev.teamCode === homeTeamCode;
+      return ev.type === 'own_goal' ? !playersTeamIsHome : playersTeamIsHome;
+    };
+
     const EventSide = ({ ev, highlight = false }: { ev: MatchTimelineEvent; highlight?: boolean }) => {
       const cfg = EVENT_LABEL[ev.type];
-      const isHome = ev.teamCode === homeTeamCode;
+      const isHome = displaySideIsHome(ev);
       const sub = isSub(ev.type);
       // Fresh goals get a brief celebration on the ball: scale-up + rotate.
       // Run it once on mount (initial→animate); not infinite, otherwise it
@@ -1118,7 +1127,14 @@ function MatchEvents({
             {cfg.icon}
           </motion.span>
           <span className={cn('truncate', sub ? 'text-muted' : 'font-medium text-text', highlight && 'text-accent')}>
-            {ev.playerName}{ev.type === 'own_goal' ? <span className="ml-1 text-[10px] text-red-400 font-bold">(OG)</span> : null}
+            {ev.type === 'own_goal' ? (
+              <>
+                <span className="text-[10px] text-red-400 font-bold mr-1">EN CONTRA de</span>
+                <span className="text-muted">{ev.playerName}</span>
+              </>
+            ) : (
+              ev.playerName
+            )}
           </span>
         </div>
       );
@@ -1155,7 +1171,7 @@ function MatchEvents({
               );
             }
             const ev = row.ev;
-            const isHome = ev.teamCode === homeTeamCode;
+            const isHome = displaySideIsHome(ev);
             const sub = isSub(ev.type);
             const isFresh = ev.id === freshEventId;
             const isGoal = ev.type === 'goal' || ev.type === 'own_goal';
