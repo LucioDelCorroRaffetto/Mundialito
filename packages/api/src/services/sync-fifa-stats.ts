@@ -199,6 +199,38 @@ export async function syncFifaStatsForMatch(
   }
 }
 
+/**
+ * Levenshtein-1 truncado: devuelve true sii la distancia es 0 o 1.
+ * Mucho más barato que computar la matriz completa cuando solo querés
+ * saber si toleramos 1 typo (substitution/insertion/deletion) entre
+ * transliteraciones del estilo "Mohebbi" vs "Mohebi", "Solskjær" vs
+ * "Solskjaer". No usar para nombres de < 5 chars — la tolerancia ahí
+ * mata el matcher (rieselgo de "Mota" matchee "Sota").
+ */
+function editDistanceAtMostOne(a: string, b: string): boolean {
+  if (a === b) return true;
+  const la = a.length;
+  const lb = b.length;
+  if (Math.abs(la - lb) > 1) return false;
+  // Recorré simultáneamente, permití a lo sumo 1 "tropiezo".
+  let i = 0;
+  let j = 0;
+  let diffs = 0;
+  while (i < la && j < lb) {
+    if (a[i] === b[j]) {
+      i++;
+      j++;
+      continue;
+    }
+    if (++diffs > 1) return false;
+    if (la === lb) { i++; j++; }     // substitution
+    else if (la > lb) i++;           // deletion en a
+    else j++;                        // insertion en a / deletion en b
+  }
+  if (i < la || j < lb) diffs++;     // sobra una letra al final
+  return diffs <= 1;
+}
+
 function normName(s: string): string {
   return s
     .toLowerCase()
@@ -446,6 +478,10 @@ async function doSync(matchId: number): Promise<SyncStatsResult> {
     //     del roster. Resuelve "VINI JR." (FIFA) → "Vinícius Júnior" (DB)
     //     sin colisionar con otros "Junior" del mismo plantel — exige
     //     coincidencia de prefijo del nombre corto, no sólo del sufijo.
+    //  7. distancia Levenshtein ≤ 1 entre last tokens cuando AMBOS tienen
+    //     ≥ 5 chars. Resuelve transliteraciones inconsistentes — caso
+    //     "MOHEBBI" (FIFA, persa) vs "Mohebi" (Wikipedia). Restringimos a
+    //     palabras largas para evitar "Mota"/"Sota" tipo falso positivo.
     let candidates = teamRoster.filter((rp) => {
       const norm = normName(rp.name);
       const tokens = norm.split(' ');
@@ -461,6 +497,11 @@ async function doSync(matchId: number): Promise<SyncStatsResult> {
         lastCanon === 'jr' &&
         surnameFirst.length >= 3 &&
         tokens.some((tok) => tok.startsWith(surnameFirst));
+      const fuzzyMatch =
+        surnameLast.length >= 5 &&
+        last.length >= 5 &&
+        Math.abs(surnameLast.length - last.length) <= 1 &&
+        editDistanceAtMostOne(surnameLast, last);
       return (
         last === surnameNorm
         || norm.includes(surnameNorm)
@@ -468,6 +509,7 @@ async function doSync(matchId: number): Promise<SyncStatsResult> {
         || collapsedLast === surnameLast
         || first === surnameLast
         || suffixMatch
+        || fuzzyMatch
       );
     });
     if (candidates.length === 0) return null;
