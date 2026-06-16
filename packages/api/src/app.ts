@@ -10,6 +10,7 @@ import { syncScoresFromEspn } from './services/sync-espn.js';
 import { syncFifaStatsForMatch } from './services/sync-fifa-stats.js';
 import { reconcileMatchStatuses } from './services/reconcile-matches.js';
 import { syncFixtureTimes } from './services/fixture-time-sync.js';
+import { reconcileSquadsFromWikipedia } from './services/squad-reconcile.js';
 import { invalidateForecastCache } from './services/forecast-service.js';
 import { db } from './db/index.js';
 import { matches } from './db/schema/index.js';
@@ -121,6 +122,12 @@ app.post('/sync', async (req, res) => {
     console.error('[reconcile-matches] failed:', err);
     return { startedAuto: 0, finishedAuto: 0, skippedNoScore: 0, errors: [String(err)] };
   });
+  // Squad reconciliation (1 request a Wikipedia, cubre los 48 equipos).
+  // Gateá por cooldown de 12h para no martillar Wikipedia ni la DB —
+  // los call-ups/withdrawals son eventos esporádicos. Fire-and-forget:
+  // si Wikipedia tarda 5s no queremos bloquear cron-job.org.
+  const squadStatus = maybeRunSquadReconcile();
+
   const shouldInvalidate =
     result.synced > 0 ||
     fifaEventsSynced > 0 ||
@@ -128,8 +135,44 @@ app.post('/sync', async (req, res) => {
     reconcile.finishedAuto > 0 ||
     fixtureTimes.updated > 0;
   if (shouldInvalidate) invalidateForecastCache();
-  return res.json({ data: { ...result, liveFifa: fifaResults, reconcile, fixtureTimes } });
+  return res.json({ data: { ...result, liveFifa: fifaResults, reconcile, fixtureTimes, squads: squadStatus } });
 });
+
+let lastSquadReconcileAt = 0;
+const SQUAD_RECONCILE_COOLDOWN_MS = 12 * 60 * 60 * 1000;
+function maybeRunSquadReconcile(): { triggered: boolean; lastRunAt: string | null } {
+  const now = Date.now();
+  if (now - lastSquadReconcileAt < SQUAD_RECONCILE_COOLDOWN_MS) {
+    return {
+      triggered: false,
+      lastRunAt: lastSquadReconcileAt ? new Date(lastSquadReconcileAt).toISOString() : null,
+    };
+  }
+  // Marcá inmediato — si dos ticks concurrentes pegan ambos pasan este
+  // chequeo, sólo el primero debería disparar.
+  lastSquadReconcileAt = now;
+  reconcileSquadsFromWikipedia()
+    .then((r) => {
+      const total = r.renamed + r.inserted + r.deleted + r.posFixed;
+      if (total > 0) {
+        console.log(
+          `[squad-reconcile] ${r.processed} teams checked, ${total} changes ` +
+          `(renamed=${r.renamed} inserted=${r.inserted} deleted=${r.deleted} pos=${r.posFixed})`,
+        );
+        invalidateForecastCache();
+      } else {
+        console.log(`[squad-reconcile] ${r.processed} teams checked, no changes`);
+      }
+      for (const e of r.errors) console.warn('[squad-reconcile] err:', e);
+    })
+    .catch((err) => {
+      console.error('[squad-reconcile] failed:', err);
+      // Resetear timestamp si falló — la próxima corrida puede reintentar
+      // sin esperar 12h.
+      lastSquadReconcileAt = 0;
+    });
+  return { triggered: true, lastRunAt: new Date(now).toISOString() };
+}
 app.use('/api/v1', apiRouter);
 
 app.use(errorHandler);
