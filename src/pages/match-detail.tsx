@@ -523,6 +523,22 @@ export function MatchDetailPage() {
     match.status !== 'scheduled' ||
     new Date(match.predictionLockUtc).getTime() <= Date.now();
 
+  // Aviso al usuario antes de cerrar la pestaña / recargar / volver atrás
+  // cuando hay scores tipeados sin guardar. Sin esto, el usuario tipea un
+  // marcador, navega a otro lado, vuelve, y se sorprende de no encontrar
+  // su pronóstico — el caso clásico de "lo había guardado y se perdió".
+  // saved=true Y dirty=false significa que efectivamente está persistido.
+  const hasUnsavedChanges = !saved && dirtyRef.current;
+  useEffect(() => {
+    if (!hasUnsavedChanges) return;
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [hasUnsavedChanges]);
+
   const notifyLocked = () => {
     if (match.status === 'finished') {
       toast.error('El partido ya terminó — el pronóstico está bloqueado.');
@@ -880,6 +896,18 @@ export function MatchDetailPage() {
                   )}
                 </div>
               )}
+              {/* Aviso visible cuando hay cambios sin guardar — el bug
+                  clásico es "tipeé el marcador y me olvidé de apretar
+                  Guardar". El badge pulsante + el ring en el botón
+                  hacen ese caso imposible de pasar por alto. */}
+              {hasUnsavedChanges && (
+                <div className="mb-2 flex items-center gap-2 px-3 py-2 rounded-lg bg-orange-500/10 border border-orange-500/40">
+                  <span className="w-2 h-2 rounded-full bg-orange-500 animate-pulse flex-shrink-0" />
+                  <p className="text-xs-s text-orange-700 dark:text-orange-300 font-semibold">
+                    Cambios sin guardar — tocá el botón abajo
+                  </p>
+                </div>
+              )}
               <Button
                 fullWidth
                 size="lg"
@@ -889,6 +917,7 @@ export function MatchDetailPage() {
                   upsertMutation.isPending ||
                   (!!anyPrediction && myLeagueList.length > 1 && targetLeagueIds.size === 0)
                 }
+                className={cn(hasUnsavedChanges && 'ring-2 ring-orange-400/60 animate-pulse')}
               >
                 {!!anyPrediction && targetLeagueIds.size > 1
                   ? `Guardar en ${targetLeagueIds.size === myLeagueList.length ? 'todas las ligas' : `${targetLeagueIds.size} ligas`}`

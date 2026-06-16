@@ -27,6 +27,16 @@ export async function upsertPredictionHandler(req: Request, res: Response) {
   const match = await db.select().from(matches).where(eq(matches.id, matchId)).get();
   if (!match) throw new NotFoundError('Match');
   if (isLocked(match.predictionLockUtc)) {
+    // Log para diagnosticar reportes tipo "no me guardó el pronóstico":
+    // si FIFA reprogramó el kickoff a una hora más temprana, la lock se
+    // mueve y un save que el usuario "tenía a tiempo" puede caer acá.
+    const lockMs = new Date(match.predictionLockUtc).getTime();
+    const ageMin = (Date.now() - lockMs) / 60000;
+    console.warn(
+      `[upsert-prediction] LOCKED userId=${userId} matchId=${matchId} ` +
+      `lock=${match.predictionLockUtc} kickoff=${match.kickoffUtc} ` +
+      `lockAgeMin=${ageMin.toFixed(1)}`,
+    );
     throw new AppError('LOCKED', 'Prediction lock has passed for this match', 409);
   }
 
