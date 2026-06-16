@@ -456,6 +456,20 @@ export function MatchDetailPage() {
     }
   }, [existingPrediction, anyPrediction]);
 
+  // Aviso al usuario antes de cerrar la pestaña / recargar cuando hay
+  // scores tipeados sin guardar. DEBE estar antes de los early returns
+  // de loading/!match para no violar la regla de hooks ordenados.
+  const hasUnsavedChanges = !saved && dirtyRef.current;
+  useEffect(() => {
+    if (!hasUnsavedChanges) return;
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [hasUnsavedChanges]);
+
   const isLoading = matchLoading || teamsLoading;
 
   useEffect(() => {
@@ -522,22 +536,6 @@ export function MatchDetailPage() {
   const isPredictionLocked =
     match.status !== 'scheduled' ||
     new Date(match.predictionLockUtc).getTime() <= Date.now();
-
-  // Aviso al usuario antes de cerrar la pestaña / recargar / volver atrás
-  // cuando hay scores tipeados sin guardar. Sin esto, el usuario tipea un
-  // marcador, navega a otro lado, vuelve, y se sorprende de no encontrar
-  // su pronóstico — el caso clásico de "lo había guardado y se perdió".
-  // saved=true Y dirty=false significa que efectivamente está persistido.
-  const hasUnsavedChanges = !saved && dirtyRef.current;
-  useEffect(() => {
-    if (!hasUnsavedChanges) return;
-    const handler = (e: BeforeUnloadEvent) => {
-      e.preventDefault();
-      e.returnValue = '';
-    };
-    window.addEventListener('beforeunload', handler);
-    return () => window.removeEventListener('beforeunload', handler);
-  }, [hasUnsavedChanges]);
 
   const notifyLocked = () => {
     if (match.status === 'finished') {
