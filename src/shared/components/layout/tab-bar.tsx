@@ -20,7 +20,7 @@ export function TabBar() {
   // each tab, which is the WCAG / Apple HIG minimum. Icons + labels also
   // bumped a size each so the row reads at arm's length.
   return (
-    <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-card/95 backdrop-blur-md border-t border-border safe-bottom">
+    <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-card border-t border-border shadow-[0_-2px_8px_-2px_rgba(0,0,0,0.08)] dark:shadow-[0_-2px_12px_-2px_rgba(0,0,0,0.4)] safe-bottom">
       <ul className="flex items-stretch justify-around max-w-xl mx-auto h-16">
         {tabs.map(({ to, label, Icon }) => (
           <li key={to} className="flex-1 min-w-0">
@@ -29,7 +29,7 @@ export function TabBar() {
               className={({ isActive }) =>
                 cn(
                   'flex flex-col items-center justify-center gap-1 h-full w-full transition-colors',
-                  isActive ? 'text-accent' : 'text-muted hover:text-text'
+                  isActive ? 'text-accent' : 'text-text/70 hover:text-text'
                 )
               }
               aria-label={label}

@@ -24,30 +24,35 @@ export function LogrosGateBanner({ shown }: { shown: boolean }) {
  * strings so callers can apply them inline without importing the palette
  * twice.
  */
+// Estilos del podio con variantes light/dark explícitas. Antes usábamos
+// solo tonos `-300/-200/-400` con alpha `/10` que dependía 100% del fondo
+// dark — en light mode el texto se fundía con el blanco y las filas se
+// veían transparentes. Ahora `bg-yellow-100/60` en light y mantenemos los
+// alphas bajos en dark donde sí funcionan.
 export const PODIUM_STYLES = [
   // 1st
   {
     medal: '🥇',
-    rowBg: 'bg-yellow-400/10 hover:bg-yellow-400/20',
-    rowBorder: 'border-yellow-400/40',
-    text: 'text-yellow-300',
-    rankPill: 'bg-yellow-400/20 border-yellow-400/50 text-yellow-300',
+    rowBg: 'bg-yellow-100/70 hover:bg-yellow-100 dark:bg-yellow-400/10 dark:hover:bg-yellow-400/20',
+    rowBorder: 'border-yellow-300 dark:border-yellow-400/40',
+    text: 'text-yellow-700 dark:text-yellow-300',
+    rankPill: 'bg-yellow-200 border-yellow-300 text-yellow-800 dark:bg-yellow-400/20 dark:border-yellow-400/50 dark:text-yellow-300',
   },
   // 2nd
   {
     medal: '🥈',
-    rowBg: 'bg-slate-400/10 hover:bg-slate-400/20',
-    rowBorder: 'border-slate-400/40',
-    text: 'text-slate-200',
-    rankPill: 'bg-slate-400/20 border-slate-400/50 text-slate-200',
+    rowBg: 'bg-slate-200/70 hover:bg-slate-200 dark:bg-slate-400/10 dark:hover:bg-slate-400/20',
+    rowBorder: 'border-slate-300 dark:border-slate-400/40',
+    text: 'text-slate-700 dark:text-slate-200',
+    rankPill: 'bg-slate-200 border-slate-300 text-slate-800 dark:bg-slate-400/20 dark:border-slate-400/50 dark:text-slate-200',
   },
   // 3rd
   {
     medal: '🥉',
-    rowBg: 'bg-amber-700/10 hover:bg-amber-700/20',
-    rowBorder: 'border-amber-700/40',
-    text: 'text-amber-400',
-    rankPill: 'bg-amber-700/20 border-amber-700/50 text-amber-400',
+    rowBg: 'bg-amber-100/70 hover:bg-amber-100 dark:bg-amber-700/10 dark:hover:bg-amber-700/20',
+    rowBorder: 'border-amber-400 dark:border-amber-700/40',
+    text: 'text-amber-800 dark:text-amber-400',
+    rankPill: 'bg-amber-200 border-amber-400 text-amber-900 dark:bg-amber-700/20 dark:border-amber-700/50 dark:text-amber-400',
   },
 ] as const;
 
