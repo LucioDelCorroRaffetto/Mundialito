@@ -115,6 +115,8 @@ export interface Player {
   id: number;
   name: string;
   position: 'GK' | 'DEF' | 'MID' | 'FWD';
+  /** CSV de roles cortos: "LW,LB" o "ST". null si Wikipedia no publicó info. */
+  subPosition: string | null;
   teamId: number;
   nationality: string | null;
   shirtNumber: number | null;

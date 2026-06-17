@@ -251,6 +251,8 @@ interface LineupPitchPlayer extends PitchPlayer {
   isStarter: boolean;
   isCaptain: boolean;
   isViceCaptain: boolean;
+  /** CSV de roles cortos: "LW,LB" o "ST". null si Wikipedia no lo publicó. */
+  subPosition: string | null;
 }
 
 /**
@@ -395,20 +397,38 @@ function LineupPitch({
   // por filas sin slots — placeholder amistoso "Falta X" para que entienda
   // qué le falta.
   const formation = detectFormation(starters);
-  // Asignamos jugadores a slots: para cada slot del template, tomamos el
-  // siguiente jugador disponible con la misma posición base. Orden por
-  // shirt number da un resultado estable.
+  // Asignación inteligente — dos pasadas:
+  //  1ª pass: para cada slot, preferimos un jugador cuyo `subPosition`
+  //     coincide EXACTAMENTE con el rol del slot (Haaland ST → slot ST,
+  //     Nico González LW → slot LW).
+  //  2ª pass: rellenamos slots vacíos con cualquier jugador disponible
+  //     de la misma posición base (FWDs sobrantes → slot FWD genérico).
+  // Esto resuelve "Haaland aparece en el LW solo porque hay 3 FWD".
   const slotAssignments: Array<{ slot: FormationSlot; player: LineupPitchPlayer | null }> = [];
   if (formation) {
-    const remaining: Record<Position, LineupPitchPlayer[]> = { GK: [], DEF: [], MID: [], FWD: [] };
-    for (const p of starters) remaining[p.position].push(p);
-    for (const pos of Object.keys(remaining) as Position[]) {
-      remaining[pos].sort((a, b) => (a.shirtNumber ?? 999) - (b.shirtNumber ?? 999));
+    const used = new Set<number>();
+    const available = [...starters].sort((a, b) => (a.shirtNumber ?? 999) - (b.shirtNumber ?? 999));
+    const hasRole = (p: LineupPitchPlayer, role: SlotRole): boolean => {
+      if (!p.subPosition) return false;
+      return p.subPosition.split(',').map((r) => r.trim()).includes(role);
+    };
+    // 1ª pass: matchs exactos de subPosition.
+    const tempSlots: Array<{ slot: FormationSlot; player: LineupPitchPlayer | null }> = formation.slots.map((slot) => {
+      const exact = available.find((p) => !used.has(p.id) && p.position === slot.base && hasRole(p, slot.role));
+      if (exact) used.add(exact.id);
+      return { slot, player: exact ?? null };
+    });
+    // 2ª pass: rellenamos los slots vacíos con cualquier jugador disponible
+    // de la misma base position.
+    for (const ts of tempSlots) {
+      if (ts.player) continue;
+      const fallback = available.find((p) => !used.has(p.id) && p.position === ts.slot.base);
+      if (fallback) {
+        used.add(fallback.id);
+        ts.player = fallback;
+      }
     }
-    for (const slot of formation.slots) {
-      const p = remaining[slot.base].shift() ?? null;
-      slotAssignments.push({ slot, player: p });
-    }
+    slotAssignments.push(...tempSlots);
   }
 
   // Resumen de qué falta para que el usuario novato sepa cómo armarlo.
@@ -1695,6 +1715,7 @@ function PerRoundLineupTab({ squadPlayers }: { squadPlayers: Player[] }) {
                   id: p.id,
                   name: p.name,
                   position: p.position as Position,
+                  subPosition: (p as { subPosition?: string | null }).subPosition ?? null,
                   photoUrl: p.photoUrl ?? null,
                   shirtNumber: p.shirtNumber ?? null,
                   isStarter: d.isStarter,

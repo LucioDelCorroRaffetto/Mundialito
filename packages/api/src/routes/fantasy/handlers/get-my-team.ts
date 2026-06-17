@@ -87,6 +87,7 @@ export async function getMyTeamHandler(req: Request, res: Response) {
       teamId: players.teamId,
       name: players.name,
       position: players.position,
+      subPosition: players.subPosition,
       shirtNumber: players.shirtNumber,
       photoUrl: players.photoUrl,
     })
