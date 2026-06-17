@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Clock, MapPin, CheckCircle2, Share2, Users, Plus, Minus, Lock } from 'lucide-react';
+import { ArrowLeft, Clock, MapPin, CheckCircle2, Share2, Users, Plus, Minus, Lock, ArrowRightLeft, Handshake } from 'lucide-react';
 import { toast } from 'sonner';
 import { ROUND_LABELS } from '@/shared/data/mock';
 import { getMaxPossiblePoints } from '@/shared/lib/scoring';
@@ -623,6 +623,12 @@ export function MatchDetailPage() {
         </div>
       </div>
 
+      {/* Cooling break: efecto de gotas de agua cayendo sobre la score card.
+          FIFA introdujo los "hydration breaks" cuando hace mucho calor; en
+          vez de un sub-badge plano, le damos una capa juguetona con drops
+          azules animadas que refuerzan visualmente que el partido está
+          pausado por sed. Solo se renderiza el efecto cuando la API marca
+          liveStatus='cooling_break'. */}
       {/* Score card.
           Live/finished: lo tematizamos con un gradiente sutil que va del
           primary del local al primary del visitante, para que el partido
@@ -658,6 +664,10 @@ export function MatchDetailPage() {
             aria-hidden
             className="absolute inset-0 pointer-events-none bg-card/40 dark:bg-card/30 rounded-xl"
           />
+        )}
+        {/* Cooling-break: capa de gotas animadas */}
+        {match.status === 'live' && match.liveStatus === 'cooling_break' && (
+          <CoolingBreakDrops />
         )}
         <div className="relative">
         {match.status !== 'scheduled' ? (
@@ -1050,14 +1060,102 @@ function formatMinute(minute: number | null, period: number | null): string {
   return `${minute}'`;
 }
 
-const EVENT_LABEL: Record<MatchTimelineEvent['type'], { icon: string; label: string }> = {
-  goal:     { icon: '⚽', label: 'Gol' },
-  own_goal: { icon: '⚽', label: 'Gol en contra' },
-  assist:   { icon: '🅰️', label: 'Asistencia' },
-  yellow:   { icon: '🟨', label: 'Amarilla' },
-  red:      { icon: '🟥', label: 'Roja' },
-  sub_in:   { icon: '🔼', label: 'Entra' },
-  sub_out:  { icon: '🔽', label: 'Sale' },
+/**
+ * Capa de gotas de agua cayendo, para el sub-estado "cooling_break".
+ * No es interactiva — `pointer-events-none` y `aria-hidden` para que no
+ * moleste al lector ni a la tab key. Las posiciones son determinísticas
+ * (no aleatorias) para evitar re-cálculo en cada render y para que cada
+ * gota tenga su delay propio que entrelaza el shower.
+ */
+function CoolingBreakDrops() {
+  const drops = [
+    { left: 8,  delay: 0.0, dur: 1.6, size: 5 },
+    { left: 22, delay: 0.4, dur: 2.0, size: 6 },
+    { left: 38, delay: 0.9, dur: 1.8, size: 5 },
+    { left: 54, delay: 0.2, dur: 2.2, size: 7 },
+    { left: 70, delay: 1.1, dur: 1.7, size: 5 },
+    { left: 88, delay: 0.6, dur: 2.0, size: 6 },
+    { left: 14, delay: 1.4, dur: 1.9, size: 4 },
+    { left: 60, delay: 1.7, dur: 2.1, size: 5 },
+    { left: 78, delay: 0.0, dur: 1.6, size: 4 },
+  ];
+  return (
+    <div aria-hidden className="absolute inset-0 pointer-events-none overflow-hidden rounded-xl">
+      {/* Tinte azulado muy suave que envuelve toda la card */}
+      <div className="absolute inset-0 bg-gradient-to-b from-sky-400/8 via-cyan-400/4 to-sky-500/12" />
+      {drops.map((d, i) => (
+        <motion.div
+          key={i}
+          className="absolute rounded-full bg-sky-300/70 dark:bg-sky-300/80 shadow-[0_0_4px_rgba(14,165,233,0.6)]"
+          style={{ left: `${d.left}%`, width: d.size, height: d.size * 1.4, top: '-12%' }}
+          animate={{ top: ['-12%', '110%'], opacity: [0, 0.9, 0.9, 0] }}
+          transition={{ duration: d.dur, delay: d.delay, repeat: Infinity, ease: 'easeIn', times: [0, 0.1, 0.85, 1] }}
+        />
+      ))}
+      {/* Pequeño pill arriba al centro avisando del estado */}
+      <div className="absolute top-1.5 left-1/2 -translate-x-1/2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-sky-500/20 border border-sky-400/40 backdrop-blur-sm text-[9px] font-bold text-sky-700 dark:text-sky-200 uppercase tracking-wider">
+        💧 Descanso de hidratación
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Etiquetas + íconos para cada tipo de evento. Los emojis nativos (🟨🟥🅰️🔼🔽)
+ * se veían inconsistentes entre OS (Apple vs Windows vs Android) y los de
+ * sustitución/asistencia quedaban especialmente toscos. Reemplazamos por:
+ *  - cards SVG con color exacto para amarilla/roja (estilo árbitro real)
+ *  - íconos lucide para sub_in/sub_out y assist (vectoriales = nítidos)
+ *  - mantenemos ⚽ para goal/own_goal porque el emoji de pelota sí queda bien
+ *    cross-platform y es universalmente reconocible.
+ */
+type EventDisplay = {
+  label: string;
+  /** Render compacto del ícono. size en px (16 / 20 / 24). */
+  render: (props: { size?: number; className?: string }) => React.ReactNode;
+};
+
+const RefereeCard = ({ color, className }: { color: 'yellow' | 'red'; className?: string }) => (
+  <span
+    className={cn(
+      'inline-block rounded-[1.5px] shadow-sm align-middle',
+      color === 'yellow' ? 'bg-yellow-400 border border-yellow-600/30' : 'bg-red-500 border border-red-800/30',
+      className,
+    )}
+    style={{ width: '0.65em', height: '0.95em' }}
+    aria-hidden
+  />
+);
+
+const EVENT_LABEL: Record<MatchTimelineEvent['type'], EventDisplay> = {
+  goal:     {
+    label: 'Gol',
+    render: ({ size = 14 }) => <span style={{ fontSize: size }} aria-label="Gol">⚽</span>,
+  },
+  own_goal: {
+    label: 'Gol en contra',
+    render: ({ size = 14 }) => <span style={{ fontSize: size }} aria-label="Gol en contra">⚽</span>,
+  },
+  assist:   {
+    label: 'Asistencia',
+    render: ({ size = 14 }) => <Handshake size={size} className="text-blue-500" aria-label="Asistencia" />,
+  },
+  yellow:   {
+    label: 'Amarilla',
+    render: ({ className }) => <RefereeCard color="yellow" className={className} />,
+  },
+  red:      {
+    label: 'Roja',
+    render: ({ className }) => <RefereeCard color="red" className={className} />,
+  },
+  sub_in:   {
+    label: 'Entra',
+    render: ({ size = 12 }) => <ArrowRightLeft size={size} className="text-emerald-500 rotate-90" aria-label="Entra" />,
+  },
+  sub_out:  {
+    label: 'Sale',
+    render: ({ size = 12 }) => <ArrowRightLeft size={size} className="text-rose-500 rotate-90 scale-y-[-1]" aria-label="Sale" />,
+  },
 };
 
 function MatchEvents({
@@ -1163,10 +1261,10 @@ function MatchEvents({
         >
           <motion.span
             {...ballMotion}
-            className={cn('flex-shrink-0 leading-none inline-block', sub ? 'text-xs' : 'text-sm')}
+            className={cn('flex-shrink-0 leading-none inline-flex items-center justify-center', sub ? 'text-xs' : 'text-sm')}
             aria-label={cfg.label}
           >
-            {cfg.icon}
+            {cfg.render({ size: sub ? 11 : 14 })}
           </motion.span>
           <span className={cn('truncate', sub ? 'text-muted' : 'font-medium text-text', highlight && 'text-accent')}>
             {ev.type === 'own_goal' ? (
