@@ -102,7 +102,7 @@ const FIFA_NAME_TO_CODE: Record<string, string> = {
   'morocco':        'MAR',
   'senegal':        'SEN',
   'egypt':          'EGY',
-  'algeria':        'DZA',
+  'algeria':        'ALG',
   'tunisia':        'TUN',
   'cameroon':       'CMR',
   'nigeria':        'NGA',
@@ -372,6 +372,23 @@ async function doSync(matchId: number): Promise<SyncStatsResult> {
   // Lazy-populated as we observe (IdPlayer, IdTeam) pairs.
   const teamIdByFifaIdTeam = new Map<string, number>();
 
+  // 3.5. Pre-scan: rellená teamIdByFifaIdTeam con todos los eventos que
+  // traen IdTeam + country en la descripción. Sin esto, eventos sin
+  // country procesados ANTES de cualquier evento con country del mismo
+  // equipo (ej. "Assisted by R. DE PAUL." es el primer evento de ARG en
+  // un partido — viene antes que el goal "MESSI (Argentina) scores!!")
+  // no resuelven targetTeamId y se descartan silenciosamente. Order-
+  // dependent: el primer no-country de cada equipo se perdía.
+  for (const ev of events) {
+    if (!ev.IdTeam || teamIdByFifaIdTeam.has(ev.IdTeam)) continue;
+    const desc = ev.EventDescription?.[0]?.Description;
+    const parsed = parseDescription(desc);
+    if (parsed?.country) {
+      const id = teamIdByNorm.get(normName(parsed.country));
+      if (id != null) teamIdByFifaIdTeam.set(ev.IdTeam, id);
+    }
+  }
+
   // 4. Walk events.
   interface Acc {
     goals: number;
@@ -627,9 +644,15 @@ async function doSync(matchId: number): Promise<SyncStatsResult> {
       if (ev.IdSubPlayer && rosterByFifaId.has(ev.IdSubPlayer)) {
         subOut = rosterByFifaId.get(ev.IdSubPlayer)!;
       } else {
-        // "ROBERTS (in) comes off the bench to replace N WILLIAMS (out) (Wales)"
+        // Formato canónico in-play:
+        //   "ROBERTS (in) comes off the bench to replace N WILLIAMS (out) (Wales)"
+        // Formato del HT sub (sin sufijo (out) ni country):
+        //   "Before the second half begins MOLINA (in) comes off the bench
+        //    to replace MONTIEL"
+        // Aceptamos ambos: "(out)" opcional y captura hasta el primero de
+        // ese marcador, paréntesis siguiente, o fin de línea.
         const desc = ev.EventDescription?.[0]?.Description ?? '';
-        const m = desc.match(/replace\s+([A-ZÁÉÍÓÚÑÜÇA-zÀ-ÿ' .-]+?)\s*\(out\)/i);
+        const m = desc.match(/replace\s+([A-ZÁÉÍÓÚÑÜÇA-zÀ-ÿ' .-]+?)\s*(?:\(out\)|\(|$)/i);
         if (m && ev.IdTeam && teamIdByFifaIdTeam.has(ev.IdTeam)) {
           const teamRoster = rosterByTeam.get(teamIdByFifaIdTeam.get(ev.IdTeam)!) ?? [];
           const outNorm = normName(m[1]);
