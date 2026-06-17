@@ -146,6 +146,29 @@ export function MatchesPage() {
   const liveCount = matches.filter((m) => m.status === 'live').length;
   const finishedCount = matches.filter((m) => m.status === 'finished').length;
 
+  // Para la tab "En vivo" rompemos el agrupamiento por fecha y armamos
+  // dos secciones explícitas: "En entretiempo" (halftime + descanso de
+  // alargue) y "En juego ahora". Antes los partidos en pausa quedaban
+  // mezclados con los activos y, sin animación pulsante, se confundían
+  // con "ya terminó" o "no está en vivo".
+  type LiveSection = { id: string; label: string; tone: 'halftime' | 'inplay'; matches: Match[] };
+  const liveSections: LiveSection[] | null = statusFilter === 'En vivo' ? (() => {
+    const halftime: Match[] = [];
+    const inPlay: Match[] = [];
+    for (const m of filtered) {
+      const isHalt = m.liveStatus === 'half_time' || m.liveStatus === 'extra_time_break';
+      (isHalt ? halftime : inPlay).push(m);
+    }
+    const sections: LiveSection[] = [];
+    if (halftime.length > 0) {
+      sections.push({ id: 'halftime', label: 'En entretiempo', tone: 'halftime', matches: halftime });
+    }
+    if (inPlay.length > 0) {
+      sections.push({ id: 'inplay', label: 'En juego ahora', tone: 'inplay', matches: inPlay });
+    }
+    return sections;
+  })() : null;
+
   return (
     <div className="flex flex-col gap-0 animate-fade-in">
       <div className="px-4 pt-6 pb-2">
@@ -259,9 +282,37 @@ export function MatchesPage() {
             })}
           </div>
 
-          {/* Match list */}
+          {/* Match list. Renderizamos secciones live-status para la tab
+              "En vivo", o agrupado por fecha para las demás. La función
+              MatchRow renderiza una sola card y se reusa en ambos paths. */}
           <div className="flex flex-col gap-6 px-4 pb-4">
-            {dates.map((date) => (
+            {liveSections && liveSections.map((section) => (
+              <motion.div
+                key={section.id}
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="flex flex-col gap-2"
+              >
+                <div className="flex items-center gap-2">
+                  <span
+                    className={cn(
+                      'w-2 h-2 rounded-full flex-shrink-0',
+                      section.tone === 'halftime' ? 'bg-amber-500' : 'bg-red-500 animate-pulse',
+                    )}
+                  />
+                  <p
+                    className={cn(
+                      'text-xs-s font-bold uppercase tracking-wider',
+                      section.tone === 'halftime' ? 'text-amber-600 dark:text-amber-400' : 'text-red-600 dark:text-red-400',
+                    )}
+                  >
+                    {section.label} ({section.matches.length})
+                  </p>
+                </div>
+                {section.matches.map((match) => renderMatchRow(match))}
+              </motion.div>
+            ))}
+            {!liveSections && dates.map((date) => (
               <motion.div
                 key={date}
                 initial={{ opacity: 0, y: 8 }}
@@ -269,146 +320,7 @@ export function MatchesPage() {
                 className="flex flex-col gap-2"
               >
                 <p className="text-sm-s font-bold text-muted capitalize">{formatDate(date)}</p>
-                {grouped[date].map((match) => {
-                  const prediction = (myPredictionsData?.data ?? []).find(
-                    (p) => p.matchId === match.id,
-                  );
-                  const homeTeam = getTeam(teamMap, match.homeTeamId);
-                  const awayTeam = getTeam(teamMap, match.awayTeamId);
-                  const isLive = match.status === 'live';
-                  const isFinished = match.status === 'finished';
-                  const isScheduled = match.status === 'scheduled';
-                  // Distintos sub-estados live: en entretiempo o break del
-                  // alargue, mostramos "ENT" en vez del badge pulsante para
-                  // dejar claro que el partido está pausado.
-                  const isHalftime = isLive && (match.liveStatus === 'half_time' || match.liveStatus === 'extra_time_break');
-                  // Only meaningful once the match is finished and graded.
-                  const predictionHit =
-                    isFinished && prediction && prediction.points !== null
-                      ? prediction.points > 0
-                      : null;
-                  return (
-                    <motion.div
-                      key={match.id}
-                      initial={{ opacity: 0, y: 4 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ duration: 0.18 }}
-                    >
-                      <Link
-                        to={`/matches/${match.id}`}
-                        className={cn(
-                          'flex items-center gap-3 p-3 rounded-lg border transition-all',
-                          isLive &&
-                            'bg-card border-red-500/50 shadow-[0_0_0_1px_rgba(239,68,68,0.25),0_0_16px_-4px_rgba(239,68,68,0.45)] hover:border-red-500/70',
-                          isFinished &&
-                            'bg-card/60 border-border/60 opacity-70 hover:opacity-90 hover:border-accent-border',
-                          isScheduled &&
-                            'bg-card border-border hover:border-accent-border',
-                        )}
-                      >
-                        <div className="flex-shrink-0">
-                          {isLive ? (
-                            <span className={cn('w-2 h-2 rounded-full bg-red-400 block', !isHalftime && 'animate-pulse')} />
-                          ) : isFinished ? (
-                            predictionHit === true ? (
-                              <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-green-500/20 text-green-500">
-                                <Check size={12} strokeWidth={3} />
-                              </span>
-                            ) : predictionHit === false ? (
-                              <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-red-500/15 text-red-500">
-                                <X size={12} strokeWidth={3} />
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-elevated text-muted text-[9px] font-bold">
-                                FT
-                              </span>
-                            )
-                          ) : prediction ? (
-                            <CheckCircle2 size={18} className="text-green-400" />
-                          ) : (
-                            <Clock size={18} className="text-muted" />
-                          )}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs-s text-muted">
-                              {match.group ? `Grupo ${match.group}` : ROUND_LABELS[match.round]}
-                            </span>
-                            <span className="text-xs-s text-muted">·</span>
-                            {isLive ? (
-                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-red-500/15 border border-red-500/40">
-                                <span className={cn('w-1.5 h-1.5 rounded-full bg-red-400', !isHalftime && 'animate-pulse')} />
-                                <span className="text-[10px] font-bold text-red-600 dark:text-red-300 uppercase tracking-wider">
-                                  {isHalftime ? 'ENT' : 'En vivo'}
-                                </span>
-                              </span>
-                            ) : isFinished ? (
-                              <span className="inline-flex items-center px-1.5 py-0.5 rounded-full bg-elevated border border-border text-[10px] font-bold text-muted uppercase tracking-wider">
-                                Final
-                              </span>
-                            ) : (
-                              <span className="text-xs-s font-semibold text-accent tabular-nums">
-                                {formatTime(match.kickoffUtc)}
-                              </span>
-                            )}
-                          </div>
-                          <div className="flex items-center gap-2 mt-1">
-                            <span className="flex items-center gap-1.5 text-sm-s font-semibold text-text">
-                              {homeTeam.code !== 'TBD' && (
-                                <TeamFlag code={homeTeam.code} emoji={homeTeam.flag} size={20} />
-                              )}
-                              <span className={homeTeam.code === 'TBD' ? 'text-muted text-xs-s' : ''}>
-                                {teamDisplayLabel(homeTeam.code, match.matchNumber, 'home')}
-                              </span>
-                            </span>
-                            {(isLive || isFinished) && match.homeScore !== null ? (
-                              <span
-                                className={cn(
-                                  'font-display font-bold tabular-nums px-2',
-                                  isLive
-                                    ? 'text-lg-s text-red-500'
-                                    : 'text-sm-s text-muted',
-                                )}
-                              >
-                                {match.homeScore} – {match.awayScore}
-                              </span>
-                            ) : (
-                              <span className="text-xs-s font-bold text-muted">vs</span>
-                            )}
-                            <span className="flex items-center gap-1.5 text-sm-s font-semibold text-text">
-                              <span className={awayTeam.code === 'TBD' ? 'text-muted text-xs-s' : ''}>
-                                {teamDisplayLabel(awayTeam.code, match.matchNumber, 'away')}
-                              </span>
-                              {awayTeam.code !== 'TBD' && (
-                                <TeamFlag code={awayTeam.code} emoji={awayTeam.flag} size={20} />
-                              )}
-                            </span>
-                          </div>
-                          {prediction && (
-                            <p
-                              className={cn(
-                                'text-xs-s font-semibold mt-0.5',
-                                predictionHit === true
-                                  ? 'text-green-500'
-                                  : predictionHit === false
-                                    ? 'text-muted'
-                                    : 'text-accent',
-                              )}
-                            >
-                              Tu pronóstico: {prediction.homeScore} – {prediction.awayScore}
-                              {prediction.points !== null && ` · +${prediction.points} pts`}
-                            </p>
-                          )}
-                        </div>
-                        {/* Hide the chevron CTA on finished matches — there's nothing
-                            actionable left to predict. */}
-                        {!isFinished && (
-                          <ChevronRight size={16} className="text-muted flex-shrink-0" />
-                        )}
-                      </Link>
-                    </motion.div>
-                  );
-                })}
+                {grouped[date].map((match) => renderMatchRow(match))}
               </motion.div>
             ))}
 
@@ -428,4 +340,144 @@ export function MatchesPage() {
       )}
     </div>
   );
+
+  function renderMatchRow(match: Match) {
+    const prediction = (myPredictionsData?.data ?? []).find((p) => p.matchId === match.id);
+    const homeTeam = getTeam(teamMap, match.homeTeamId);
+    const awayTeam = getTeam(teamMap, match.awayTeamId);
+    const isLive = match.status === 'live';
+    const isFinished = match.status === 'finished';
+    const isScheduled = match.status === 'scheduled';
+    const isHalftime = isLive && (match.liveStatus === 'half_time' || match.liveStatus === 'extra_time_break');
+    const predictionHit =
+      isFinished && prediction && prediction.points !== null ? prediction.points > 0 : null;
+    return (
+      <motion.div
+        key={match.id}
+        initial={{ opacity: 0, y: 4 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.18 }}
+      >
+        <Link
+          to={`/matches/${match.id}`}
+          className={cn(
+            'flex items-center gap-3 p-3 rounded-lg border transition-all',
+            isLive && !isHalftime &&
+              'bg-card border-red-500/50 shadow-[0_0_0_1px_rgba(239,68,68,0.25),0_0_16px_-4px_rgba(239,68,68,0.45)] hover:border-red-500/70',
+            isHalftime &&
+              'bg-card border-amber-500/50 shadow-[0_0_0_1px_rgba(245,158,11,0.2),0_0_14px_-4px_rgba(245,158,11,0.4)] hover:border-amber-500/70',
+            isFinished &&
+              'bg-card/60 border-border/60 opacity-70 hover:opacity-90 hover:border-accent-border',
+            isScheduled &&
+              'bg-card border-border hover:border-accent-border',
+          )}
+        >
+          <div className="flex-shrink-0">
+            {isLive ? (
+              <span className={cn('w-2 h-2 rounded-full block', isHalftime ? 'bg-amber-500' : 'bg-red-400 animate-pulse')} />
+            ) : isFinished ? (
+              predictionHit === true ? (
+                <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-green-500/20 text-green-500">
+                  <Check size={12} strokeWidth={3} />
+                </span>
+              ) : predictionHit === false ? (
+                <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-red-500/15 text-red-500">
+                  <X size={12} strokeWidth={3} />
+                </span>
+              ) : (
+                <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-elevated text-muted text-[9px] font-bold">
+                  FT
+                </span>
+              )
+            ) : prediction ? (
+              <CheckCircle2 size={18} className="text-green-400" />
+            ) : (
+              <Clock size={18} className="text-muted" />
+            )}
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2">
+              <span className="text-xs-s text-muted">
+                {match.group ? `Grupo ${match.group}` : ROUND_LABELS[match.round]}
+              </span>
+              <span className="text-xs-s text-muted">·</span>
+              {isLive ? (
+                isHalftime ? (
+                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-amber-500/15 border border-amber-500/40">
+                    <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                    <span className="text-[10px] font-bold text-amber-700 dark:text-amber-300 uppercase tracking-wider">
+                      Entretiempo
+                    </span>
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-red-500/15 border border-red-500/40">
+                    <span className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse" />
+                    <span className="text-[10px] font-bold text-red-600 dark:text-red-300 uppercase tracking-wider">
+                      En vivo
+                    </span>
+                  </span>
+                )
+              ) : isFinished ? (
+                <span className="inline-flex items-center px-1.5 py-0.5 rounded-full bg-elevated border border-border text-[10px] font-bold text-muted uppercase tracking-wider">
+                  Final
+                </span>
+              ) : (
+                <span className="text-xs-s font-semibold text-accent tabular-nums">
+                  {formatTime(match.kickoffUtc)}
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-2 mt-1">
+              <span className="flex items-center gap-1.5 text-sm-s font-semibold text-text">
+                {homeTeam.code !== 'TBD' && (
+                  <TeamFlag code={homeTeam.code} emoji={homeTeam.flag} size={20} />
+                )}
+                <span className={homeTeam.code === 'TBD' ? 'text-muted text-xs-s' : ''}>
+                  {teamDisplayLabel(homeTeam.code, match.matchNumber, 'home')}
+                </span>
+              </span>
+              {(isLive || isFinished) && match.homeScore !== null ? (
+                <span
+                  className={cn(
+                    'font-display font-bold tabular-nums px-2',
+                    isLive
+                      ? isHalftime ? 'text-lg-s text-amber-600 dark:text-amber-400' : 'text-lg-s text-red-500'
+                      : 'text-sm-s text-muted',
+                  )}
+                >
+                  {match.homeScore} – {match.awayScore}
+                </span>
+              ) : (
+                <span className="text-xs-s font-bold text-muted">vs</span>
+              )}
+              <span className="flex items-center gap-1.5 text-sm-s font-semibold text-text">
+                <span className={awayTeam.code === 'TBD' ? 'text-muted text-xs-s' : ''}>
+                  {teamDisplayLabel(awayTeam.code, match.matchNumber, 'away')}
+                </span>
+                {awayTeam.code !== 'TBD' && (
+                  <TeamFlag code={awayTeam.code} emoji={awayTeam.flag} size={20} />
+                )}
+              </span>
+            </div>
+            {prediction && (
+              <p
+                className={cn(
+                  'text-xs-s font-semibold mt-0.5',
+                  predictionHit === true
+                    ? 'text-green-500'
+                    : predictionHit === false
+                      ? 'text-muted'
+                      : 'text-accent',
+                )}
+              >
+                Tu pronóstico: {prediction.homeScore} – {prediction.awayScore}
+                {prediction.points !== null && ` · +${prediction.points} pts`}
+              </p>
+            )}
+          </div>
+          {!isFinished && <ChevronRight size={16} className="text-muted flex-shrink-0" />}
+        </Link>
+      </motion.div>
+    );
+  }
 }
