@@ -278,6 +278,18 @@ export function FantasyPage() {
   const { data: fantasyData, isLoading: fantasyLoading } = useMyFantasyTeam();
   const { data: leaguesResponse } = useMyLeagues();
   const updateSquad = useUpdateFantasySquad();
+  const { data: roundsData } = useFantasyRounds();
+
+  // El plantel se bloquea con el deadline de Fecha 1 (group_1) — no podés
+  // cambiar los 15 una vez arrancado el Mundial. Lo que SÍ podés cambiar
+  // es tu 11 inicial fecha por fecha desde la pestaña Titulares. Cuando
+  // el plantel queda locked, escondemos el botón "Guardar plantel" y
+  // dejamos un banner que apunta al lugar correcto.
+  const squadLocked = (() => {
+    const group1 = roundsData?.data.find((r) => r.slug === 'group_1');
+    if (!group1?.deadline) return false;
+    return new Date(group1.deadline).getTime() <= Date.now();
+  })();
 
   const myLeagues = leaguesResponse?.data ?? [];
 
@@ -770,6 +782,39 @@ export function FantasyPage() {
           serverIds.length !== selectedPlayerIds.length ||
           serverIds.some((id) => !localSet.has(id)) ||
           selectedPlayerIds.some((id) => !serverSet.has(id));
+        // Si el plantel está locked Y el usuario intentó editar la
+        // selección, mostramos un banner aclarando que el plantel ya
+        // no se cambia y redirigiendo a Titulares — que es donde sí
+        // se cambia el 11 por fecha. Sin esto el usuario veía un botón
+        // "Guardar" que devolvía 409 sin explicación clara.
+        if (squadLocked) {
+          if (!isDirty) return null;
+          return (
+            <motion.div
+              initial={{ y: 80 }}
+              animate={{ y: 0 }}
+              className="fixed bottom-20 md:bottom-6 left-0 md:left-56 xl:left-64 right-0 flex justify-center px-4 pointer-events-none z-30"
+            >
+              <div className="pointer-events-auto w-full max-w-xl p-4 rounded-xl bg-amber-500/15 border border-amber-500/40 backdrop-blur-md shadow-lg flex items-start gap-3">
+                <span className="text-xl flex-shrink-0" aria-hidden>🔒</span>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm-s font-bold text-amber-700 dark:text-amber-300">El plantel está cerrado</p>
+                  <p className="text-xs-s text-amber-700/80 dark:text-amber-200/80 mt-0.5 leading-snug">
+                    El plazo de Fecha 1 ya pasó. Tu plantel queda fijo para todo el Mundial.
+                    Lo que SÍ podés cambiar es tu <span className="font-semibold">11 inicial fecha por fecha</span>.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setTab('lineup')}
+                    className="mt-2 px-3 py-1.5 rounded-lg bg-amber-500 text-amber-950 text-xs-s font-bold hover:bg-amber-400 transition-colors"
+                  >
+                    Ir a Titulares →
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          );
+        }
         if (!isDirty || selectedPlayerIds.length === 0) return null;
         return (
           <motion.div
