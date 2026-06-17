@@ -130,6 +130,10 @@ const FIFA_NAME_TO_CODE: Record<string, string> = {
   'haiti':          'HAI',
   'curacao':        'CUW',
   'curaçao':        'CUW',
+  // Africa (resto)
+  'congo dr':                          'COD',
+  'dr congo':                          'COD',
+  'democratic republic of the congo':  'COD',
   // Oceania
   'australia':      'AUS',
   'new zealand':    'NZL',
@@ -379,14 +383,31 @@ async function doSync(matchId: number): Promise<SyncStatsResult> {
   // un partido — viene antes que el goal "MESSI (Argentina) scores!!")
   // no resuelven targetTeamId y se descartan silenciosamente. Order-
   // dependent: el primer no-country de cada equipo se perdía.
+  //
+  // Además: si vemos un country del feed que NO está en FIFA_NAME_TO_CODE,
+  // emitimos un warning. Es la única forma de detectar a tiempo cuando una
+  // sub-selección entra al Mundial y nos falta su alias (caso COD "Congo
+  // DR"). Sin esto, todos sus goles se pierden en silencio y el equipo
+  // termina 0-N en la tabla.
+  const unknownCountries = new Set<string>();
   for (const ev of events) {
     if (!ev.IdTeam || teamIdByFifaIdTeam.has(ev.IdTeam)) continue;
     const desc = ev.EventDescription?.[0]?.Description;
     const parsed = parseDescription(desc);
     if (parsed?.country) {
       const id = teamIdByNorm.get(normName(parsed.country));
-      if (id != null) teamIdByFifaIdTeam.set(ev.IdTeam, id);
+      if (id != null) {
+        teamIdByFifaIdTeam.set(ev.IdTeam, id);
+      } else {
+        unknownCountries.add(parsed.country);
+      }
     }
+  }
+  if (unknownCountries.size > 0) {
+    console.warn(
+      `[sync-fifa-stats] match ${matchId}: countries from feed without FIFA_NAME_TO_CODE alias — ` +
+      `eventos de estos equipos NO se van a persistir hasta agregar el alias: ${[...unknownCountries].join(', ')}`,
+    );
   }
 
   // 4. Walk events.
