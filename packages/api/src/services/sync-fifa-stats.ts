@@ -724,6 +724,47 @@ async function doSync(matchId: number): Promise<SyncStatsResult> {
     await db.delete(matchEvents).where(inArray(matchEvents.id, toDelete));
   }
 
+  // 6.5. Calcular currentMinute (último MatchMinute de FIFA, con stoppage
+  // crudo) y detectar cooling break del feed. FIFA emite eventos tipo
+  // "Match paused for a hydration break" / "Match resumed after
+  // interruption" sin Type específico (varían). El liveStatus pasa a
+  // 'cooling_break' si el último paused/resumed fue paused. Si el partido
+  // termina (Type 26 "The final whistle sounds") no tocamos liveStatus
+  // — eso lo manejan sync-scores y reconcile.
+  if (m.status === 'live') {
+    const updates: { currentMinute?: string | null; liveStatus?: string } = {};
+    // Recorremos events EN ORDEN para que el último gana.
+    let latestMinute: string | null = null;
+    let coolingBreakActive = false;
+    let halftime = false;
+    for (const ev of events) {
+      if (ev.MatchMinute) latestMinute = ev.MatchMinute;
+      const desc = (ev.EventDescription?.[0]?.Description ?? '').toLowerCase();
+      if (desc.includes('hydration break') || desc.includes('cooling break')) {
+        coolingBreakActive = true;
+      } else if (
+        coolingBreakActive &&
+        (desc.includes('match resumed') || desc.includes('resumed after interruption'))
+      ) {
+        coolingBreakActive = false;
+      }
+      // FIFA suele emitir "brings the first period to an end" al HT y
+      // "signals the start of the second period" al volver. Solo
+      // marcamos halftime si el último evento de período no tiene un
+      // "start of second" después.
+      if (desc.includes('brings the first period to an end')) halftime = true;
+      else if (desc.includes('start of the second period')) halftime = false;
+    }
+    if (latestMinute) updates.currentMinute = latestMinute;
+    // Cooling break tiene prioridad porque half_time es más persistente
+    // y suele venir del feed de scores; cooling es siempre transitorio
+    // y solo FIFA lo publica.
+    if (coolingBreakActive) updates.liveStatus = 'cooling_break';
+    if (Object.keys(updates).length > 0) {
+      await db.update(matches).set(updates).where(eq(matches.id, matchId));
+    }
+  }
+
   // 7. Upsert player_match_stats.
   let upserted = 0;
   for (const [playerId, b] of stats) {

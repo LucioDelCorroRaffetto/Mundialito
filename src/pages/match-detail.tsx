@@ -126,6 +126,7 @@ function ScoreInput({
 function liveStatusLabel(liveStatus: string | null | undefined): string | null {
   switch (liveStatus) {
     case 'half_time':         return 'Entretiempo';
+    case 'cooling_break':     return 'Descanso de hidratación';
     case 'extra_time_break':  return 'Descanso del alargue';
     case 'penalty_shootout':  return 'Penales';
     default:                  return null;
@@ -665,29 +666,43 @@ export function MatchDetailPage() {
           // caíamos al ScoreInput cuando homeScore era null, lo que dejaba
           // editar el pronóstico en partidos ya en vivo o terminados.
           <div className="flex flex-col items-center gap-2">
-            {match.status === 'live' && (
-              <div className="flex flex-col items-center gap-0.5 mb-1">
-                <span className="flex items-center gap-1.5">
-                  {/* Heartbeat dot — concentric ping ring on top of a solid
-                      dot reads more "live broadcast" than a single pulse.
-                      Apagamos el ping cuando el juego está pausado
-                      (entretiempo / break del alargue) — sigue rojo fijo
-                      pero deja de "latir" para señalar que no hay acción. */}
-                  <span className="relative inline-flex w-2.5 h-2.5">
-                    {match.liveStatus !== 'half_time' && match.liveStatus !== 'extra_time_break' && (
-                      <span className="absolute inset-0 rounded-full bg-red-400/60 animate-ping" />
+            {match.status === 'live' && (() => {
+              const paused =
+                match.liveStatus === 'half_time' ||
+                match.liveStatus === 'extra_time_break' ||
+                match.liveStatus === 'cooling_break';
+              return (
+                <div className="flex flex-col items-center gap-0.5 mb-1">
+                  <span className="flex items-center gap-1.5">
+                    {/* Heartbeat dot — concentric ping ring on top of a
+                        solid dot reads "live broadcast". Apagamos el ping
+                        cuando el juego está pausado para señalar que no
+                        hay acción en este momento. */}
+                    <span className="relative inline-flex w-2.5 h-2.5">
+                      {!paused && (
+                        <span className="absolute inset-0 rounded-full bg-red-400/60 animate-ping" />
+                      )}
+                      <span className="relative inline-flex w-2.5 h-2.5 rounded-full bg-red-500" />
+                    </span>
+                    <span className="text-xs-s font-bold text-red-400 uppercase tracking-wider">En Vivo</span>
+                    {/* Minuto actual del partido — viene de FIFA con
+                        stoppage incluido ("90'+3'"). Cuando está pausado
+                        lo escondemos: el sub-label de abajo dice qué
+                        clase de pausa es. */}
+                    {!paused && match.currentMinute && (
+                      <span className="ml-1 px-2 py-0.5 rounded-md bg-red-500/15 border border-red-500/40 text-[11px] font-bold text-red-700 dark:text-red-300 tabular-nums">
+                        {match.currentMinute}
+                      </span>
                     )}
-                    <span className="relative inline-flex w-2.5 h-2.5 rounded-full bg-red-500" />
                   </span>
-                  <span className="text-xs-s font-bold text-red-400 uppercase tracking-wider">En Vivo</span>
-                </span>
-                {liveStatusLabel(match.liveStatus) && (
-                  <span className="text-[10px] font-semibold text-muted uppercase tracking-wider">
-                    {liveStatusLabel(match.liveStatus)}
-                  </span>
-                )}
-              </div>
-            )}
+                  {liveStatusLabel(match.liveStatus) && (
+                    <span className="text-[10px] font-semibold text-muted uppercase tracking-wider">
+                      {liveStatusLabel(match.liveStatus)}
+                    </span>
+                  )}
+                </div>
+              );
+            })()}
             <div className="flex items-center justify-around w-full gap-4">
               <div className="flex flex-col items-center gap-1">
                 <TeamFlag code={homeTeamDisplay.code} emoji={homeTeamDisplay.flag} size={48} />

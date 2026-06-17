@@ -26,14 +26,22 @@ export const matches = sqliteTable('matches', {
    * mostrar siempre "EN VIVO". Null mientras el partido no esté en curso
    * o el feed no aporte detalle.
    *
-   * Valores: 'in_play' | 'half_time' | 'extra_time_break' |
-   *          'penalty_shootout' | 'full_time'
+   * Valores: 'in_play' | 'half_time' | 'cooling_break' |
+   *          'extra_time_break' | 'penalty_shootout' | 'full_time'
    *
-   * Nota de diseño: derivamos esto de los mismos feeds que ya consumimos
-   * para el score (sync-scores y sync-espn) — NO del timeline de FIFA,
-   * que se baja una sola vez al finalizar el partido (sync-fifa-stats).
+   * Nota de diseño: lo escriben los syncs de score (sync-scores y
+   * sync-espn) y también sync-fifa-stats cuando detecta cooling break
+   * por descripción de evento (FIFA es la única fuente que lo publica).
    */
   liveStatus: text('live_status'),
+  /**
+   * Último minuto reportado por FIFA para este partido, como string
+   * crudo: "67'", "90'+3'", "ET 5'", etc. Se actualiza en cada tick del
+   * sync FIFA con el MatchMinute del evento más reciente. Útil para
+   * mostrar "vamos 78'" sin que la app tenga que estimar desde kickoff.
+   * Null hasta que el partido tenga al menos un evento.
+   */
+  currentMinute: text('current_minute'),
   homeScore: integer('home_score'),
   awayScore: integer('away_score'),
   apiFixtureId: integer('api_fixture_id'), // nullable — API-Football fixture ID (no longer used in free tier)

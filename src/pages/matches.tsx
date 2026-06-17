@@ -153,15 +153,18 @@ export function MatchesPage() {
   // con "ya terminó" o "no está en vivo".
   type LiveSection = { id: string; label: string; tone: 'halftime' | 'inplay'; matches: Match[] };
   const liveSections: LiveSection[] | null = statusFilter === 'En vivo' ? (() => {
-    const halftime: Match[] = [];
+    const paused: Match[] = [];
     const inPlay: Match[] = [];
     for (const m of filtered) {
-      const isHalt = m.liveStatus === 'half_time' || m.liveStatus === 'extra_time_break';
-      (isHalt ? halftime : inPlay).push(m);
+      const isPaused =
+        m.liveStatus === 'half_time' ||
+        m.liveStatus === 'extra_time_break' ||
+        m.liveStatus === 'cooling_break';
+      (isPaused ? paused : inPlay).push(m);
     }
     const sections: LiveSection[] = [];
-    if (halftime.length > 0) {
-      sections.push({ id: 'halftime', label: 'En entretiempo', tone: 'halftime', matches: halftime });
+    if (paused.length > 0) {
+      sections.push({ id: 'paused', label: 'En pausa', tone: 'halftime', matches: paused });
     }
     if (inPlay.length > 0) {
       sections.push({ id: 'inplay', label: 'En juego ahora', tone: 'inplay', matches: inPlay });
@@ -348,7 +351,17 @@ export function MatchesPage() {
     const isLive = match.status === 'live';
     const isFinished = match.status === 'finished';
     const isScheduled = match.status === 'scheduled';
-    const isHalftime = isLive && (match.liveStatus === 'half_time' || match.liveStatus === 'extra_time_break');
+    const isPaused = isLive && (
+      match.liveStatus === 'half_time' ||
+      match.liveStatus === 'extra_time_break' ||
+      match.liveStatus === 'cooling_break'
+    );
+    const isHalftime = isPaused; // alias para mantener nombre semántico abajo
+    const pauseLabel =
+      match.liveStatus === 'half_time' ? 'Entretiempo'
+      : match.liveStatus === 'cooling_break' ? 'Hidratación'
+      : match.liveStatus === 'extra_time_break' ? 'Descanso ET'
+      : null;
     const predictionHit =
       isFinished && prediction && prediction.points !== null ? prediction.points > 0 : null;
     return (
@@ -402,18 +415,18 @@ export function MatchesPage() {
               </span>
               <span className="text-xs-s text-muted">·</span>
               {isLive ? (
-                isHalftime ? (
+                isPaused ? (
                   <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-amber-500/15 border border-amber-500/40">
                     <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
                     <span className="text-[10px] font-bold text-amber-700 dark:text-amber-300 uppercase tracking-wider">
-                      Entretiempo
+                      {pauseLabel}
                     </span>
                   </span>
                 ) : (
                   <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-red-500/15 border border-red-500/40">
                     <span className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse" />
                     <span className="text-[10px] font-bold text-red-600 dark:text-red-300 uppercase tracking-wider">
-                      En vivo
+                      {match.currentMinute ? match.currentMinute : 'En vivo'}
                     </span>
                   </span>
                 )

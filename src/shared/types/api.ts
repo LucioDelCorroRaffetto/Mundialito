@@ -19,6 +19,7 @@ export interface Team {
 export type LiveStatus =
   | 'in_play'
   | 'half_time'
+  | 'cooling_break'
   | 'extra_time_break'
   | 'penalty_shootout'
   | 'full_time';
@@ -42,6 +43,8 @@ export interface Match {
    * inferirlo del timeline. Si el feed no lo aporta, queda null.
    */
   liveStatus: LiveStatus | null;
+  /** Último minuto reportado por FIFA (ej. "67'", "90'+3'"). null si no hay eventos aún. */
+  currentMinute: string | null;
   homeScore: number | null;
   awayScore: number | null;
   // Solo lo devuelve GET /matches/:id (no la lista). Acumulados por jugador.
