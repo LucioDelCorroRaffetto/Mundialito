@@ -253,6 +253,125 @@ interface LineupPitchPlayer extends PitchPlayer {
   isViceCaptain: boolean;
 }
 
+/**
+ * Plantilla de formación: definimos slots con nombre (CB, LB, ST, etc.) y
+ * coordenadas % sobre la cancha. La formación activa se deduce del recuento
+ * de starters por posición — el usuario solo elige 11 jugadores y la cancha
+ * adopta el esquema correcto. Si en el futuro queremos role-per-player, este
+ * mapeo deja un slot.role para cruzarlo contra preferencias del jugador.
+ */
+type SlotRole = 'GK' | 'CB' | 'LB' | 'RB' | 'LWB' | 'RWB' | 'CDM' | 'CM' | 'CAM' | 'LM' | 'RM' | 'LW' | 'RW' | 'ST' | 'SS';
+interface FormationSlot { role: SlotRole; base: Position; x: number; y: number }
+interface Formation { name: string; slots: FormationSlot[] }
+
+const FORMATIONS: Record<string, Formation> = {
+  '4-4-2': {
+    name: '4-4-2',
+    slots: [
+      { role: 'GK',  base: 'GK',  x: 50, y: 90 },
+      { role: 'LB',  base: 'DEF', x: 15, y: 70 },
+      { role: 'CB',  base: 'DEF', x: 38, y: 72 },
+      { role: 'CB',  base: 'DEF', x: 62, y: 72 },
+      { role: 'RB',  base: 'DEF', x: 85, y: 70 },
+      { role: 'LM',  base: 'MID', x: 15, y: 45 },
+      { role: 'CM',  base: 'MID', x: 38, y: 47 },
+      { role: 'CM',  base: 'MID', x: 62, y: 47 },
+      { role: 'RM',  base: 'MID', x: 85, y: 45 },
+      { role: 'ST',  base: 'FWD', x: 38, y: 18 },
+      { role: 'ST',  base: 'FWD', x: 62, y: 18 },
+    ],
+  },
+  '4-3-3': {
+    name: '4-3-3',
+    slots: [
+      { role: 'GK',  base: 'GK',  x: 50, y: 90 },
+      { role: 'LB',  base: 'DEF', x: 15, y: 70 },
+      { role: 'CB',  base: 'DEF', x: 38, y: 72 },
+      { role: 'CB',  base: 'DEF', x: 62, y: 72 },
+      { role: 'RB',  base: 'DEF', x: 85, y: 70 },
+      { role: 'CDM', base: 'MID', x: 50, y: 52 },
+      { role: 'CM',  base: 'MID', x: 28, y: 45 },
+      { role: 'CM',  base: 'MID', x: 72, y: 45 },
+      { role: 'LW',  base: 'FWD', x: 18, y: 18 },
+      { role: 'ST',  base: 'FWD', x: 50, y: 14 },
+      { role: 'RW',  base: 'FWD', x: 82, y: 18 },
+    ],
+  },
+  '3-5-2': {
+    name: '3-5-2',
+    slots: [
+      { role: 'GK',  base: 'GK',  x: 50, y: 90 },
+      { role: 'CB',  base: 'DEF', x: 25, y: 72 },
+      { role: 'CB',  base: 'DEF', x: 50, y: 74 },
+      { role: 'CB',  base: 'DEF', x: 75, y: 72 },
+      { role: 'LWB', base: 'MID', x: 12, y: 48 },
+      { role: 'CDM', base: 'MID', x: 36, y: 52 },
+      { role: 'CM',  base: 'MID', x: 50, y: 45 },
+      { role: 'CDM', base: 'MID', x: 64, y: 52 },
+      { role: 'RWB', base: 'MID', x: 88, y: 48 },
+      { role: 'ST',  base: 'FWD', x: 38, y: 18 },
+      { role: 'ST',  base: 'FWD', x: 62, y: 18 },
+    ],
+  },
+  '5-3-2': {
+    name: '5-3-2',
+    slots: [
+      { role: 'GK',  base: 'GK',  x: 50, y: 90 },
+      { role: 'LWB', base: 'DEF', x: 12, y: 70 },
+      { role: 'CB',  base: 'DEF', x: 32, y: 73 },
+      { role: 'CB',  base: 'DEF', x: 50, y: 75 },
+      { role: 'CB',  base: 'DEF', x: 68, y: 73 },
+      { role: 'RWB', base: 'DEF', x: 88, y: 70 },
+      { role: 'CDM', base: 'MID', x: 30, y: 47 },
+      { role: 'CM',  base: 'MID', x: 50, y: 45 },
+      { role: 'CAM', base: 'MID', x: 70, y: 47 },
+      { role: 'ST',  base: 'FWD', x: 38, y: 18 },
+      { role: 'ST',  base: 'FWD', x: 62, y: 18 },
+    ],
+  },
+  '3-4-3': {
+    name: '3-4-3',
+    slots: [
+      { role: 'GK',  base: 'GK',  x: 50, y: 90 },
+      { role: 'CB',  base: 'DEF', x: 25, y: 72 },
+      { role: 'CB',  base: 'DEF', x: 50, y: 74 },
+      { role: 'CB',  base: 'DEF', x: 75, y: 72 },
+      { role: 'LM',  base: 'MID', x: 15, y: 47 },
+      { role: 'CM',  base: 'MID', x: 38, y: 47 },
+      { role: 'CM',  base: 'MID', x: 62, y: 47 },
+      { role: 'RM',  base: 'MID', x: 85, y: 47 },
+      { role: 'LW',  base: 'FWD', x: 18, y: 18 },
+      { role: 'ST',  base: 'FWD', x: 50, y: 14 },
+      { role: 'RW',  base: 'FWD', x: 82, y: 18 },
+    ],
+  },
+  '4-5-1': {
+    name: '4-5-1',
+    slots: [
+      { role: 'GK',  base: 'GK',  x: 50, y: 90 },
+      { role: 'LB',  base: 'DEF', x: 15, y: 70 },
+      { role: 'CB',  base: 'DEF', x: 38, y: 72 },
+      { role: 'CB',  base: 'DEF', x: 62, y: 72 },
+      { role: 'RB',  base: 'DEF', x: 85, y: 70 },
+      { role: 'LM',  base: 'MID', x: 12, y: 45 },
+      { role: 'CM',  base: 'MID', x: 32, y: 48 },
+      { role: 'CDM', base: 'MID', x: 50, y: 52 },
+      { role: 'CM',  base: 'MID', x: 68, y: 48 },
+      { role: 'RM',  base: 'MID', x: 88, y: 45 },
+      { role: 'ST',  base: 'FWD', x: 50, y: 16 },
+    ],
+  },
+};
+
+/** Detecta formación por recuento de starters por posición base. */
+function detectFormation(players: LineupPitchPlayer[]): Formation | null {
+  const counts: Record<Position, number> = { GK: 0, DEF: 0, MID: 0, FWD: 0 };
+  for (const p of players) if (p.isStarter) counts[p.position]++;
+  if (counts.GK !== 1) return null;
+  const key = `${counts.DEF}-${counts.MID}-${counts.FWD}`;
+  return FORMATIONS[key] ?? null;
+}
+
 function LineupPitch({
   players,
   isOpen,
@@ -271,65 +390,119 @@ function LineupPitch({
   const starters = players.filter((p) => p.isStarter);
   const bench = players.filter((p) => !p.isStarter);
 
-  // Group starters by position to render rows on the pitch. The number of
-  // slots in each row is exactly how many the user has marked as starter
-  // — so si saca un DEF y mete un MID, la cancha refleja eso al instante.
-  const byPos: Record<Position, LineupPitchPlayer[]> = { GK: [], DEF: [], MID: [], FWD: [] };
-  for (const p of starters) byPos[p.position].push(p);
-  // Sort within each row by shirt number for visual consistency.
-  for (const pos of Object.keys(byPos) as Position[]) {
-    byPos[pos].sort((a, b) => (a.shirtNumber ?? 999) - (b.shirtNumber ?? 999));
+  // Detectamos la formación a partir del recuento de starters. Si el usuario
+  // no llegó a 11 o tiene un combo raro (ej. 0 GK), caemos a una vista
+  // por filas sin slots — placeholder amistoso "Falta X" para que entienda
+  // qué le falta.
+  const formation = detectFormation(starters);
+  // Asignamos jugadores a slots: para cada slot del template, tomamos el
+  // siguiente jugador disponible con la misma posición base. Orden por
+  // shirt number da un resultado estable.
+  const slotAssignments: Array<{ slot: FormationSlot; player: LineupPitchPlayer | null }> = [];
+  if (formation) {
+    const remaining: Record<Position, LineupPitchPlayer[]> = { GK: [], DEF: [], MID: [], FWD: [] };
+    for (const p of starters) remaining[p.position].push(p);
+    for (const pos of Object.keys(remaining) as Position[]) {
+      remaining[pos].sort((a, b) => (a.shirtNumber ?? 999) - (b.shirtNumber ?? 999));
+    }
+    for (const slot of formation.slots) {
+      const p = remaining[slot.base].shift() ?? null;
+      slotAssignments.push({ slot, player: p });
+    }
   }
+
+  // Resumen de qué falta para que el usuario novato sepa cómo armarlo.
+  const counts: Record<Position, number> = { GK: 0, DEF: 0, MID: 0, FWD: 0 };
+  for (const p of starters) counts[p.position]++;
+  const needs: string[] = [];
+  if (counts.GK === 0) needs.push('1 arquero');
+  if (starters.length < 11) needs.push(`${11 - starters.length} jugadores más`);
+  if (starters.length > 11) needs.push(`sobran ${starters.length - 11}`);
 
   return (
     <div className="flex flex-col gap-4 px-4">
       <div
-        className="rounded-2xl overflow-hidden relative shadow-xl"
+        className="rounded-2xl overflow-hidden relative shadow-xl aspect-[3/4]"
         style={{ background: 'linear-gradient(175deg, #1a5c35 0%, #2d8653 35%, #3aaa68 50%, #2d8653 65%, #1a5c35 100%)' }}
         onClick={() => setOpenMenuId(null)}
       >
-        {/* Pitch markings — reusados de PitchView. */}
+        {/* Pitch markings */}
         <div className="absolute inset-0 pointer-events-none select-none">
           <div className="absolute left-0 right-0 top-1/2 h-px bg-white/12" />
           <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-16 h-16 rounded-full border border-white/12" />
-          <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-1 h-1 rounded-full bg-white/20" />
           <div className="absolute top-0 left-1/2 -translate-x-1/2 w-28 h-10 border-b border-x border-white/12 rounded-b-xl" />
           <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-28 h-10 border-t border-x border-white/12 rounded-t-xl" />
         </div>
 
-        <div className="relative flex flex-col gap-3 py-5 px-2 min-h-[420px]">
-          {(['FWD', 'MID', 'DEF', 'GK'] as Position[]).map((pos) => {
-            const row = byPos[pos];
-            if (row.length === 0) {
-              // Show empty row hint if no starters at this position so the
-              // user sees they need to pick e.g. a GK.
+        {/* Etiqueta de formación arriba a la derecha (si la pudimos detectar) */}
+        {formation && (
+          <span className="absolute top-2 right-2 px-2 py-0.5 rounded-full bg-black/40 backdrop-blur text-[10px] font-bold text-white tracking-wider">
+            {formation.name}
+          </span>
+        )}
+        {!formation && needs.length > 0 && (
+          <div className="absolute top-2 left-1/2 -translate-x-1/2 px-3 py-1 rounded-full bg-orange-500/90 text-[10px] font-bold text-white text-center">
+            Te falta {needs.join(' + ')}
+          </div>
+        )}
+
+        {/* Render por slots con posicionamiento absoluto */}
+        {formation && slotAssignments.map(({ slot, player }, i) => (
+          <div
+            key={i}
+            className="absolute"
+            style={{ left: `${slot.x}%`, top: `${slot.y}%`, transform: 'translate(-50%, -50%)' }}
+          >
+            <LineupPitchSlot
+              role={slot.role}
+              player={player ?? undefined}
+              menuOpen={player ? openMenuId === player.id : false}
+              canEdit={isOpen}
+              onToggleMenu={(e) => {
+                if (!player) return;
+                e.stopPropagation();
+                setOpenMenuId((cur) => (cur === player.id ? null : player.id));
+              }}
+              onPickCaptain={() => { if (player) { onSetCaptain(player.id); setOpenMenuId(null); } }}
+              onPickVice={() => { if (player) { onSetVice(player.id); setOpenMenuId(null); } }}
+              onBench={() => { if (player) { onToggleStarter(player.id); setOpenMenuId(null); } }}
+            />
+          </div>
+        ))}
+
+        {/* Fallback: si no detectamos formación (recuento raro), mostramos
+            por filas como antes para que igual se vea algo coherente. */}
+        {!formation && (
+          <div className="relative flex flex-col gap-3 py-5 px-2 h-full justify-around">
+            {(['FWD', 'MID', 'DEF', 'GK'] as Position[]).map((pos) => {
+              const row = starters.filter((p) => p.position === pos).sort((a, b) => (a.shirtNumber ?? 999) - (b.shirtNumber ?? 999));
+              if (row.length === 0) {
+                return (
+                  <div key={pos} className="flex justify-center items-center px-1 min-h-[60px]">
+                    <span className="text-[10px] text-white/30 font-bold uppercase tracking-widest">Falta {pos}</span>
+                  </div>
+                );
+              }
               return (
-                <div key={pos} className="flex justify-center items-center px-1 min-h-[60px]">
-                  <span className="text-[10px] text-white/30 font-bold uppercase tracking-widest">Falta {pos}</span>
+                <div key={pos} className="flex justify-around items-center px-1">
+                  {row.map((p) => (
+                    <LineupPitchSlot
+                      key={p.id}
+                      role={p.position as SlotRole}
+                      player={p}
+                      menuOpen={openMenuId === p.id}
+                      canEdit={isOpen}
+                      onToggleMenu={(e) => { e.stopPropagation(); setOpenMenuId((cur) => (cur === p.id ? null : p.id)); }}
+                      onPickCaptain={() => { onSetCaptain(p.id); setOpenMenuId(null); }}
+                      onPickVice={() => { onSetVice(p.id); setOpenMenuId(null); }}
+                      onBench={() => { onToggleStarter(p.id); setOpenMenuId(null); }}
+                    />
+                  ))}
                 </div>
               );
-            }
-            return (
-              <div key={pos} className="flex justify-around items-center px-1">
-                {row.map((p) => (
-                  <LineupPitchSlot
-                    key={p.id}
-                    player={p}
-                    menuOpen={openMenuId === p.id}
-                    canEdit={isOpen}
-                    onToggleMenu={(e) => {
-                      e.stopPropagation();
-                      setOpenMenuId((cur) => (cur === p.id ? null : p.id));
-                    }}
-                    onPickCaptain={() => { onSetCaptain(p.id); setOpenMenuId(null); }}
-                    onPickVice={() => { onSetVice(p.id); setOpenMenuId(null); }}
-                    onBench={() => { onToggleStarter(p.id); setOpenMenuId(null); }}
-                  />
-                ))}
-              </div>
-            );
-          })}
-        </div>
+            })}
+          </div>
+        )}
       </div>
 
       {/* Bench — chips horizontales abajo, tap para promover a titular */}
@@ -373,6 +546,7 @@ function LineupPitch({
 }
 
 function LineupPitchSlot({
+  role,
   player,
   menuOpen,
   canEdit,
@@ -381,7 +555,8 @@ function LineupPitchSlot({
   onPickVice,
   onBench,
 }: {
-  player: LineupPitchPlayer;
+  role: SlotRole;
+  player?: LineupPitchPlayer;
   menuOpen: boolean;
   canEdit: boolean;
   onToggleMenu: (e: React.MouseEvent) => void;
@@ -389,10 +564,24 @@ function LineupPitchSlot({
   onPickVice: () => void;
   onBench: () => void;
 }) {
+  // Slot vacío — placeholder con el rol esperado (CB / ST / etc.).
+  if (!player) {
+    return (
+      <div className="relative w-[60px]">
+        <div className="flex flex-col items-center gap-0.5">
+          <div className="w-12 h-12 rounded-full border-2 border-dashed border-white/40 flex items-center justify-center bg-white/5">
+            <span className="text-[10px] text-white/60 font-bold">{role}</span>
+          </div>
+          <span className="text-[9px] text-white/40 font-semibold leading-tight">{role}</span>
+        </div>
+      </div>
+    );
+  }
+
   const shirt = SHIRT_COLORS[player.position];
   const lastName = player.name.split(' ').slice(-1)[0] ?? player.name;
   return (
-    <div className="relative w-[68px]">
+    <div className="relative w-[60px]">
       <button
         onClick={onToggleMenu}
         disabled={!canEdit}
@@ -400,7 +589,7 @@ function LineupPitchSlot({
       >
         <div
           className={cn(
-            'relative w-14 h-14 rounded-full overflow-hidden ring-2 transition-transform group-hover:scale-110 drop-shadow-lg',
+            'relative w-12 h-12 rounded-full overflow-hidden ring-2 transition-transform group-hover:scale-110 drop-shadow-lg',
             player.isCaptain ? 'ring-yellow-400' : player.isViceCaptain ? 'ring-slate-300' : 'ring-white/40',
           )}
           style={{ background: shirt.bg }}
@@ -420,8 +609,12 @@ function LineupPitchSlot({
               <span className="text-[10px] font-black text-slate-900">V</span>
             </span>
           )}
+          {/* Etiqueta de rol específico (CB, LB, ST...) abajo a la derecha del avatar */}
+          <span className="absolute -bottom-1 -right-1 px-1 min-w-[16px] h-3.5 rounded-full bg-black/60 border border-white/30 text-[7px] font-bold text-white flex items-center justify-center leading-none">
+            {role}
+          </span>
         </div>
-        <span className="text-[10px] text-white font-bold truncate max-w-[68px] text-center leading-tight drop-shadow-md">
+        <span className="text-[10px] text-white font-bold truncate max-w-[60px] text-center leading-tight drop-shadow-md">
           {lastName}
         </span>
       </button>
