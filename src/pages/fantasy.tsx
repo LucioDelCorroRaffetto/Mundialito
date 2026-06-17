@@ -245,7 +245,225 @@ function PitchView({
   );
 }
 
-// ─── End pitch view ─────────────────────────────────────────────────────────
+// ─── Lineup pitch — for the Titulares tab ────────────────────────────────────
+
+interface LineupPitchPlayer extends PitchPlayer {
+  isStarter: boolean;
+  isCaptain: boolean;
+  isViceCaptain: boolean;
+}
+
+function LineupPitch({
+  players,
+  isOpen,
+  onToggleStarter,
+  onSetCaptain,
+  onSetVice,
+}: {
+  players: LineupPitchPlayer[];
+  isOpen: boolean;
+  onToggleStarter: (id: number) => void;
+  onSetCaptain: (id: number) => void;
+  onSetVice: (id: number) => void;
+}) {
+  const [openMenuId, setOpenMenuId] = useState<number | null>(null);
+
+  const starters = players.filter((p) => p.isStarter);
+  const bench = players.filter((p) => !p.isStarter);
+
+  // Group starters by position to render rows on the pitch. The number of
+  // slots in each row is exactly how many the user has marked as starter
+  // — so si saca un DEF y mete un MID, la cancha refleja eso al instante.
+  const byPos: Record<Position, LineupPitchPlayer[]> = { GK: [], DEF: [], MID: [], FWD: [] };
+  for (const p of starters) byPos[p.position].push(p);
+  // Sort within each row by shirt number for visual consistency.
+  for (const pos of Object.keys(byPos) as Position[]) {
+    byPos[pos].sort((a, b) => (a.shirtNumber ?? 999) - (b.shirtNumber ?? 999));
+  }
+
+  return (
+    <div className="flex flex-col gap-4 px-4">
+      <div
+        className="rounded-2xl overflow-hidden relative shadow-xl"
+        style={{ background: 'linear-gradient(175deg, #1a5c35 0%, #2d8653 35%, #3aaa68 50%, #2d8653 65%, #1a5c35 100%)' }}
+        onClick={() => setOpenMenuId(null)}
+      >
+        {/* Pitch markings — reusados de PitchView. */}
+        <div className="absolute inset-0 pointer-events-none select-none">
+          <div className="absolute left-0 right-0 top-1/2 h-px bg-white/12" />
+          <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-16 h-16 rounded-full border border-white/12" />
+          <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-1 h-1 rounded-full bg-white/20" />
+          <div className="absolute top-0 left-1/2 -translate-x-1/2 w-28 h-10 border-b border-x border-white/12 rounded-b-xl" />
+          <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-28 h-10 border-t border-x border-white/12 rounded-t-xl" />
+        </div>
+
+        <div className="relative flex flex-col gap-3 py-5 px-2 min-h-[420px]">
+          {(['FWD', 'MID', 'DEF', 'GK'] as Position[]).map((pos) => {
+            const row = byPos[pos];
+            if (row.length === 0) {
+              // Show empty row hint if no starters at this position so the
+              // user sees they need to pick e.g. a GK.
+              return (
+                <div key={pos} className="flex justify-center items-center px-1 min-h-[60px]">
+                  <span className="text-[10px] text-white/30 font-bold uppercase tracking-widest">Falta {pos}</span>
+                </div>
+              );
+            }
+            return (
+              <div key={pos} className="flex justify-around items-center px-1">
+                {row.map((p) => (
+                  <LineupPitchSlot
+                    key={p.id}
+                    player={p}
+                    menuOpen={openMenuId === p.id}
+                    canEdit={isOpen}
+                    onToggleMenu={(e) => {
+                      e.stopPropagation();
+                      setOpenMenuId((cur) => (cur === p.id ? null : p.id));
+                    }}
+                    onPickCaptain={() => { onSetCaptain(p.id); setOpenMenuId(null); }}
+                    onPickVice={() => { onSetVice(p.id); setOpenMenuId(null); }}
+                    onBench={() => { onToggleStarter(p.id); setOpenMenuId(null); }}
+                  />
+                ))}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Bench — chips horizontales abajo, tap para promover a titular */}
+      <div>
+        <p className="text-xs-s text-muted mb-2 font-semibold uppercase tracking-wider">
+          Suplentes ({bench.length})
+        </p>
+        <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
+          {bench.map((p) => (
+            <button
+              key={p.id}
+              type="button"
+              disabled={!isOpen}
+              onClick={() => onToggleStarter(p.id)}
+              className="flex-shrink-0 flex flex-col items-center gap-0.5 p-2 rounded-xl bg-card border border-border w-[78px] disabled:opacity-50 active:scale-95 transition-transform"
+              title={`Subir ${p.name} a titular`}
+            >
+              <div className="relative w-12 h-12 rounded-full overflow-hidden ring-2 ring-border" style={{ background: SHIRT_COLORS[p.position].bg }}>
+                {p.photoUrl ? (
+                  <img src={p.photoUrl} alt={p.name} className="absolute inset-0 w-full h-full object-cover object-top" loading="lazy" />
+                ) : (
+                  <Shirt color={SHIRT_COLORS[p.position].bg} textColor={SHIRT_COLORS[p.position].text} number={p.shirtNumber} />
+                )}
+              </div>
+              <span className="text-[10px] font-bold text-text truncate max-w-[74px] leading-tight">
+                {p.name.split(' ').slice(-1)[0]}
+              </span>
+              <span className={cn(
+                'text-[8px] font-bold px-1.5 rounded leading-tight',
+                p.position === 'GK' ? 'bg-amber-500/20 text-amber-700 dark:text-amber-300' :
+                p.position === 'DEF' ? 'bg-sky-500/20 text-sky-700 dark:text-sky-300' :
+                p.position === 'MID' ? 'bg-emerald-500/20 text-emerald-700 dark:text-emerald-300' :
+                'bg-rose-500/20 text-rose-700 dark:text-rose-300'
+              )}>{p.position}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function LineupPitchSlot({
+  player,
+  menuOpen,
+  canEdit,
+  onToggleMenu,
+  onPickCaptain,
+  onPickVice,
+  onBench,
+}: {
+  player: LineupPitchPlayer;
+  menuOpen: boolean;
+  canEdit: boolean;
+  onToggleMenu: (e: React.MouseEvent) => void;
+  onPickCaptain: () => void;
+  onPickVice: () => void;
+  onBench: () => void;
+}) {
+  const shirt = SHIRT_COLORS[player.position];
+  const lastName = player.name.split(' ').slice(-1)[0] ?? player.name;
+  return (
+    <div className="relative w-[68px]">
+      <button
+        onClick={onToggleMenu}
+        disabled={!canEdit}
+        className="flex flex-col items-center gap-0.5 w-full group disabled:cursor-default"
+      >
+        <div
+          className={cn(
+            'relative w-14 h-14 rounded-full overflow-hidden ring-2 transition-transform group-hover:scale-110 drop-shadow-lg',
+            player.isCaptain ? 'ring-yellow-400' : player.isViceCaptain ? 'ring-slate-300' : 'ring-white/40',
+          )}
+          style={{ background: shirt.bg }}
+        >
+          {player.photoUrl ? (
+            <img src={player.photoUrl} alt={player.name} className="absolute inset-0 w-full h-full object-cover object-top" loading="lazy" />
+          ) : (
+            <Shirt color={shirt.bg} textColor={shirt.text} number={player.shirtNumber} />
+          )}
+          {player.isCaptain && (
+            <span className="absolute -top-1 -left-1 w-5 h-5 rounded-full bg-yellow-400 flex items-center justify-center shadow-md ring-2 ring-black/30">
+              <Crown size={11} className="text-yellow-950" />
+            </span>
+          )}
+          {player.isViceCaptain && (
+            <span className="absolute -top-1 -left-1 w-5 h-5 rounded-full bg-slate-300 flex items-center justify-center shadow-md ring-2 ring-black/30">
+              <span className="text-[10px] font-black text-slate-900">V</span>
+            </span>
+          )}
+        </div>
+        <span className="text-[10px] text-white font-bold truncate max-w-[68px] text-center leading-tight drop-shadow-md">
+          {lastName}
+        </span>
+      </button>
+
+      {menuOpen && canEdit && (
+        <div
+          className="absolute top-full left-1/2 -translate-x-1/2 mt-1 z-20 flex flex-col gap-1 p-1.5 rounded-lg bg-card border border-border shadow-xl min-w-[110px]"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <button
+            onClick={onPickCaptain}
+            className={cn(
+              'px-2 py-1 rounded text-[11px] font-semibold text-left flex items-center gap-1.5 hover:bg-elevated',
+              player.isCaptain && 'text-yellow-600 dark:text-yellow-400',
+            )}
+          >
+            <Crown size={11} className="text-yellow-500" />
+            {player.isCaptain ? 'Es capitán' : 'Capitán (x2)'}
+          </button>
+          <button
+            onClick={onPickVice}
+            className={cn(
+              'px-2 py-1 rounded text-[11px] font-semibold text-left flex items-center gap-1.5 hover:bg-elevated',
+              player.isViceCaptain && 'text-slate-600 dark:text-slate-300',
+            )}
+          >
+            <span className="w-3 h-3 rounded-full bg-slate-400 flex items-center justify-center text-[8px] font-black text-slate-900">V</span>
+            {player.isViceCaptain ? 'Es vice' : 'Vicecapitán (x1.5)'}
+          </button>
+          <button
+            onClick={onBench}
+            className="px-2 py-1 rounded text-[11px] font-semibold text-left hover:bg-elevated text-muted"
+          >
+            ↓ A banca
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── End lineup pitch ───────────────────────────────────────────────────────
 
 const POSITIONS = ['Todo', 'GK', 'DEF', 'MID', 'FWD'] as const;
 type PositionFilter = typeof POSITIONS[number];
@@ -1057,6 +1275,7 @@ function PerRoundLineupTab({ squadPlayers }: { squadPlayers: Player[] }) {
   const rounds = roundsData?.data ?? [];
   const currentRound = rounds.find((r) => r.isCurrent) ?? rounds.find((r) => r.isOpen) ?? null;
   const [selectedRound, setSelectedRound] = useState<string | null>(null);
+  const [lineupView, setLineupView] = useState<'pitch' | 'list'>('pitch');
 
   // Auto-select the current open round on load.
   useEffect(() => {
@@ -1252,59 +1471,101 @@ function PerRoundLineupTab({ squadPlayers }: { squadPlayers: Player[] }) {
         <div className="px-4"><SkeletonList count={11} /></div>
       ) : (
         <>
-          {/* Starters */}
-          <div className="px-4">
-            <p className="text-xs-s text-muted mb-2 font-semibold uppercase tracking-wider">
+          {/* View toggle — pitch (default) vs list */}
+          <div className="px-4 flex items-center justify-between">
+            <p className="text-xs-s text-muted font-semibold uppercase tracking-wider">
               Titulares ({starterCount}/11)
-              {!captainPicked && starterCount > 0 && isOpen && <span className="text-orange-400 ml-2">· Elegí capitán</span>}
-              {!vicePicked && starterCount > 0 && isOpen && <span className="text-orange-400 ml-1">y vicecapitán</span>}
+              {!captainPicked && starterCount > 0 && isOpen && <span className="text-orange-400 ml-2">· Capitán</span>}
+              {!vicePicked && starterCount > 0 && isOpen && <span className="text-orange-400 ml-1">+ Vice</span>}
             </p>
-            <div className="flex flex-col gap-1.5">
-              {starters.map((row) => {
-                const p = squadById.get(row.playerId);
-                if (!p) return null;
-                return (
-                  <LineupRow
-                    key={row.playerId}
-                    player={p}
-                    isStarter
-                    isCaptain={row.isCaptain}
-                    isViceCaptain={row.isViceCaptain}
-                    isOpen={isOpen}
-                    onToggle={() => toggle(row.playerId)}
-                    onCaptain={() => setCaptain(row.playerId)}
-                    onVice={() => setVice(row.playerId)}
-                  />
-                );
-              })}
+            <div className="flex p-0.5 rounded-lg bg-elevated border border-border">
+              <button
+                onClick={() => setLineupView('pitch')}
+                className={cn('px-2 py-1 rounded text-[10px] font-bold transition-colors', lineupView === 'pitch' ? 'bg-accent text-accent-on' : 'text-muted')}
+              >
+                Cancha
+              </button>
+              <button
+                onClick={() => setLineupView('list')}
+                className={cn('px-2 py-1 rounded text-[10px] font-bold transition-colors', lineupView === 'list' ? 'bg-accent text-accent-on' : 'text-muted')}
+              >
+                Lista
+              </button>
             </div>
           </div>
 
-          {/* Bench */}
-          <div className="px-4">
-            <p className="text-xs-s text-muted mb-2 font-semibold uppercase tracking-wider">
-              Suplentes ({bench.length})
-            </p>
-            <div className="flex flex-col gap-1.5 opacity-60">
-              {bench.map((row) => {
-                const p = squadById.get(row.playerId);
-                if (!p) return null;
-                return (
-                  <LineupRow
-                    key={row.playerId}
-                    player={p}
-                    isStarter={false}
-                    isCaptain={false}
-                    isViceCaptain={false}
-                    isOpen={isOpen}
-                    onToggle={() => toggle(row.playerId)}
-                    onCaptain={undefined}
-                    onVice={undefined}
-                  />
-                );
-              })}
-            </div>
-          </div>
+          {lineupView === 'pitch' ? (
+            <LineupPitch
+              players={draft.map((d) => {
+                const p = squadById.get(d.playerId)!;
+                return {
+                  id: p.id,
+                  name: p.name,
+                  position: p.position as Position,
+                  photoUrl: p.photoUrl ?? null,
+                  shirtNumber: p.shirtNumber ?? null,
+                  isStarter: d.isStarter,
+                  isCaptain: d.isCaptain,
+                  isViceCaptain: d.isViceCaptain,
+                };
+              }).filter((p) => squadById.has(p.id))}
+              isOpen={isOpen}
+              onToggleStarter={toggle}
+              onSetCaptain={setCaptain}
+              onSetVice={setVice}
+            />
+          ) : (
+            <>
+              {/* Starters list */}
+              <div className="px-4">
+                <div className="flex flex-col gap-1.5">
+                  {starters.map((row) => {
+                    const p = squadById.get(row.playerId);
+                    if (!p) return null;
+                    return (
+                      <LineupRow
+                        key={row.playerId}
+                        player={p}
+                        isStarter
+                        isCaptain={row.isCaptain}
+                        isViceCaptain={row.isViceCaptain}
+                        isOpen={isOpen}
+                        onToggle={() => toggle(row.playerId)}
+                        onCaptain={() => setCaptain(row.playerId)}
+                        onVice={() => setVice(row.playerId)}
+                      />
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Bench list */}
+              <div className="px-4">
+                <p className="text-xs-s text-muted mb-2 font-semibold uppercase tracking-wider">
+                  Suplentes ({bench.length})
+                </p>
+                <div className="flex flex-col gap-1.5 opacity-60">
+                  {bench.map((row) => {
+                    const p = squadById.get(row.playerId);
+                    if (!p) return null;
+                    return (
+                      <LineupRow
+                        key={row.playerId}
+                        player={p}
+                        isStarter={false}
+                        isCaptain={false}
+                        isViceCaptain={false}
+                        isOpen={isOpen}
+                        onToggle={() => toggle(row.playerId)}
+                        onCaptain={undefined}
+                        onVice={undefined}
+                      />
+                    );
+                  })}
+                </div>
+              </div>
+            </>
+          )}
 
           {/* Save — sticky above the mobile tab bar (bottom-24 on mobile,
               regular on desktop). Only renders when there's actually
