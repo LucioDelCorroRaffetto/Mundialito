@@ -49,6 +49,9 @@ app.post('/sync', async (req, res) => {
   }
 
   const today = new Date().toISOString().slice(0, 10);
+  // Include yesterday so matches that started near midnight UTC and
+  // finished after 00:00 UTC are still picked up in the next tick.
+  const yesterday = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
 
   // Pull fresh kickoff times from FIFA before any other sync. If a match
   // was rescheduled (FIFA moves a game by hours, common close to kickoff)
@@ -61,19 +64,26 @@ app.post('/sync', async (req, res) => {
     return { updated: 0, unchanged: 0, errors: [String(err)] };
   });
 
-  // Try primary (football-data.org), fall back to ESPN if it fails
-  let result = await syncScores({ dateFrom: today, dateTo: today }).catch((err) => ({
+  // Try primary (football-data.org), fall back to ESPN if it fails.
+  // dateFrom=yesterday covers matches that started before midnight UTC.
+  let result = await syncScores({ dateFrom: yesterday, dateTo: today }).catch((err) => ({
     synced: 0, errors: [String(err)], matchesChecked: 0,
   }));
 
   if (result.errors.length > 0 || !process.env.FOOTBALL_DATA_API_KEY) {
-    const espnResult = await syncScoresFromEspn(today).catch((err) => ({
-      synced: 0, errors: [String(err)], matchesChecked: 0,
-    }));
+    // Run ESPN for both dates; merge results.
+    const [espnY, espnT] = await Promise.all([
+      syncScoresFromEspn(yesterday).catch((err) => ({ synced: 0, errors: [String(err)], matchesChecked: 0 })),
+      syncScoresFromEspn(today).catch((err) => ({ synced: 0, errors: [String(err)], matchesChecked: 0 })),
+    ]);
     result = {
-      synced: result.synced + espnResult.synced,
-      errors: [...result.errors.map((e) => `[fd] ${e}`), ...espnResult.errors.map((e) => `[espn] ${e}`)],
-      matchesChecked: Math.max(result.matchesChecked, espnResult.matchesChecked),
+      synced: result.synced + espnY.synced + espnT.synced,
+      errors: [
+        ...result.errors.map((e) => `[fd] ${e}`),
+        ...espnY.errors.map((e) => `[espn-y] ${e}`),
+        ...espnT.errors.map((e) => `[espn-t] ${e}`),
+      ],
+      matchesChecked: Math.max(result.matchesChecked, espnY.matchesChecked, espnT.matchesChecked),
     };
   }
 
