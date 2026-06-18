@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { motion, useDragControls } from 'framer-motion';
-import { ChevronDown, Check, Trophy, LayoutList, Layers, Crown, Shield, BarChart2, BookOpen, ChevronRight, Lock, CheckCircle2 } from 'lucide-react';
+import { ChevronDown, Check, Trophy, Crown, Shield, BarChart2, BookOpen, ChevronRight, Lock, CheckCircle2 } from 'lucide-react';
 import { cn } from '@/shared/lib/cn';
 import { useTeams } from '@/shared/hooks/use-teams';
 import { usePlayers } from '@/shared/hooks/use-players';
@@ -41,15 +41,6 @@ function PlayerAvatar({ photoUrl, name, position }: { photoUrl: string | null; n
   );
 }
 
-// ─── Pitch view ────────────────────────────────────────────────────────────
-const PITCH_ROWS: { pos: Position; slots: number }[] = [
-  { pos: 'FWD', slots: 3 },
-  { pos: 'MID', slots: 5 },
-  { pos: 'DEF', slots: 5 },
-  { pos: 'GK',  slots: 2 },
-];
-
-
 interface PitchPlayer {
   id: number;
   name: string;
@@ -82,168 +73,6 @@ const SHIRT_COLORS: Record<Position, { bg: string; text: string; ring: string }>
   MID: { bg: '#22c55e', text: '#ffffff', ring: 'ring-green-400' },
   FWD: { bg: '#ef4444', text: '#ffffff', ring: 'ring-red-400' },
 };
-
-function PitchSlot({
-  player,
-  pos,
-  onRemove,
-  isStarter,
-  isCaptain,
-}: {
-  player?: PitchPlayer;
-  pos: Position;
-  onRemove?: (id: number) => void;
-  isStarter?: boolean;
-  isCaptain?: boolean;
-}) {
-  const shirt = SHIRT_COLORS[pos];
-
-  if (!player) {
-    return (
-      <div className="flex flex-col items-center gap-1 w-[68px]">
-        <div className="w-14 h-14 opacity-20 rounded-full border-2 border-dashed border-white/40 flex items-center justify-center">
-          <span className="text-[9px] text-white/40 font-bold">{pos}</span>
-        </div>
-        <span className="text-[8px] text-white/20 text-center leading-tight">{pos}</span>
-      </div>
-    );
-  }
-
-  const lastName = player.name.split(' ').slice(-1)[0] ?? player.name;
-  const isBench = isStarter === false;
-
-  return (
-    <button
-      onClick={() => onRemove?.(player.id)}
-      className={cn('flex flex-col items-center gap-0.5 group w-[68px]', isBench && 'opacity-50')}
-      title={`Quitar ${player.name}`}
-    >
-      {/* Photo-first design: big circular photo (or shirt fallback) so the
-          user can actually recognise the player on the pitch. */}
-      <div className={cn(
-        'relative w-14 h-14 rounded-full overflow-hidden ring-2 transition-transform group-hover:scale-110 drop-shadow-lg',
-        isCaptain ? 'ring-accent' : 'ring-white/40',
-        isBench && 'grayscale',
-      )} style={{ background: shirt.bg }}>
-        {player.photoUrl ? (
-          <img
-            src={player.photoUrl}
-            alt={player.name}
-            className="absolute inset-0 w-full h-full object-cover object-top"
-            loading="lazy"
-          />
-        ) : (
-          <div className="w-full h-full flex items-center justify-center">
-            <Shirt color={shirt.bg} textColor={shirt.text} number={player.shirtNumber} />
-          </div>
-        )}
-        {/* Shirt number badge — bottom right, semi-circle on the photo */}
-        {player.photoUrl && player.shirtNumber != null && (
-          <span
-            className="absolute -bottom-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 rounded-full border-2 border-black/40 flex items-center justify-center text-[10px] font-black tabular-nums"
-            style={{ background: shirt.bg, color: shirt.text }}
-          >
-            {player.shirtNumber}
-          </span>
-        )}
-        {/* Captain crown — top left over the photo */}
-        {isCaptain && (
-          <span className="absolute -top-1 -left-1 w-5 h-5 rounded-full bg-accent flex items-center justify-center shadow-md ring-2 ring-black/30">
-            <Crown size={11} className="text-accent-on" />
-          </span>
-        )}
-      </div>
-      <span className="text-[10px] text-white font-bold truncate max-w-[68px] text-center leading-tight drop-shadow-md">
-        {lastName}
-      </span>
-    </button>
-  );
-}
-
-function PitchView({
-  selectedPlayerIds,
-  players,
-  onRemove,
-}: {
-  selectedPlayerIds: number[];
-  players: PitchPlayer[];
-  onRemove: (id: number) => void;
-}) {
-  // The pitch view used to grey out "bench" players based on the legacy
-  // starter/captain flags. Now that the 11 + captain + vice are picked
-  // per-round on the Titulares tab, this view is just the universe of
-  // 15 — every player is rendered equally. The starter highlight lives
-  // on the Titulares tab where it actually reflects the user's choice.
-  const selectedSet = new Set(selectedPlayerIds);
-  const selectedPlayers = players.filter((p) => selectedSet.has(p.id));
-
-  const byPosition: Record<Position, PitchPlayer[]> = { GK: [], DEF: [], MID: [], FWD: [] };
-  for (const p of selectedPlayers) {
-    byPosition[p.position].push(p);
-  }
-
-  return (
-    <div
-      className="mx-4 rounded-2xl overflow-hidden relative shadow-xl"
-      style={{ background: 'linear-gradient(175deg, #1a5c35 0%, #2d8653 35%, #3aaa68 50%, #2d8653 65%, #1a5c35 100%)' }}
-    >
-      {/* Pitch markings — more detailed */}
-      <div className="absolute inset-0 pointer-events-none select-none">
-        {/* Center line */}
-        <div className="absolute left-0 right-0 top-1/2 h-px bg-white/12" />
-        {/* Center circle */}
-        <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-16 h-16 rounded-full border border-white/12" />
-        <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-1 h-1 rounded-full bg-white/20" />
-        {/* Top box */}
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-28 h-10 border-b border-x border-white/12 rounded-b-xl" />
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-14 h-4 border-b border-x border-white/12" />
-        {/* Bottom box */}
-        <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-28 h-10 border-t border-x border-white/12 rounded-t-xl" />
-        <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-14 h-4 border-t border-x border-white/12" />
-        {/* Grass stripes */}
-        {Array.from({ length: 6 }).map((_, i) => (
-          <div
-            key={i}
-            className="absolute left-0 right-0"
-            style={{
-              top: `${i * (100 / 6)}%`,
-              height: `${100 / 12}%`,
-              background: 'rgba(0,0,0,0.04)',
-            }}
-          />
-        ))}
-      </div>
-
-      <div className="relative flex flex-col gap-3 py-5 px-2">
-        {PITCH_ROWS.map(({ pos, slots }) => {
-          const posPlayers = byPosition[pos];
-          const filledSlots = Array.from({ length: slots }, (_, i) => posPlayers[i]);
-          return (
-            <div key={pos} className="flex justify-around items-center px-1">
-              {filledSlots.map((player, i) => (
-                <PitchSlot
-                  key={player?.id ?? `empty-${pos}-${i}`}
-                  player={player}
-                  pos={pos}
-                  onRemove={onRemove}
-                  // All squad members render identically here — starter /
-                  // captain belong on the Titulares tab.
-                  isStarter={undefined}
-                  isCaptain={undefined}
-                />
-              ))}
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Bottom hint */}
-      <p className="text-center text-[8px] text-white/25 pb-2 tracking-wide uppercase">
-        Tocá para quitar
-      </p>
-    </div>
-  );
-}
 
 // ─── Lineup pitch — for the Titulares tab ────────────────────────────────────
 
@@ -693,16 +522,15 @@ const POSITION_LABELS: Record<Position, string> = {
   FWD: 'Delantero',
 };
 
-type Tab = 'squad' | 'lineup' | 'standings' | 'guide';
+type Tab = 'team' | 'standings' | 'guide';
 
 export function FantasyPage() {
-  const [tab, setTab] = useState<Tab>('squad');
+  const [tab, setTab] = useState<Tab>('team');
   const [selectedPosition, setSelectedPosition] = useState<PositionFilter>('Todo');
   const [selectedPlayerIds, setSelectedPlayerIds] = useState<number[]>([]);
   const [starterIds, setStarterIds] = useState<number[]>([]);
   const [captainId, setCaptainId] = useState<number | null>(null);
   const [expandedTeam, setExpandedTeam] = useState<number | null>(null);
-  const [viewMode, setViewMode] = useState<'list' | 'pitch'>('list');
 
   const { data: teamsData, isLoading: teamsLoading } = useTeams();
   const { data: playersData, isLoading: playersLoading } = usePlayers();
@@ -834,11 +662,6 @@ export function FantasyPage() {
     setSelectedPlayerIds((prev) => [...prev, player.id]);
   };
 
-  const handleRemoveFromPitch = (id: number) => {
-    setSelectedPlayerIds((prev) => prev.filter((p) => p !== id));
-    setStarterIds((prev) => prev.filter((p) => p !== id));
-    setCaptainId((prev) => (prev === id ? null : prev));
-  };
 
   // NOTE: starterIds / captainId / these handlers belong to the legacy
   // "fixed starters per tournament" model. They still feed the squad save
@@ -912,45 +735,17 @@ export function FantasyPage() {
 
   return (
     <div className="flex flex-col gap-4 pb-36 md:pb-24 animate-fade-in">
-      <div className="px-4 pt-6 pb-2 flex items-start justify-between gap-3">
-        <div>
-          <h1 className="text-2xl-s font-display font-bold text-text">Fantasy</h1>
-          <p className="text-sm-s text-muted mt-1">
-            Armá tu plantel de 15. El 11 titular y capitán se eligen por fecha.
-          </p>
-        </div>
-        {/* View toggle — only relevant on the squad tab */}
-        {tab === 'squad' && (
-          <div className="flex items-center gap-1 mt-1 p-0.5 rounded-lg bg-elevated border border-border flex-shrink-0">
-            <button
-              onClick={() => setViewMode('list')}
-              title="Vista lista"
-              className={cn(
-                'p-1.5 rounded-md transition-colors',
-                viewMode === 'list' ? 'bg-accent text-accent-on' : 'text-muted hover:text-text'
-              )}
-            >
-              <LayoutList size={16} />
-            </button>
-            <button
-              onClick={() => setViewMode('pitch')}
-              title="Vista cancha"
-              className={cn(
-                'p-1.5 rounded-md transition-colors',
-                viewMode === 'pitch' ? 'bg-accent text-accent-on' : 'text-muted hover:text-text'
-              )}
-            >
-              <Layers size={16} />
-            </button>
-          </div>
-        )}
+      <div className="px-4 pt-6 pb-2">
+        <h1 className="text-2xl-s font-display font-bold text-text">Fantasy</h1>
+        <p className="text-sm-s text-muted mt-1">
+          Armá tu plantel de 15. Elegí tu 11 y capitán por fecha.
+        </p>
       </div>
 
       {/* Tabs */}
       <div className="flex gap-1 px-4">
         {([
-          { id: 'squad', label: 'Plantel' },
-          { id: 'lineup', label: 'Titulares' },
+          { id: 'team', label: 'Mi Equipo' },
           { id: 'standings', label: 'Tabla' },
           { id: 'guide', label: 'Guía' },
         ] as { id: Tab; label: string }[]).map((t) => (
@@ -979,292 +774,53 @@ export function FantasyPage() {
       {tab === 'guide' && <FantasyGuide />}
       {tab === 'standings' && <FantasyStandings />}
 
-      {tab === 'lineup' && (
-        <PerRoundLineupTab squadPlayers={squadPlayers} />
-      )}
-
-      {tab === 'squad' && (
+      {tab === 'team' && (
         <>
-          {/* League info — global team counts for all leagues */}
-          {myLeagues.length === 0 ? (
-            <div className="mx-4 flex items-center gap-3 p-4 rounded-xl bg-card border border-border">
-              <Trophy size={18} className="text-muted flex-shrink-0" />
-              <p className="text-sm-s text-muted">
-                Tu equipo es global — no hace falta estar en una liga para guardarlo.
-              </p>
-            </div>
-          ) : (
-            // Quieter single-line note instead of the previous chip-list banner
-            // (which collided with the team list and stole vertical space).
-            <p className="mx-4 text-xs-s text-muted/70 flex items-center gap-1.5">
-              <Trophy size={11} className="text-accent flex-shrink-0" />
-              Tu equipo cuenta en {myLeagues.length === 1 ? 'tu liga' : `tus ${myLeagues.length} ligas`} automáticamente.
-            </p>
-          )}
-
-          {/* Position filter — list mode only */}
-          {viewMode === 'list' && <div className="flex gap-2 px-4 overflow-x-auto pb-1 no-scrollbar">
-            {POSITIONS.map((pos) => (
-              <button
-                key={pos}
-                onClick={() => setSelectedPosition(pos)}
-                className={cn(
-                  'px-3 py-1.5 rounded-full text-xs-s font-semibold whitespace-nowrap transition-colors',
-                  selectedPosition === pos
-                    ? 'bg-accent text-accent-on'
-                    : 'bg-card border border-border text-muted'
-                )}
-              >
-                {pos}
-              </button>
-            ))}
-          </div>}
-
-          {/* Squad counter */}
-          <div className={cn('mx-4 p-3 rounded-xl bg-card border border-border flex justify-between text-xs-s', viewMode === 'pitch' && 'hidden')}>
-            {(Object.entries(POSITION_LIMITS) as [Position, number][]).map(([pos, max]) => (
-              <div key={pos} className="flex flex-col items-center gap-0.5">
-                <span className="text-muted">{pos}</span>
-                <span
-                  className={cn(
-                    'font-bold',
-                    positionCounts[pos] >= max ? 'text-accent' : 'text-text'
-                  )}
-                >
-                  {positionCounts[pos]}/{max}
-                </span>
-              </div>
-            ))}
-            <div className="flex flex-col items-center gap-0.5">
-              <span className="text-muted">Total</span>
-              <span
-                className={cn(
-                  'font-bold',
-                  selectedPlayerIds.length >= 11 ? 'text-accent' : 'text-text'
-                )}
-              >
-                {selectedPlayerIds.length}/{MAX_SQUAD}
-              </span>
-            </div>
-          </div>
-
-          {/* Pitch view */}
-          {viewMode === 'pitch' && (
-            <PitchView
+          {/* If squad not complete yet, show picker first so user knows what to do */}
+          {squadPlayers.length < 15 ? (
+            <SquadPicker
+              teams={teams}
+              playersByTeam={playersByTeam}
               selectedPlayerIds={selectedPlayerIds}
-              players={players as PitchPlayer[]}
-              onRemove={handleRemoveFromPitch}
+              positionCounts={positionCounts}
+              fantasyPointsById={fantasyPointsById}
+              expandedTeam={expandedTeam}
+              selectedPosition={selectedPosition}
+              squadLocked={squadLocked}
+              squadSaving={updateSquad.isPending}
+              myLeagues={myLeagues}
+              onTogglePlayer={handleTogglePlayer}
+              onSave={handleSave}
+              onSetExpandedTeam={setExpandedTeam}
+              onSetPosition={setSelectedPosition}
             />
+          ) : (
+            <>
+              {/* Lineup picker (11 starters + captain per round) */}
+              <PerRoundLineupTab squadPlayers={squadPlayers} />
+              {/* Squad management below — collapsed by default once squad is complete */}
+              <SquadPicker
+                teams={teams}
+                playersByTeam={playersByTeam}
+                selectedPlayerIds={selectedPlayerIds}
+                positionCounts={positionCounts}
+                fantasyPointsById={fantasyPointsById}
+                expandedTeam={expandedTeam}
+                selectedPosition={selectedPosition}
+                squadLocked={squadLocked}
+                squadSaving={updateSquad.isPending}
+                myLeagues={myLeagues}
+                onTogglePlayer={handleTogglePlayer}
+                onSave={handleSave}
+                onSetExpandedTeam={setExpandedTeam}
+                onSetPosition={setSelectedPosition}
+                collapsible
+              />
+            </>
           )}
-
-          {/* Teams accordion */}
-          {viewMode === 'list' && <div className="flex flex-col gap-2 px-4">
-            {teams.length === 0 ? (
-              <div className="p-6 rounded-xl bg-card border border-border text-center">
-                <p className="text-sm-s text-muted">
-                  Los equipos estarán disponibles próximamente
-                </p>
-              </div>
-            ) : (
-              teams.map((team) => {
-                const teamPlayers = (playersByTeam.get(team.id) ?? []).filter(
-                  (p) => selectedPosition === 'Todo' || p.position === selectedPosition
-                );
-
-                // If filtering by position and team has no matching players, hide the team
-                if (selectedPosition !== 'Todo' && teamPlayers.length === 0) return null;
-
-                const selectedInTeam = teamPlayers.filter((p) =>
-                  selectedPlayerIds.includes(p.id)
-                ).length;
-
-                return (
-                  <div
-                    key={team.id}
-                    className="rounded-xl bg-card border border-border overflow-hidden"
-                  >
-                    <button
-                      onClick={() =>
-                        setExpandedTeam(expandedTeam === team.id ? null : team.id)
-                      }
-                      className="w-full flex items-center gap-3 p-4"
-                    >
-                      <TeamFlag code={team.code} emoji={team.flag} size={32} />
-                      <span className="flex-1 text-left text-sm-s font-semibold text-text">
-                        {team.name}
-                      </span>
-                      {selectedInTeam > 0 && (
-                        <span className="text-xs-s font-bold text-accent bg-accent/10 px-2 py-0.5 rounded-full">
-                          {selectedInTeam}
-                        </span>
-                      )}
-                      <span className="text-xs-s text-muted">{team.code}</span>
-                      <ChevronDown
-                        size={16}
-                        className={cn(
-                          'text-muted transition-transform',
-                          expandedTeam === team.id && 'rotate-180'
-                        )}
-                      />
-                    </button>
-
-                    {expandedTeam === team.id && (
-                      <motion.div
-                        initial={{ height: 0 }}
-                        animate={{ height: 'auto' }}
-                        exit={{ height: 0 }}
-                        className="border-t border-border"
-                      >
-                        {teamPlayers.length === 0 ? (
-                          <p className="px-4 py-3 text-xs-s text-muted italic">
-                            No hay jugadores disponibles para este equipo.
-                          </p>
-                        ) : (
-                          <ul>
-                            {teamPlayers.map((player, idx) => {
-                              const isSelected = selectedPlayerIds.includes(player.id);
-                              const isLast = idx === teamPlayers.length - 1;
-                              const pts = fantasyPointsById.get(player.id);
-                              return (
-                                <li key={player.id} className={cn(!isLast && 'border-b border-border')}>
-                                  <button
-                                    onClick={() => handleTogglePlayer(player)}
-                                    className={cn(
-                                      'w-full flex items-center gap-3 px-4 py-3 text-left transition-colors',
-                                      isSelected ? 'bg-accent/10' : 'hover:bg-muted/5'
-                                    )}
-                                  >
-                                    {/* Checkmark */}
-                                    <span
-                                      className={cn(
-                                        'flex-shrink-0 w-5 h-5 rounded-full border flex items-center justify-center transition-colors',
-                                        isSelected
-                                          ? 'bg-accent border-accent'
-                                          : 'border-border'
-                                      )}
-                                    >
-                                      {isSelected && (
-                                        <Check size={12} className="text-accent-on" strokeWidth={3} />
-                                      )}
-                                    </span>
-
-                                    {/* Player photo */}
-                                    <PlayerAvatar
-                                      photoUrl={player.photoUrl}
-                                      name={player.name}
-                                      position={player.position}
-                                    />
-
-                                    {/* Player name */}
-                                    <span className="flex-1 text-sm-s font-medium text-text">
-                                      {player.name}
-                                    </span>
-
-                                    {/* Fantasy points (if selected and has points) */}
-                                    {isSelected && pts != null && (
-                                      <span className="text-xs-s font-bold text-accent">
-                                        {pts} pts
-                                      </span>
-                                    )}
-
-                                    {/* Shirt number */}
-                                    {player.shirtNumber != null && (
-                                      <span className="text-xs-s text-muted w-5 text-right">
-                                        #{player.shirtNumber}
-                                      </span>
-                                    )}
-
-                                    {/* Position badge */}
-                                    <span
-                                      className={cn(
-                                        'text-xs-s font-bold px-2 py-0.5 rounded-full',
-                                        POSITION_COLORS[player.position]
-                                      )}
-                                    >
-                                      {player.position}
-                                    </span>
-                                  </button>
-                                </li>
-                              );
-                            })}
-                          </ul>
-                        )}
-                      </motion.div>
-                    )}
-                  </div>
-                );
-              })
-            )}
-          </div>}
         </>
       )}
 
-      {/* Save button — only on squad & lineup tabs */}
-      {/* Floating save for the squad. Hidden on the Titulares tab (which
-          has its own per-round save) and only renders when the local pick
-          differs from what's saved on the server. Without the dirty check
-          the bar sat there permanently asking to save a no-op, even after
-          a fresh load. */}
-      {tab === 'squad' && (() => {
-        const serverIds = fantasyData?.squad?.map((p) => p.id) ?? [];
-        const serverSet = new Set(serverIds);
-        const localSet = new Set(selectedPlayerIds);
-        const isDirty =
-          serverIds.length !== selectedPlayerIds.length ||
-          serverIds.some((id) => !localSet.has(id)) ||
-          selectedPlayerIds.some((id) => !serverSet.has(id));
-        // Si el plantel está locked Y el usuario intentó editar la
-        // selección, mostramos un banner aclarando que el plantel ya
-        // no se cambia y redirigiendo a Titulares — que es donde sí
-        // se cambia el 11 por fecha. Sin esto el usuario veía un botón
-        // "Guardar" que devolvía 409 sin explicación clara.
-        if (squadLocked) {
-          if (!isDirty) return null;
-          return (
-            <motion.div
-              initial={{ y: 80 }}
-              animate={{ y: 0 }}
-              className="fixed bottom-20 md:bottom-6 left-0 md:left-56 xl:left-64 right-0 flex justify-center px-4 pointer-events-none z-30"
-            >
-              <div className="pointer-events-auto w-full max-w-xl p-4 rounded-xl bg-amber-500/15 border border-amber-500/40 backdrop-blur-md shadow-lg flex items-start gap-3">
-                <span className="text-xl flex-shrink-0" aria-hidden>🔒</span>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm-s font-bold text-amber-700 dark:text-amber-300">El plantel está cerrado</p>
-                  <p className="text-xs-s text-amber-700/80 dark:text-amber-200/80 mt-0.5 leading-snug">
-                    El plazo de Fecha 1 ya pasó. Tu plantel queda fijo para todo el Mundial.
-                    Lo que SÍ podés cambiar es tu <span className="font-semibold">11 inicial fecha por fecha</span>.
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => setTab('lineup')}
-                    className="mt-2 px-3 py-1.5 rounded-lg bg-amber-500 text-amber-950 text-xs-s font-bold hover:bg-amber-400 transition-colors"
-                  >
-                    Ir a Titulares →
-                  </button>
-                </div>
-              </div>
-            </motion.div>
-          );
-        }
-        if (!isDirty || selectedPlayerIds.length === 0) return null;
-        return (
-          <motion.div
-            initial={{ y: 80 }}
-            animate={{ y: 0 }}
-            className="fixed bottom-20 md:bottom-6 left-0 md:left-56 xl:left-64 right-0 flex justify-center px-4 pointer-events-none z-30"
-          >
-            <button
-              onClick={handleSave}
-              disabled={updateSquad.isPending}
-              className="pointer-events-auto w-full max-w-xl py-4 rounded-xl bg-accent text-accent-on font-bold text-base-s shadow-lg disabled:opacity-60 hover:opacity-90 transition-opacity"
-            >
-              {updateSquad.isPending
-                ? 'Guardando...'
-                : `Guardar plantel (${selectedPlayerIds.length}/15)`}
-            </button>
-          </motion.div>
-        );
-      })()}
     </div>
   );
 }
@@ -1475,6 +1031,215 @@ function FantasyGuide() {
           ))}
         </div>
       </GuideSection>
+    </div>
+  );
+}
+
+// ─── Squad picker — choose the 15-player squad ──────────────────────────────
+
+function SquadPicker({
+  teams,
+  playersByTeam,
+  selectedPlayerIds,
+  positionCounts,
+  fantasyPointsById,
+  expandedTeam,
+  selectedPosition,
+  squadLocked,
+  squadSaving,
+  myLeagues,
+  onTogglePlayer,
+  onSave,
+  onSetExpandedTeam,
+  onSetPosition,
+  collapsible = false,
+}: {
+  teams: { id: number; name: string; code: string; flag: string | null; confederation: string | null }[];
+  playersByTeam: Map<number, Player[]>;
+  selectedPlayerIds: number[];
+  positionCounts: Record<Position, number>;
+  fantasyPointsById: Map<number, number>;
+  expandedTeam: number | null;
+  selectedPosition: PositionFilter;
+  squadLocked: boolean;
+  squadSaving: boolean;
+  myLeagues: { id: number }[];
+  onTogglePlayer: (player: Player) => void;
+  onSave: () => void;
+  onSetExpandedTeam: (id: number | null) => void;
+  onSetPosition: (pos: PositionFilter) => void;
+  collapsible?: boolean;
+}) {
+  const [open, setOpen] = useState(!collapsible);
+  const total = selectedPlayerIds.length;
+  const isDirty = total > 0; // parent tracks server vs local; here we just show save when >0 and not locked
+
+  return (
+    <div className="flex flex-col gap-3">
+      {/* Section header — clickable when collapsible */}
+      <button
+        type="button"
+        onClick={() => collapsible && setOpen((o) => !o)}
+        className={cn(
+          'mx-4 flex items-center gap-2 text-xs-s font-bold text-muted uppercase tracking-wider',
+          collapsible && 'cursor-pointer hover:text-text transition-colors',
+        )}
+      >
+        <span className="flex-1 text-left">
+          Plantel ({total}/{MAX_SQUAD})
+        </span>
+        {/* Position counts inline */}
+        {(Object.entries(POSITION_LIMITS) as [Position, number][]).map(([pos, max]) => (
+          <span
+            key={pos}
+            className={cn(
+              'px-1.5 py-0.5 rounded text-[10px] font-bold',
+              positionCounts[pos] >= max ? 'bg-accent/20 text-accent' : 'bg-elevated text-muted',
+            )}
+          >
+            {pos} {positionCounts[pos]}/{max}
+          </span>
+        ))}
+        {collapsible && (
+          <ChevronDown size={14} className={cn('transition-transform flex-shrink-0', open && 'rotate-180')} />
+        )}
+      </button>
+
+      {open && (
+        <>
+          {/* Locked banner */}
+          {squadLocked && (
+            <div className="mx-4 p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-start gap-2.5">
+              <Lock size={14} className="text-amber-500 flex-shrink-0 mt-0.5" />
+              <p className="text-xs-s text-amber-700 dark:text-amber-300 leading-snug">
+                El plantel está cerrado desde el inicio del torneo. Podés cambiar tu 11 inicial y capitán por fecha en la cancha de arriba.
+              </p>
+            </div>
+          )}
+
+          {/* League note */}
+          {myLeagues.length > 0 && (
+            <p className="mx-4 text-xs-s text-muted/70 flex items-center gap-1.5">
+              <Trophy size={11} className="text-accent flex-shrink-0" />
+              Tu equipo cuenta en {myLeagues.length === 1 ? 'tu liga' : `tus ${myLeagues.length} ligas`} automáticamente.
+            </p>
+          )}
+
+          {/* Position filter */}
+          <div className="flex gap-2 px-4 overflow-x-auto pb-1 no-scrollbar">
+            {POSITIONS.map((pos) => (
+              <button
+                key={pos}
+                onClick={() => onSetPosition(pos)}
+                className={cn(
+                  'px-3 py-1.5 rounded-full text-xs-s font-semibold whitespace-nowrap transition-colors',
+                  selectedPosition === pos ? 'bg-accent text-accent-on' : 'bg-card border border-border text-muted',
+                )}
+              >
+                {pos}
+              </button>
+            ))}
+          </div>
+
+          {/* Teams accordion */}
+          <div className="flex flex-col gap-2 px-4">
+            {teams.map((team) => {
+              const teamPlayers = (playersByTeam.get(team.id) ?? []).filter(
+                (p) => selectedPosition === 'Todo' || p.position === selectedPosition,
+              );
+              if (selectedPosition !== 'Todo' && teamPlayers.length === 0) return null;
+
+              const selectedInTeam = teamPlayers.filter((p) => selectedPlayerIds.includes(p.id)).length;
+
+              return (
+                <div key={team.id} className="rounded-xl bg-card border border-border overflow-hidden">
+                  <button
+                    onClick={() => onSetExpandedTeam(expandedTeam === team.id ? null : team.id)}
+                    className="w-full flex items-center gap-3 p-4"
+                  >
+                    <TeamFlag code={team.code} emoji={team.flag ?? undefined} size={32} />
+                    <span className="flex-1 text-left text-sm-s font-semibold text-text">{team.name}</span>
+                    {selectedInTeam > 0 && (
+                      <span className="text-xs-s font-bold text-accent bg-accent/10 px-2 py-0.5 rounded-full">
+                        {selectedInTeam}
+                      </span>
+                    )}
+                    <span className="text-xs-s text-muted">{team.code}</span>
+                    <ChevronDown
+                      size={16}
+                      className={cn('text-muted transition-transform', expandedTeam === team.id && 'rotate-180')}
+                    />
+                  </button>
+
+                  {expandedTeam === team.id && (
+                    <motion.div
+                      initial={{ height: 0 }}
+                      animate={{ height: 'auto' }}
+                      exit={{ height: 0 }}
+                      className="border-t border-border"
+                    >
+                      <ul>
+                        {teamPlayers.map((player, idx) => {
+                          const isSelected = selectedPlayerIds.includes(player.id);
+                          const pts = fantasyPointsById.get(player.id);
+                          return (
+                            <li key={player.id} className={cn(idx < teamPlayers.length - 1 && 'border-b border-border')}>
+                              <button
+                                disabled={squadLocked && !isSelected}
+                                onClick={() => onTogglePlayer(player)}
+                                className={cn(
+                                  'w-full flex items-center gap-3 px-4 py-3 text-left transition-colors',
+                                  isSelected ? 'bg-accent/10' : 'hover:bg-muted/5',
+                                  squadLocked && !isSelected && 'opacity-40 cursor-not-allowed',
+                                )}
+                              >
+                                <span className={cn(
+                                  'flex-shrink-0 w-5 h-5 rounded-full border flex items-center justify-center transition-colors',
+                                  isSelected ? 'bg-accent border-accent' : 'border-border',
+                                )}>
+                                  {isSelected && <Check size={12} className="text-accent-on" strokeWidth={3} />}
+                                </span>
+                                <PlayerAvatar photoUrl={player.photoUrl} name={player.name} position={player.position} />
+                                <span className="flex-1 text-sm-s font-medium text-text">{player.name}</span>
+                                {isSelected && pts != null && (
+                                  <span className="text-xs-s font-bold text-accent">{pts} pts</span>
+                                )}
+                                {player.shirtNumber != null && (
+                                  <span className="text-xs-s text-muted w-5 text-right">#{player.shirtNumber}</span>
+                                )}
+                                <span className={cn('text-xs-s font-bold px-2 py-0.5 rounded-full', POSITION_COLORS[player.position])}>
+                                  {player.position}
+                                </span>
+                              </button>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    </motion.div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Save button — only when dirty and not locked */}
+          {!squadLocked && isDirty && (
+            <div className="px-4">
+              <button
+                onClick={onSave}
+                disabled={squadSaving || total < MAX_SQUAD}
+                className="w-full py-3.5 rounded-xl bg-accent text-accent-on font-bold text-sm-s shadow-lg disabled:opacity-50 transition-opacity hover:opacity-90"
+              >
+                {squadSaving
+                  ? 'Guardando...'
+                  : total < MAX_SQUAD
+                    ? `Elegí ${MAX_SQUAD - total} jugador${MAX_SQUAD - total === 1 ? '' : 'es'} más`
+                    : 'Guardar plantel'}
+              </button>
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
 }
