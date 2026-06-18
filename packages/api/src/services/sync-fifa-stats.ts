@@ -628,6 +628,13 @@ async function doSync(matchId: number): Promise<SyncStatsResult> {
     else if (YELLOW_TYPES.has(ev.Type)) { bucket.yellow += 1; eventType = 'yellow'; }
     else if (RED_TYPES.has(ev.Type)) { bucket.red = true; eventType = 'red'; }
 
+    // FIFA usa números impares para fases de juego (3=1T, 5=2T, 7=ET1,
+    // 9=ET2, 11=penales) y números pares para los "intermedios"
+    // (4=entretiempo, 6=antes de alargue, 8=entre ET1/ET2, 10=antes de
+    // penales). Mapeamos los intermedios al inicio de la fase siguiente
+    // con un minuto sintético, así los subs/eventos del HT no quedan con
+    // `period=null minute=null` y la UI los puede ordenar correctamente
+    // en lugar de mostrarlos arriba de todo con un `?`.
     const fifaPeriod = ev.Period ?? null;
     const normalizedPeriod =
       fifaPeriod === 3 ? 1
@@ -635,8 +642,22 @@ async function doSync(matchId: number): Promise<SyncStatsResult> {
       : fifaPeriod === 7 ? 3
       : fifaPeriod === 9 ? 4
       : fifaPeriod === 11 ? 5
+      : fifaPeriod === 4 ? 2  // entretiempo → inicio del 2T
+      : fifaPeriod === 6 ? 3  // antes de ET → inicio ET1
+      : fifaPeriod === 8 ? 4  // entre ET1/ET2 → inicio ET2
+      : fifaPeriod === 10 ? 5 // antes de penales → fase penales
       : null;
-    const minute = parseMinute(ev.MatchMinute);
+    const parsedMinute = parseMinute(ev.MatchMinute);
+    // Si FIFA no publicó MatchMinute (típico de subs/eventos durante un
+    // intermedio), inferimos un minuto sintético consistente con la fase
+    // mapeada arriba para que el sort cronológico lo coloque bien.
+    const syntheticMinute =
+      parsedMinute == null && fifaPeriod === 4 ? 45  // HT subs caen al inicio del 2T
+      : parsedMinute == null && fifaPeriod === 6 ? 90 // pre-ET cae al inicio del ET1
+      : parsedMinute == null && fifaPeriod === 8 ? 105 // pre-ET2 cae al inicio del ET2
+      : parsedMinute == null && fifaPeriod === 10 ? 120 // pre-penales cae al inicio de los penales
+      : null;
+    const minute = parsedMinute ?? syntheticMinute;
 
     if (eventType) {
       timeline.push({

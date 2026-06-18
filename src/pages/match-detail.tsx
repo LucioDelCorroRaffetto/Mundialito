@@ -1092,10 +1092,6 @@ function CoolingBreakDrops() {
           transition={{ duration: d.dur, delay: d.delay, repeat: Infinity, ease: 'easeIn', times: [0, 0.1, 0.85, 1] }}
         />
       ))}
-      {/* Pequeño pill arriba al centro avisando del estado */}
-      <div className="absolute top-1.5 left-1/2 -translate-x-1/2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-sky-500/20 border border-sky-400/40 backdrop-blur-sm text-[9px] font-bold text-sky-700 dark:text-sky-200 uppercase tracking-wider">
-        💧 Descanso de hidratación
-      </div>
     </div>
   );
 }
@@ -1134,7 +1130,12 @@ const EVENT_LABEL: Record<MatchTimelineEvent['type'], EventDisplay> = {
   },
   own_goal: {
     label: 'Gol en contra',
-    render: ({ size = 14 }) => <span style={{ fontSize: size }} aria-label="Gol en contra">⚽</span>,
+    render: ({ size = 14 }) => (
+      <span className="relative inline-flex items-center justify-center" aria-label="Gol en contra">
+        <span style={{ fontSize: size }}>⚽</span>
+        <span className="absolute -bottom-0.5 -right-0.5 text-[7px] leading-none font-black text-red-500">✕</span>
+      </span>
+    ),
   },
   assist:   {
     label: 'Asistencia',
