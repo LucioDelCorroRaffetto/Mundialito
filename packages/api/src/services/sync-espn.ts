@@ -12,7 +12,7 @@
 
 import { eq, sql } from 'drizzle-orm';
 import { db } from '../db/index.js';
-import { matches, predictions } from '../db/schema/index.js';
+import { matches, predictions, teams } from '../db/schema/index.js';
 import { calculatePoints } from '../lib/scoring.js';
 import { recomputeAllFantasyPoints } from './fantasy-scoring-service.js';
 import { broadcastMatchUpdate } from '../ws/broadcast.js';
@@ -94,12 +94,89 @@ interface OurMatch {
   awayScore: number | null;
   status: string;
   liveStatus: string | null;
+  homeTeamCode: string;
+  awayTeamCode: string;
 }
 
-function findMatchByKickoff(ourMatches: OurMatch[], espnDate: string): OurMatch | undefined {
-  const espnTime = new Date(espnDate).getTime();
+/**
+ * ESPN's 3-letter abbreviation → our `teams.code`. Almost all are identical
+ * (SUI, BIH, MEX, KOR, …); the handful of exceptions live here. ESPN uses
+ * RSA for South Africa where we use ZAF (the same divergence the FIFA
+ * backfill handles). Add entries if a match ever logs an unmatched code.
+ */
+const ESPN_CODE_TO_OURS: Record<string, string> = {
+  RSA: 'ZAF', // South Africa
+};
+
+function normalizeEspnCode(code: string | undefined | null): string {
+  if (!code) return '';
+  const upper = code.toUpperCase();
+  return ESPN_CODE_TO_OURS[upper] ?? upper;
+}
+
+/**
+ * Match an ESPN event to our DB row by kickoff window AND team identity.
+ *
+ * The kickoff-only matcher used to collapse two concurrent same-slot fixtures
+ * (FIFA schedules the final group round simultaneously) into the same row.
+ * Matching the team codes in either orientation disambiguates them; ESPN may
+ * list home/away in the opposite order to us, so we accept both.
+ */
+function findMatch(ourMatches: OurMatch[], event: EspnEvent): OurMatch | undefined {
+  const espnTime = new Date(event.date).getTime();
   const TEN_MIN = 10 * 60 * 1000;
-  return ourMatches.find((m) => Math.abs(new Date(m.kickoffUtc).getTime() - espnTime) <= TEN_MIN);
+  const comp = event.competitions[0];
+  const codeA = normalizeEspnCode(comp?.competitors.find((c) => c.homeAway === 'home')?.team.abbreviation);
+  const codeB = normalizeEspnCode(comp?.competitors.find((c) => c.homeAway === 'away')?.team.abbreviation);
+
+  // Strict: kickoff window AND both codes match (either orientation).
+  const strict = ourMatches.find((m) => {
+    if (Math.abs(new Date(m.kickoffUtc).getTime() - espnTime) > TEN_MIN) return false;
+    if (codeA && codeB) {
+      return (
+        (m.homeTeamCode === codeA && m.awayTeamCode === codeB) ||
+        (m.homeTeamCode === codeB && m.awayTeamCode === codeA)
+      );
+    }
+    return false;
+  });
+  if (strict) return strict;
+
+  // Loose: kickoff only, but only when a single DB match shares the slot.
+  const sameSlot = ourMatches.filter(
+    (m) => Math.abs(new Date(m.kickoffUtc).getTime() - espnTime) <= TEN_MIN,
+  );
+  return sameSlot.length === 1 ? sameSlot[0] : undefined;
+}
+
+/**
+ * Resolve which ESPN competitor is OUR home team and which is OUR away team,
+ * by matching team codes — NOT by ESPN's own homeAway flag. ESPN and our DB
+ * sometimes disagree on which side is "home"; assigning scores by position
+ * would then attach each team's goals to the wrong side. When the codes can't
+ * be resolved (missing abbreviations) we fall back to ESPN's orientation.
+ */
+function resolveCompetitors(
+  ourMatch: OurMatch,
+  competitors: EspnCompetitor[],
+): { home: EspnCompetitor | undefined; away: EspnCompetitor | undefined } {
+  const espnHome = competitors.find((c) => c.homeAway === 'home');
+  const espnAway = competitors.find((c) => c.homeAway === 'away');
+  const codeHome = normalizeEspnCode(espnHome?.team.abbreviation);
+  const codeAway = normalizeEspnCode(espnAway?.team.abbreviation);
+
+  if (codeHome && codeAway && ourMatch.homeTeamCode && ourMatch.awayTeamCode) {
+    if (codeHome === ourMatch.homeTeamCode && codeAway === ourMatch.awayTeamCode) {
+      return { home: espnHome, away: espnAway };
+    }
+    if (codeHome === ourMatch.awayTeamCode && codeAway === ourMatch.homeTeamCode) {
+      // ESPN lists the teams in the opposite order to us → swap so scores
+      // land on the correct side.
+      return { home: espnAway, away: espnHome };
+    }
+  }
+  // Unresolvable by identity — keep ESPN's orientation as a best effort.
+  return { home: espnHome, away: espnAway };
 }
 
 // ─── Main export ─────────────────────────────────────────────────────────────
@@ -149,14 +226,36 @@ export async function syncScoresFromEspn(date: string): Promise<SyncScoresResult
     return { synced: 0, errors: [], matchesChecked: 0 };
   }
 
-  // Load our DB matches once
-  const ourMatches = await db
-    .select({ id: matches.id, kickoffUtc: matches.kickoffUtc, homeScore: matches.homeScore, awayScore: matches.awayScore, status: matches.status, liveStatus: matches.liveStatus })
+  // Load our DB matches once, joined with team codes so the matcher can
+  // disambiguate concurrent kickoffs and assign scores by team identity.
+  const ourMatchesRaw = await db
+    .select({
+      id: matches.id,
+      kickoffUtc: matches.kickoffUtc,
+      homeScore: matches.homeScore,
+      awayScore: matches.awayScore,
+      status: matches.status,
+      liveStatus: matches.liveStatus,
+      homeTeamId: matches.homeTeamId,
+      awayTeamId: matches.awayTeamId,
+    })
     .from(matches);
+  const allTeams = await db.select({ id: teams.id, code: teams.code }).from(teams);
+  const codeById = new Map(allTeams.map((t) => [t.id, t.code.toUpperCase()]));
+  const ourMatches: OurMatch[] = ourMatchesRaw.map((m) => ({
+    id: m.id,
+    kickoffUtc: m.kickoffUtc,
+    homeScore: m.homeScore,
+    awayScore: m.awayScore,
+    status: m.status,
+    liveStatus: m.liveStatus,
+    homeTeamCode: m.homeTeamId != null ? (codeById.get(m.homeTeamId) ?? '') : '',
+    awayTeamCode: m.awayTeamId != null ? (codeById.get(m.awayTeamId) ?? '') : '',
+  }));
 
   for (const event of events) {
     try {
-      const ourMatch = findMatchByKickoff(ourMatches, event.date);
+      const ourMatch = findMatch(ourMatches, event);
       if (!ourMatch) continue;
 
       const { state, completed, name: typeName } = event.status.type;
@@ -167,8 +266,10 @@ export async function syncScoresFromEspn(date: string): Promise<SyncScoresResult
       const competition = event.competitions[0];
       if (!competition) continue;
 
-      const homeComp = competition.competitors.find((c) => c.homeAway === 'home');
-      const awayComp = competition.competitors.find((c) => c.homeAway === 'away');
+      // Resolve competitors by TEAM IDENTITY, not by ESPN's homeAway flag —
+      // homeComp is always OUR home team's competitor (scores + winner flag
+      // then land on the correct side even when ESPN lists them flipped).
+      const { home: homeComp, away: awayComp } = resolveCompetitors(ourMatch, competition.competitors);
 
       // During pre-match ESPN may still send "0" — only store scores when live or finished.
       // Also guard against ESPN returning "" or "—" or any non-numeric (it has on past
