@@ -164,6 +164,19 @@ export interface SyncStatsResult {
   unmatched: string[];
   upserted: number;
   skipped?: string;
+  /** True si la timeline trae el evento "final whistle" (Type 26): el
+   *  partido terminó según FIFA, normalmente antes que football-data/ESPN. */
+  finalWhistle?: boolean;
+}
+
+// FIFA Type 26 = "The final whistle sounds." Señal de fin de partido.
+const FINAL_WHISTLE_TYPE = 26;
+function hasFinalWhistle(events: { Type: number; EventDescription?: FifaLocaleString[] }[]): boolean {
+  return events.some(
+    (ev) =>
+      ev.Type === FINAL_WHISTLE_TYPE ||
+      (ev.EventDescription?.[0]?.Description ?? '').toLowerCase().includes('final whistle'),
+  );
 }
 
 // Event-type sets. FIFA Type 34 = OwnGoal (acreditado al jugador que marca
@@ -892,7 +905,7 @@ async function doSync(matchId: number): Promise<SyncStatsResult> {
     }
   }
 
-  return { matched: stats.size, unmatched, upserted };
+  return { matched: stats.size, unmatched, upserted, finalWhistle: hasFinalWhistle(events) };
 }
 
 const NOTIFY_COOLDOWN_MS = 60 * 60 * 1000;

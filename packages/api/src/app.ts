@@ -8,6 +8,7 @@ import { apiRouter } from './routes/index.js';
 import { syncScores } from './services/sync-scores.js';
 import { syncScoresFromEspn } from './services/sync-espn.js';
 import { syncFifaStatsForMatch } from './services/sync-fifa-stats.js';
+import { finalizeMatchFromFinalWhistle } from './services/finalize-match.js';
 import { reconcileMatchStatuses } from './services/reconcile-matches.js';
 import { syncFixtureTimes } from './services/fixture-time-sync.js';
 import { reconcileSquadsFromWikipedia } from './services/squad-reconcile.js';
@@ -105,7 +106,7 @@ app.post('/sync', async (req, res) => {
   // 30s ceiling on a slot with 3-4 simultaneous games. inFlight inside
   // syncFifaStatsForMatch prevents per-match re-entry; cross-match calls
   // are independent so concurrent is safe.
-  const fifaResults: Array<{ matchId: number; upserted: number; skipped?: string; error?: string }> =
+  const fifaResults: Array<{ matchId: number; upserted: number; skipped?: string; error?: string; finalized?: boolean }> =
     await Promise.all(
       liveMatches.map(async (m) => {
         try {
@@ -115,7 +116,17 @@ app.post('/sync', async (req, res) => {
           } else {
             console.log(`[sync-live-fifa] match ${m.id}: ${r.upserted} events synced`);
           }
-          return { matchId: m.id, upserted: r.upserted, skipped: r.skipped };
+          // Si FIFA ya marcó el pitazo final, cerramos el partido sin esperar
+          // a que football-data/ESPN lo marquen FINISHED (~10 min de delay).
+          let finalized = false;
+          if (r.finalWhistle) {
+            const fin = await finalizeMatchFromFinalWhistle(m.id);
+            finalized = fin.finalized;
+            if (fin.finalized) {
+              console.log(`[sync-live-fifa] match ${m.id}: cerrado por final whistle (${fin.scored} pronósticos)`);
+            }
+          }
+          return { matchId: m.id, upserted: r.upserted, skipped: r.skipped, finalized };
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
           console.error(`[sync-live-fifa] match ${m.id}: ${msg}`);
@@ -124,6 +135,7 @@ app.post('/sync', async (req, res) => {
       }),
     );
   const fifaEventsSynced = fifaResults.reduce((acc, r) => acc + r.upserted, 0);
+  const anyFinalizedByFifa = fifaResults.some((r) => r.finalized);
 
   // Safety net: catches matches the feeds left stuck (scheduled past
   // kickoff, live hours after FT). Runs last so it sees the latest
@@ -141,6 +153,7 @@ app.post('/sync', async (req, res) => {
   const shouldInvalidate =
     result.synced > 0 ||
     fifaEventsSynced > 0 ||
+    anyFinalizedByFifa ||
     reconcile.startedAuto > 0 ||
     reconcile.finishedAuto > 0 ||
     fixtureTimes.updated > 0;

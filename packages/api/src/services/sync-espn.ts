@@ -300,12 +300,20 @@ export async function syncScoresFromEspn(date: string): Promise<SyncScoresResult
         }
       }
 
-      const statusChanged = ourMatch.status !== newStatus;
+      // Si ya marcamos el partido finished (ej. por el final whistle de FIFA,
+      // que se adelanta a ESPN ~10 min), un tick de ESPN que todavía reporta
+      // 'live' NO debe des-finalizarlo. Mantenemos finished/full_time; las
+      // correcciones de score de abajo siguen aplicando.
+      const downgradeBlocked = ourMatch.status === 'finished' && newStatus !== 'finished';
+      const effStatus = downgradeBlocked ? 'finished' : newStatus;
+      const effLiveStatus = downgradeBlocked ? (ourMatch.liveStatus ?? 'full_time') : newLiveStatus;
+
+      const statusChanged = ourMatch.status !== effStatus;
       const scoreChanged  = ourMatch.homeScore !== newHomeScore || ourMatch.awayScore !== newAwayScore;
-      const liveStatusChanged = ourMatch.liveStatus !== newLiveStatus;
+      const liveStatusChanged = ourMatch.liveStatus !== effLiveStatus;
       if (!statusChanged && !scoreChanged && !liveStatusChanged) continue;
 
-      const updatePayload: Record<string, unknown> = { status: newStatus, liveStatus: newLiveStatus };
+      const updatePayload: Record<string, unknown> = { status: effStatus, liveStatus: effLiveStatus };
       if (newHomeScore !== null) updatePayload.homeScore = newHomeScore;
       if (newAwayScore !== null) updatePayload.awayScore = newAwayScore;
 

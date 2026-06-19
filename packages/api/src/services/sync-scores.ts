@@ -271,24 +271,33 @@ export async function syncScores(options: SyncScoresOptions = {}): Promise<SyncS
       const newHomeScore = resolved.home;
       const newAwayScore = resolved.away;
 
+      // Si ya marcamos el partido finished (ej. por el final whistle de FIFA,
+      // que se adelanta a football-data ~10 min), un tick que todavía reporta
+      // 'live' NO debe des-finalizarlo. Mantenemos finished/full_time; las
+      // correcciones de score siguen aplicando. (El caso finished→scheduled,
+      // que sí limpia scores por POSTPONED, se maneja más abajo aparte.)
+      const downgradeBlocked = ourMatch.status === 'finished' && newStatus === 'live';
+      const effStatus = downgradeBlocked ? 'finished' : newStatus;
+
       // Check if anything changed
-      const statusChanged = ourMatch.status !== newStatus;
+      const statusChanged = ourMatch.status !== effStatus;
       const scoreChanged =
         ourMatch.homeScore !== newHomeScore || ourMatch.awayScore !== newAwayScore;
-      const liveStatusChanged = ourMatch.liveStatus !== newLiveStatus;
+      // Guard against spurious feed regressions on a match we already marked
+      // finished: if our row is 'finished' and the new payload would un-set
+      // full_time (a stray IN_PLAY tick after FT), we keep the existing
+      // liveStatus instead of overwriting it.
+      const effectiveLiveStatus =
+        downgradeBlocked
+          ? (ourMatch.liveStatus ?? 'full_time')
+          : ourMatch.status === 'finished' && newStatus === 'finished' && newLiveStatus !== 'full_time'
+            ? ourMatch.liveStatus
+            : newLiveStatus;
+      const liveStatusChanged = ourMatch.liveStatus !== effectiveLiveStatus;
 
       if (!statusChanged && !scoreChanged && !liveStatusChanged) continue;
 
-      // Build update payload. Guard against spurious feed regressions on
-      // a match we already marked finished: if our row is 'finished' and
-      // the new payload would un-set full_time (e.g. a stray IN_PLAY tick
-      // hitting after FT), we keep the existing liveStatus instead of
-      // overwriting it. Same idea as the score-preservation branch below.
-      const effectiveLiveStatus =
-        ourMatch.status === 'finished' && newStatus === 'finished' && newLiveStatus !== 'full_time'
-          ? ourMatch.liveStatus
-          : newLiveStatus;
-      const updatePayload: Record<string, unknown> = { status: newStatus, liveStatus: effectiveLiveStatus };
+      const updatePayload: Record<string, unknown> = { status: effStatus, liveStatus: effectiveLiveStatus };
       if (newHomeScore !== null) updatePayload.homeScore = newHomeScore;
       if (newAwayScore !== null) updatePayload.awayScore = newAwayScore;
 
