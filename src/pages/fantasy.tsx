@@ -277,10 +277,21 @@ function LineupPitch({
       >
         {/* Pitch markings */}
         <div className="absolute inset-0 pointer-events-none select-none">
-          <div className="absolute left-0 right-0 top-1/2 h-px bg-white/12" />
-          <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-16 h-16 rounded-full border border-white/12" />
-          <div className="absolute top-0 left-1/2 -translate-x-1/2 w-28 h-10 border-b border-x border-white/12 rounded-b-xl" />
-          <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-28 h-10 border-t border-x border-white/12 rounded-t-xl" />
+          {/* Franjas de césped cortado — alterna 8 bandas para el look estadio */}
+          <div
+            className="absolute inset-0"
+            style={{ background: 'repeating-linear-gradient(180deg, rgba(255,255,255,0.05) 0 12.5%, rgba(0,0,0,0.04) 12.5% 25%)' }}
+          />
+          <div className="absolute left-0 right-0 top-1/2 h-px bg-white/15" />
+          <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-16 h-16 rounded-full border border-white/15" />
+          <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-1.5 h-1.5 rounded-full bg-white/20" />
+          <div className="absolute top-0 left-1/2 -translate-x-1/2 w-28 h-10 border-b border-x border-white/15 rounded-b-xl" />
+          <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-28 h-10 border-t border-x border-white/15 rounded-t-xl" />
+          {/* Viñeta suave para dar profundidad */}
+          <div
+            className="absolute inset-0"
+            style={{ background: 'radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,0.28) 100%)' }}
+          />
         </div>
 
         {/* Etiqueta de formación arriba a la derecha (si la pudimos detectar) */}
@@ -538,6 +549,10 @@ export function FantasyPage() {
   const { data: leaguesResponse } = useMyLeagues();
   const updateSquad = useUpdateFantasySquad();
   const { data: roundsData } = useFantasyRounds();
+  // Standings comparten cache con la pestaña Tabla (staleTime 60s), así que
+  // leer el ranking del usuario en el hero no agrega un fetch extra.
+  const { data: standingsData } = useFantasyStandings();
+  const currentUser = useAuthStore((s) => s.user);
 
   // El plantel se bloquea con el deadline de Fecha 1 (group_1) — no podés
   // cambiar los 15 una vez arrancado el Mundial. Lo que SÍ podés cambiar
@@ -632,6 +647,11 @@ export function FantasyPage() {
   }, [fantasyData]);
 
   const totalPoints = fantasyData?.team?.totalPoints ?? 0;
+
+  // Posición del usuario en la tabla global — alimenta el hero. Solo tiene
+  // sentido mostrarla una vez que el torneo arrancó a sumar puntos.
+  const myRank = standingsData?.find((e) => e.userId === currentUser?.id)?.rank ?? null;
+  const totalTeams = standingsData?.length ?? 0;
 
   const handleTogglePlayer = (player: Player) => {
     const isSelected = selectedPlayerIds.includes(player.id);
@@ -735,11 +755,49 @@ export function FantasyPage() {
 
   return (
     <div className="flex flex-col gap-4 pb-36 md:pb-24 animate-fade-in">
-      <div className="px-4 pt-6 pb-2">
-        <h1 className="text-2xl-s font-display font-bold text-text">Fantasy</h1>
-        <p className="text-sm-s text-muted mt-1">
-          Armá tu plantel de 15. Elegí tu 11 y capitán por fecha.
-        </p>
+      {/* Hero — identidad del equipo + stats clave en un solo bloque con
+          presencia. El motivo de cancha (círculos) y el degradé del accent
+          le dan el aire "fantasy/estadio" que antes faltaba. */}
+      <div className="mx-4 mt-4 relative overflow-hidden rounded-2xl bg-accent text-accent-on shadow-lg">
+        <div
+          className="absolute inset-0 pointer-events-none"
+          style={{ background: 'linear-gradient(135deg, rgba(255,255,255,0.16) 0%, transparent 45%, rgba(0,0,0,0.18) 100%)' }}
+        />
+        {/* Líneas de cancha decorativas, ancladas a la derecha */}
+        <div className="absolute inset-y-0 right-0 w-40 pointer-events-none text-accent-on opacity-[0.13]">
+          <div className="absolute right-[-46px] top-1/2 -translate-y-1/2 w-40 h-40 rounded-full border-[3px] border-current" />
+          <div className="absolute right-[-96px] top-1/2 -translate-y-1/2 w-40 h-40 rounded-full border-[3px] border-current" />
+        </div>
+
+        <div className="relative p-5">
+          <div className="flex items-center gap-2">
+            <span className="text-lg leading-none">⚽</span>
+            <h1 className="text-2xl-s font-display font-black tracking-tight">Fantasy</h1>
+          </div>
+          <p className="text-xs-s text-accent-on/80 mt-1">
+            Armá tu plantel de 15. Elegí tu 11 y capitán por fecha.
+          </p>
+
+          {/* Stat strip */}
+          <div className="mt-4 grid grid-cols-3 gap-2">
+            <div className="flex flex-col">
+              <span className="text-2xl font-black tabular-nums leading-none">{totalPoints}</span>
+              <span className="text-[10px] font-bold uppercase tracking-wider text-accent-on/70 mt-1.5">Puntos</span>
+            </div>
+            <div className="flex flex-col border-l border-accent-on/20 pl-3">
+              <span className="text-2xl font-black tabular-nums leading-none">{myRank ? `#${myRank}` : '—'}</span>
+              <span className="text-[10px] font-bold uppercase tracking-wider text-accent-on/70 mt-1.5">
+                {myRank && totalTeams ? `de ${totalTeams}` : 'Ranking'}
+              </span>
+            </div>
+            <div className="flex flex-col border-l border-accent-on/20 pl-3">
+              <span className="text-2xl font-black tabular-nums leading-none">
+                {squadPlayers.length}<span className="text-base font-bold text-accent-on/55">/15</span>
+              </span>
+              <span className="text-[10px] font-bold uppercase tracking-wider text-accent-on/70 mt-1.5">Plantel</span>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Tabs */}
@@ -762,13 +820,6 @@ export function FantasyPage() {
             {t.label}
           </button>
         ))}
-      </div>
-
-      {/* Total points banner */}
-      <div className="mx-4 flex items-center gap-3 p-3 rounded-xl bg-accent/10 border border-accent/30">
-        <Trophy size={18} className="text-accent flex-shrink-0" />
-        <p className="text-sm-s text-text flex-1">Puntos de tu equipo</p>
-        <span className="text-lg font-bold text-accent">{totalPoints}</span>
       </div>
 
       {tab === 'guide' && <FantasyGuide />}
@@ -906,7 +957,7 @@ function FantasyGuide() {
             </div>
           ))}
         </div>
-        <p>En la pestaña <span className="text-text font-semibold">Plantel</span> expandís cada selección y tocás los jugadores para agregarlos. Podés ver el plantel en lista o en formato cancha.</p>
+        <p>En <span className="text-text font-semibold">Mi Equipo</span> expandís cada selección y tocás los jugadores para agregarlos.</p>
       </GuideSection>
 
       <GuideSection emoji="⭐" title="Paso 2 — Elegí tu 11 inicial por fecha">
@@ -915,7 +966,7 @@ function FantasyGuide() {
           <p className="text-xs-s font-semibold text-text mb-1">⚠️ Importante</p>
           <p className="text-xs-s">Solo los <span className="text-text font-semibold">titulares</span> de esa fecha suman puntos. Los suplentes no acumulan puntos por más goles que hagan.</p>
         </div>
-        <p>Usá la pestaña <span className="text-text font-semibold">Titulares</span> para configurar el 11 inicial de cada fecha — podés cambiarlo entre rondas para apostar a los jugadores que tienen partido.</p>
+        <p>En <span className="text-text font-semibold">Mi Equipo</span> configurás el 11 inicial por fecha — podés cambiarlo entre rondas para apostar a los jugadores que tienen partido.</p>
       </GuideSection>
 
       <GuideSection emoji="👑" title="Paso 3 — Elegí tu capitán y vicecapitán">
@@ -1076,34 +1127,41 @@ function SquadPicker({
 
   return (
     <div className="flex flex-col gap-3">
-      {/* Section header — clickable when collapsible */}
-      <button
-        type="button"
-        onClick={() => collapsible && setOpen((o) => !o)}
-        className={cn(
-          'mx-4 flex items-center gap-2 text-xs-s font-bold text-muted uppercase tracking-wider',
-          collapsible && 'cursor-pointer hover:text-text transition-colors',
-        )}
-      >
-        <span className="flex-1 text-left">
-          Plantel ({total}/{MAX_SQUAD})
-        </span>
-        {/* Position counts inline */}
-        {(Object.entries(POSITION_LIMITS) as [Position, number][]).map(([pos, max]) => (
-          <span
-            key={pos}
-            className={cn(
-              'px-1.5 py-0.5 rounded text-[10px] font-bold',
-              positionCounts[pos] >= max ? 'bg-accent/20 text-accent' : 'bg-elevated text-muted',
-            )}
-          >
-            {pos} {positionCounts[pos]}/{max}
-          </span>
-        ))}
-        {collapsible && (
-          <ChevronDown size={14} className={cn('transition-transform flex-shrink-0', open && 'rotate-180')} />
-        )}
-      </button>
+      {/* Section header */}
+      {collapsible ? (
+        <button
+          type="button"
+          onClick={() => setOpen((o) => !o)}
+          className="mx-4 rounded-xl bg-card border border-border flex items-center gap-3 px-4 py-3 transition-colors hover:bg-elevated text-left"
+        >
+          <div className="flex-1 min-w-0">
+            <p className="text-sm-s font-bold text-text">Mi plantel</p>
+            <p className="text-xs-s text-muted mt-0.5">
+              {(Object.entries(POSITION_LIMITS) as [Position, number][]).map(([pos, max]) =>
+                `${pos} ${positionCounts[pos]}/${max}`
+              ).join(' · ')}
+            </p>
+          </div>
+          <ChevronDown size={16} className={cn('text-muted transition-transform flex-shrink-0', open && 'rotate-180')} />
+        </button>
+      ) : (
+        <div className="mx-4 flex items-center gap-2">
+          <p className="flex-1 text-xs-s font-bold text-muted uppercase tracking-wider">
+            Plantel ({total}/{MAX_SQUAD})
+          </p>
+          {(Object.entries(POSITION_LIMITS) as [Position, number][]).map(([pos, max]) => (
+            <span
+              key={pos}
+              className={cn(
+                'px-1.5 py-0.5 rounded text-[10px] font-bold',
+                positionCounts[pos] >= max ? 'bg-accent/20 text-accent' : 'bg-elevated text-muted',
+              )}
+            >
+              {pos} {positionCounts[pos]}/{max}
+            </span>
+          ))}
+        </div>
+      )}
 
       {open && (
         <>
@@ -1155,19 +1213,18 @@ function SquadPicker({
                 <div key={team.id} className="rounded-xl bg-card border border-border overflow-hidden">
                   <button
                     onClick={() => onSetExpandedTeam(expandedTeam === team.id ? null : team.id)}
-                    className="w-full flex items-center gap-3 p-4"
+                    className="w-full flex items-center gap-3 px-3 py-2.5"
                   >
-                    <TeamFlag code={team.code} emoji={team.flag ?? undefined} size={32} />
+                    <TeamFlag code={team.code} emoji={team.flag ?? undefined} size={24} />
                     <span className="flex-1 text-left text-sm-s font-semibold text-text">{team.name}</span>
                     {selectedInTeam > 0 && (
                       <span className="text-xs-s font-bold text-accent bg-accent/10 px-2 py-0.5 rounded-full">
-                        {selectedInTeam}
+                        {selectedInTeam} ✓
                       </span>
                     )}
-                    <span className="text-xs-s text-muted">{team.code}</span>
                     <ChevronDown
-                      size={16}
-                      className={cn('text-muted transition-transform', expandedTeam === team.id && 'rotate-180')}
+                      size={15}
+                      className={cn('text-muted transition-transform flex-shrink-0', expandedTeam === team.id && 'rotate-180')}
                     />
                   </button>
 
@@ -1409,7 +1466,6 @@ function PerRoundLineupTab({ squadPlayers }: { squadPlayers: Player[] }) {
     <div className="flex flex-col gap-4 pb-6">
       {/* Round selector */}
       <div className="px-4">
-        <p className="text-xs-s text-muted mb-2 font-semibold uppercase tracking-wider">Fecha</p>
         <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
           {rounds.map((r) => (
             <button
