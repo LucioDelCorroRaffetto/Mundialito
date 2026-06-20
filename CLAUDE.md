@@ -4,6 +4,12 @@
 > PLAN-LANZAMIENTO, INTEGRATION, vercel.md y fly.deploy.md más todo lo aprendido
 > en las sesiones de hardening pre-Mundial (junio 2026). Los MD viejos siguen en
 > el repo como referencia histórica, pero **este archivo es la fuente de verdad**.
+>
+> 📓 **Append-only:** cada vez que cambies un comportamiento por una razón
+> (arreglar un bug, cambiar una fuente, ajustar una regla), agregá una entrada a
+> la **Bitácora** (final del archivo) con *qué cambió y por qué*. Si descubrís un
+> error que ya cometimos, agregalo a **Gotchas**. El objetivo es que la próxima
+> sesión arranque sabiendo qué está bien, qué está mal y por qué se hizo cada cosa.
 
 ## Qué es
 
@@ -40,10 +46,15 @@ packages/api/src/
                               # tournament-predictions, fantasy, matches,
                               # achievements, push, admin
   services/
-    auto-sync.ts              # Timer cada 3 min (hoy) + 30 min (ayer). Mutex + guard.
+    auto-sync.ts              # Timer in-process: SOLO scores (football-data→ESPN).
+                              # NO hace FIFA timeline ni finalize. Cada 3min hoy + 30min ayer.
     sync-scores.ts            # Primario: football-data.org (FOOTBALL_DATA_API_KEY)
-    sync-espn.ts              # Fallback automático (sin key; dates en ET, no UTC)
-    sync-fifa-stats.ts        # Player stats desde api.fifa.com (gratis, sin auth)
+    sync-espn.ts              # Fallback (sin key; dates en ET, no UTC). Score POR
+                              # IDENTIDAD de equipo, no por posición home/away (ver Gotchas)
+    sync-fifa-stats.ts        # Player stats + timeline en vivo desde api.fifa.com.
+                              # Detecta Type 26 "final whistle" → finalWhistle
+    finalize-match.ts         # Cierra un partido en vivo apenas FIFA da el pitazo
+                              # (Type 26), sin esperar ~10min a football-data/ESPN
     fantasy-scoring-service.ts# recomputeAllFantasyPoints (serializado, coalesce)
     achievement-service.ts    # checkAchievements + evaluadores + recompute
     diagnose-fifa-flow.ts     # Self-test del parser FIFA contra WC2022
@@ -104,11 +115,27 @@ packages/api/src/
 
 ## Flujo de datos durante el torneo (TODO AUTOMÁTICO)
 
-1. `auto-sync` (en el proceso API, cada 3 min) consulta football-data.org;
-   si falla, cae a ESPN. Actualiza status/score del match.
+⚠️ **Hay DOS disparadores de sync** (redundantes a propósito):
+- `auto-sync.ts`: timer DENTRO del proceso API. **Solo scores** (football-data→ESPN).
+- **`POST /sync` en `app.ts`**: lo pega **cron-job.org cada 3 min**. Hace scores
+  (yesterday+today) + **FIFA timeline en vivo + finalize + reconcile + squads**.
+  Toda la lógica FIFA (cronología en vivo, cierre por pitazo) vive acá, NO en el timer.
+
+1. El tick de `/sync` consulta football-data.org (yesterday+today); si falla o no
+   hay key, cae a ESPN (ambas fechas). Actualiza status/score del match.
+   - **Score por identidad** (sync-espn): el gol se asigna al equipo por su
+     código, NO por el flag home/away de ESPN (ver Gotchas #13).
+   - **Guard finished→live**: una fuente que todavía dice "live" NO des-finaliza
+     un partido ya cerrado (evita flip-flop cuando FIFA cerró antes).
 2. Al pasar un match a `finished` (solo en la **transición**):
    - Calcula points de todas las predictions → `checkAchievements('prediction_scored')`
    - Dispara `syncFifaStatsForMatch(matchId)` (fire-and-forget)
+2b. **Cierre rápido por FIFA**: tras el sync de stats de los partidos en vivo, si
+   la timeline trae el evento **Type 26 "The final whistle sounds."**,
+   `finalizeMatchFromFinalWhistle` marca el match `finished/full_time` usando el
+   score que las fuentes ya mantuvieron en vivo y puntúa predictions + fantasy —
+   **sin esperar los ~10-15 min que tardan football-data/ESPN en marcar FINISHED**
+   (ver Bitácora 2026-06-19 "Lag de cierre").
 3. `sync-fifa-stats` baja `api.fifa.com/api/v3/timelines/17/285023/{stage}/{match}`
    (público, sin auth). Tipos de evento: **0/39/41=gol, 1=asistencia ("Assisted
    by X." sin país → se resuelve por IdTeam), 2=amarilla, 3=roja (inferido),
@@ -178,6 +205,22 @@ FIFA.com no necesita key.
     league, join league, create league, tournament predictions multi-liga).
 12. **Rate limit auth**: middleware propio en `middleware/rate-limit.ts`
     (in-memory, single instance). 10 req/5min en login/register/refresh.
+13. **Score por identidad, no por posición** (`sync-espn.ts`): ESPN y nuestra DB
+    a veces difieren en quién es "local". Asignar el score por el flag home/away
+    de ESPN atribuía los goles al equipo equivocado ("resultado al revés").
+    `resolveCompetitors` resuelve cuál competidor de ESPN es NUESTRO local/visitante
+    por código de equipo. **No volver a copiar ESPN-home→nuestro-home a ciegas.**
+14. **🚨 NO swapear home/away de un match con pronósticos** sin swapear los
+    pronósticos en la MISMA operación atómica. Los `predictions.home_score/away_score`
+    se guardan POR POSICIÓN, atados a la orientación del match al momento de predecir.
+    Invertir solo el match deja todos sus pronósticos con el significado al revés
+    (incidente jun-2026: usuarios perdieron puntos, "predije Bosnia y figura Suiza").
+    Si hay que alinear orientación a FIFA: swap match + predictions juntos. Para
+    partidos jugados los puntos son **invariantes** ante swap consistente de ambos
+    lados (no hace falta re-puntuar). Verificar alineación sin testimonio:
+    `AVG(home_score-away_score)` debe apuntar al favorito (confiable solo con
+    favorito claro). El fix de "score por identidad" (#13) hace que el display
+    invertido sea inofensivo PARA LOS SCORES, pero NO para los pronósticos.
 
 ## Pendientes conocidos (no bugs, decisiones)
 
@@ -198,3 +241,61 @@ FIFA.com no necesita key.
 - Pipeline FIFA: `npm run diagnose:fifa` (sin DB) o `npm run test:fifa-e2e` (con DB)
 - Smoke prod: `curl https://mundialito-d2jk.onrender.com/health`
 - Commits SIN "Co-Authored-By Claude". La carpeta `.claude/` nunca se commitea.
+- DB de prod (Turso) para diagnósticos: scripts `.mjs` sueltos en `packages/api`
+  con `@libsql/client` apuntando a `TURSO_DATABASE_URL`. **Son temporales —
+  borralos al terminar** (no commitear). Para correrlos: `node script.mjs`.
+
+---
+
+## Bitácora de decisiones y aprendizajes (append-only)
+
+> Orden cronológico inverso (lo nuevo arriba). Cada entrada: **qué cambió y por qué**.
+> Agregá una entrada cada vez que cambies un comportamiento por una razón.
+
+### 2026-06-19 — Cierre rápido por "final whistle" de FIFA (lag de cierre)
+- **Síntoma**: un partido seguía mostrándose "EN VIVO" ~10-15 min después de
+  terminar. Medido: delay sistemático de ~10-15 min entre el pitazo y que lo
+  marcáramos `finished`.
+- **Causa raíz**: football-data.org Y ESPN **tardan ~10 min** en flipear el
+  status a FINISHED tras el pitazo (lag aguas arriba, no del cron). El cron
+  agrega hasta 3 min más.
+- **Fix**: FIFA expone el fin al instante. La timeline (que ya bajamos cada tick)
+  trae el evento **Type 26 "The final whistle sounds."**. `sync-fifa-stats` lo
+  detecta (`finalWhistle`) y `finalizeMatchFromFinalWhistle` cierra el partido
+  usando el score que las fuentes ya mantuvieron en vivo + puntúa predictions.
+  Guard en sync-scores/sync-espn: una fuente lenta que dice "live" no
+  des-finaliza (evita flip-flop). Corre por el path `/sync` (cron-job.org).
+- **Pendiente/idea**: la misma técnica serviría para la transición
+  entretiempo→2T (FIFA Type 7 Period 5 "start of the second period" llega al
+  instante; hoy esa transición también lagea unos minutos por las fuentes).
+
+### 2026-06-19 — Score por identidad de equipo (resultado al revés)
+- **Síntoma**: el resultado de Suiza-Bosnia figuraba al revés y no se actualizaba.
+- **Causa**: `sync-espn` copiaba ESPN-home-score → nuestro-home a ciegas. Cuando
+  ESPN y nuestra DB no coincidían en quién era local, los goles caían en el
+  equipo equivocado.
+- **Fix**: `resolveCompetitors` mapea cada competidor de ESPN a nuestro
+  local/visitante por código de equipo. Mapeo divergente: `RSA→ZAF`. Ver Gotcha #13.
+
+### 2026-06-19 — Alineación de orientación a FIFA + incidente de pronósticos
+- **Qué se hizo**: el seed tenía 24 partidos con home/away invertido vs FIFA (la
+  3ª fecha de cada grupo, sistemático). Se alinearon a FIFA (swap match + predictions
+  atómico por partido).
+- **Incidente**: al swapear 2 partidos (28, 53) con scripts separados, el swap de
+  predictions no persistió en uno → quedaron desalineados y usuarios perdieron
+  puntos. Se corrigió manualmente. **Aprendizaje → Gotcha #14** (no swapear match
+  sin swapear predictions atómicamente). Los puntos son invariantes ante swap
+  consistente de ambos lados.
+
+### 2026-06-18 — Sync cross-medianoche (partidos trabados en vivo)
+- **Síntoma**: partidos con kickoff cerca de medianoche UTC (ej. GHA-PAN 23:00,
+  Colombia) quedaban "en vivo" tras terminar.
+- **Causa**: el sync solo consultaba `today`; al cruzar medianoche UTC el partido
+  caía en `yesterday`.
+- **Fix**: `/sync` consulta `yesterday + today` cada tick. (ESPN además interpreta
+  `dates=` en ET → ya se pedían 2 días, ver Gotcha #3.)
+
+### 2026-06-18 — HT subs con minuto "?" y cooling breaks
+- HT subs (FIFA Period=4, sin MatchMinute) se mapean a period=2 minuto=45
+  sintético en `sync-fifa-stats`. Cooling break: el pill se sacó de
+  `CoolingBreakDrops` (duplicaba el label del header). Own goal: ícono con ✕ rojo.
