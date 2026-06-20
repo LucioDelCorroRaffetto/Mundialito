@@ -12,11 +12,24 @@
  *  - Every 30 min → also sync yesterday (safety net for late-night finishes)
  */
 
+import { eq } from 'drizzle-orm';
 import { syncScores, type SyncScoresOptions, type SyncScoresResult } from './sync-scores.js';
 import { syncScoresFromEspn } from './sync-espn.js';
+import { syncLiveMatches } from './sync-live.js';
+import { invalidateForecastCache } from './forecast-service.js';
+import { db } from '../db/index.js';
+import { matches } from '../db/schema/index.js';
 
 const THREE_MINUTES  = 3  * 60 * 1000;
 const THIRTY_MINUTES = 30 * 60 * 1000;
+// Cadencia rápida del vivo. El cuello de botella del lag (gol/cooling break/
+// minuto) era la cadencia del cron externo (~3 min): un cooling break dura
+// ~2-3 min, así que muestreando cada 3 min casi siempre se mostraba tarde o se
+// perdía. Este tick corre seguido SOLO cuando hay partidos en vivo, usando
+// ESPN (sin key, sin cuota) para el score y FIFA (público) para timeline +
+// cooling break + cierre por pitazo. football-data sigue intacto cada 3 min
+// como fuente autoritativa.
+const FORTY_FIVE_SECONDS = 45 * 1000;
 
 function todayUTC(): string {
   return new Date().toISOString().slice(0, 10);
@@ -86,6 +99,40 @@ async function runSync(label: string, options: SyncScoresOptions) {
   }
 }
 
+/**
+ * Tick rápido del vivo. Comparte el `syncInFlight` con runSync para serializar
+ * toda la escritura de sync (no hay dos writers concurrentes en la DB). Hace un
+ * pre-check barato: si no hay partidos `live` no llama a ninguna fuente externa
+ * (este tick corre 24/7, no queremos pegarle a ESPN/FIFA cuando no hay fútbol).
+ */
+async function runLiveSync() {
+  if (syncInFlight) return; // un sync (3min o vivo) ya está corriendo
+  syncInFlight = true;
+  try {
+    const live = await db
+      .select({ id: matches.id })
+      .from(matches)
+      .where(eq(matches.status, 'live'))
+      .catch(() => [] as { id: number }[]);
+    if (live.length === 0) return;
+
+    // Score por ESPN (sin key, sin cuota) para que el marcador se mueva rápido
+    // sin quemar football-data. football-data sigue siendo la fuente
+    // autoritativa cada 3 min y corrige cualquier discrepancia.
+    await syncScoresFromEspn(todayUTC()).catch((err) =>
+      console.error('[LiveSync] ESPN score error:', err),
+    );
+
+    // Timeline FIFA + cooling break + cierre por pitazo final.
+    const res = await syncLiveMatches();
+    if (res.eventsSynced > 0 || res.anyFinalized) invalidateForecastCache();
+  } catch (err) {
+    console.error('[LiveSync] unexpected error:', err);
+  } finally {
+    syncInFlight = false;
+  }
+}
+
 // Singleton guard: prevent two startAutoSync() calls from spawning duplicate
 // intervals. The most common cause is a hot reload during dev or an
 // accidental double-import; without this the same DB would be hit 2× per
@@ -93,6 +140,7 @@ async function runSync(label: string, options: SyncScoresOptions) {
 let started = false;
 let todayTimer: ReturnType<typeof setInterval> | null = null;
 let yesterdayTimer: ReturnType<typeof setInterval> | null = null;
+let liveTimer: ReturnType<typeof setInterval> | null = null;
 
 export function startAutoSync() {
   if (started) {
@@ -116,13 +164,19 @@ export function startAutoSync() {
 
   // Every 30 minutes: yesterday too (catches late finishes / delayed status updates)
   yesterdayTimer = setInterval(() => runSync('yesterday', { dateFrom: yesterdayUTC(), dateTo: yesterdayUTC() }), THIRTY_MINUTES);
+
+  // Cada 45s: tick rápido del vivo (solo actúa si hay partidos en vivo).
+  console.log('[AutoSync] live tick (ESPN score + FIFA timeline) — cada 45s mientras haya partidos en vivo');
+  liveTimer = setInterval(() => runLiveSync(), FORTY_FIVE_SECONDS);
 }
 
 /** Stops the auto-sync timers — used by graceful shutdown handlers in server.ts. */
 export function stopAutoSync() {
   if (todayTimer) clearInterval(todayTimer);
   if (yesterdayTimer) clearInterval(yesterdayTimer);
+  if (liveTimer) clearInterval(liveTimer);
   todayTimer = null;
   yesterdayTimer = null;
+  liveTimer = null;
   started = false;
 }

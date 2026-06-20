@@ -1,20 +1,16 @@
 import express from 'express';
 import cors from 'cors';
 import morgan from 'morgan';
-import { eq } from 'drizzle-orm';
 import { tokenParse } from './middleware/token-parse.js';
 import { errorHandler } from './middleware/error-handler.js';
 import { apiRouter } from './routes/index.js';
 import { syncScores } from './services/sync-scores.js';
 import { syncScoresFromEspn } from './services/sync-espn.js';
-import { syncFifaStatsForMatch } from './services/sync-fifa-stats.js';
-import { finalizeMatchFromFinalWhistle } from './services/finalize-match.js';
+import { syncLiveMatches } from './services/sync-live.js';
 import { reconcileMatchStatuses } from './services/reconcile-matches.js';
 import { syncFixtureTimes } from './services/fixture-time-sync.js';
 import { reconcileSquadsFromWikipedia } from './services/squad-reconcile.js';
 import { invalidateForecastCache } from './services/forecast-service.js';
-import { db } from './db/index.js';
-import { matches } from './db/schema/index.js';
 
 export const app = express();
 
@@ -90,52 +86,13 @@ app.post('/sync', async (req, res) => {
 
   // After score sync, refresh FIFA timeline (goals/cards/subs per minute) for
   // any live matches so the cronología renders during the game instead of
-  // only at full time. Each call is wrapped so one bad match doesn't poison
-  // the rest of the tick.
-  const liveMatches = await db
-    .select({ id: matches.id })
-    .from(matches)
-    .where(eq(matches.status, 'live'))
-    .catch((err) => {
-      console.error('[sync-live-fifa] failed loading live matches:', err);
-      return [] as { id: number }[];
-    });
-
-  // Sync in parallel — sequential awaits would multiply each FIFA request
-  // latency by the number of live matches and easily exceed cron-job.org's
-  // 30s ceiling on a slot with 3-4 simultaneous games. inFlight inside
-  // syncFifaStatsForMatch prevents per-match re-entry; cross-match calls
-  // are independent so concurrent is safe.
-  const fifaResults: Array<{ matchId: number; upserted: number; skipped?: string; error?: string; finalized?: boolean }> =
-    await Promise.all(
-      liveMatches.map(async (m) => {
-        try {
-          const r = await syncFifaStatsForMatch(m.id, { force: true });
-          if (r.skipped) {
-            console.log(`[sync-live-fifa] match ${m.id}: skipped (${r.skipped})`);
-          } else {
-            console.log(`[sync-live-fifa] match ${m.id}: ${r.upserted} events synced`);
-          }
-          // Si FIFA ya marcó el pitazo final, cerramos el partido sin esperar
-          // a que football-data/ESPN lo marquen FINISHED (~10 min de delay).
-          let finalized = false;
-          if (r.finalWhistle) {
-            const fin = await finalizeMatchFromFinalWhistle(m.id);
-            finalized = fin.finalized;
-            if (fin.finalized) {
-              console.log(`[sync-live-fifa] match ${m.id}: cerrado por final whistle (${fin.scored} pronósticos)`);
-            }
-          }
-          return { matchId: m.id, upserted: r.upserted, skipped: r.skipped, finalized };
-        } catch (err) {
-          const msg = err instanceof Error ? err.message : String(err);
-          console.error(`[sync-live-fifa] match ${m.id}: ${msg}`);
-          return { matchId: m.id, upserted: 0, error: msg };
-        }
-      }),
-    );
-  const fifaEventsSynced = fifaResults.reduce((acc, r) => acc + r.upserted, 0);
-  const anyFinalizedByFifa = fifaResults.some((r) => r.finalized);
+  // only at full time, y cerramos por pitazo final. La lógica vive en
+  // syncLiveMatches() (compartida con el timer interno de alta frecuencia de
+  // auto-sync, que la corre cada pocos segundos para bajar el lag del vivo).
+  const live = await syncLiveMatches();
+  const fifaResults = live.fifaResults;
+  const fifaEventsSynced = live.eventsSynced;
+  const anyFinalizedByFifa = live.anyFinalized;
 
   // Safety net: catches matches the feeds left stuck (scheduled past
   // kickoff, live hours after FT). Runs last so it sees the latest
