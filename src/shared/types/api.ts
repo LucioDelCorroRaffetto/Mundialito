@@ -159,6 +159,23 @@ export interface MatchPlayerStatsResponse {
   stats: PlayerMatchStats[];
 }
 
+/**
+ * Desglose de puntos fantasy de un jugador en una fecha cerrada.
+ * Viene dentro de cada entrada del lineup cuando la fecha ya cerró.
+ */
+export interface FantasyPlayerBreakdown {
+  played: boolean;
+  goals: number;
+  assists: number;
+  cleanSheet: boolean;
+  yellowCards: number;
+  redCard: boolean;
+  /** Puntos antes de aplicar el multiplicador de capitán/vice. */
+  basePoints: number;
+  /** Puntos finales (basePoints × multiplicador). */
+  totalPoints: number;
+}
+
 /** Una fila de la tabla de posiciones fantasy. */
 export interface FantasyStandingEntry {
   rank: number;

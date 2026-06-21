@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { motion, useDragControls } from 'framer-motion';
-import { ChevronDown, Check, Trophy, Crown, Shield, BarChart2, BookOpen, ChevronRight, Lock, CheckCircle2 } from 'lucide-react';
+import { ChevronDown, Check, Trophy, Crown, Shield, BarChart2, BookOpen, ChevronRight, Lock, CheckCircle2, Handshake } from 'lucide-react';
 import { cn } from '@/shared/lib/cn';
 import { useTeams } from '@/shared/hooks/use-teams';
 import { usePlayers } from '@/shared/hooks/use-players';
@@ -13,7 +13,7 @@ import { play } from '@/shared/lib/sounds';
 import { TeamFlag } from '@/shared/components/ui/team-flag';
 import { useFantasyRounds, useFantasyLineup, useUpsertLineup } from '@/shared/hooks/use-fantasy-lineups';
 import type { LineupPlayerInput } from '@/shared/hooks/use-fantasy-lineups';
-import type { Player } from '@/shared/types/api';
+import type { Player, FantasyPlayerBreakdown } from '@/shared/types/api';
 
 const POSITION_COLORS: Record<string, string> = {
   GK: 'bg-yellow-500/20 text-yellow-500',
@@ -1643,6 +1643,85 @@ function PerRoundLineupTab({ squadPlayers }: { squadPlayers: Player[] }) {
   );
 }
 
+/**
+ * Mini badge strip — shows goal/assist/clean-sheet/card icons and total
+ * points for a closed round. Shown beneath the player name in list view.
+ */
+function BreakdownBadges({
+  breakdown,
+  isCaptain,
+  isViceCaptain,
+}: {
+  breakdown: FantasyPlayerBreakdown;
+  isCaptain: boolean;
+  isViceCaptain: boolean;
+}) {
+  const badges: React.ReactNode[] = [];
+
+  if (!breakdown.played) {
+    badges.push(
+      <span key="dnp" className="text-[10px] text-muted italic">No jugó</span>,
+    );
+  } else {
+    for (let i = 0; i < breakdown.goals; i++) {
+      badges.push(
+        <span key={`g${i}`} className="text-[12px]" aria-label="Gol">⚽</span>,
+      );
+    }
+    for (let i = 0; i < breakdown.assists; i++) {
+      badges.push(
+        <Handshake key={`a${i}`} size={11} className="text-blue-400" aria-label="Asistencia" />,
+      );
+    }
+    if (breakdown.cleanSheet) {
+      badges.push(
+        <Shield key="cs" size={11} className="text-emerald-400" aria-label="Valla invicta" />,
+      );
+    }
+    for (let i = 0; i < breakdown.yellowCards; i++) {
+      badges.push(
+        <span
+          key={`y${i}`}
+          className="inline-block w-[8px] h-[11px] rounded-[1px] bg-yellow-400 flex-shrink-0"
+          aria-label="Amarilla"
+        />,
+      );
+    }
+    if (breakdown.redCard) {
+      badges.push(
+        <span
+          key="red"
+          className="inline-block w-[8px] h-[11px] rounded-[1px] bg-red-500 flex-shrink-0"
+          aria-label="Roja"
+        />,
+      );
+    }
+  }
+
+  const multiplierLabel = isCaptain ? '×2' : isViceCaptain ? '×1.5' : null;
+
+  return (
+    <div className="flex items-center gap-1 mt-0.5 flex-wrap">
+      {badges}
+      {badges.length > 0 && breakdown.played && <span className="text-muted text-[10px]">·</span>}
+      <span className={cn(
+        'text-[11px] font-bold tabular-nums',
+        breakdown.totalPoints > 0 ? 'text-accent' : breakdown.totalPoints < 0 ? 'text-red-400' : 'text-muted',
+      )}>
+        {breakdown.totalPoints > 0 ? '+' : ''}{breakdown.totalPoints} pts
+      </span>
+      {multiplierLabel && (
+        <span className={cn(
+          'text-[10px] font-black px-1 py-px rounded-full',
+          isCaptain ? 'bg-yellow-400/20 text-yellow-400' : 'bg-slate-300/20 text-slate-300',
+        )}>
+          {multiplierLabel}
+        </span>
+      )}
+    </div>
+  );
+}
+
 function LineupRow({
   player,
   isStarter,
@@ -1652,6 +1731,7 @@ function LineupRow({
   onToggle,
   onCaptain,
   onVice,
+  breakdown,
 }: {
   player: Player;
   isStarter: boolean;
@@ -1661,7 +1741,9 @@ function LineupRow({
   onToggle: () => void;
   onCaptain: (() => void) | undefined;
   onVice: (() => void) | undefined;
+  breakdown?: FantasyPlayerBreakdown | null;
 }) {
+  const showBreakdown = !isOpen && isStarter && breakdown != null;
   return (
     <div className={cn(
       'flex items-center gap-2.5 p-2.5 rounded-xl border bg-card transition-colors',
@@ -1703,7 +1785,17 @@ function LineupRow({
       >
         {player.position}
       </span>
-      <span className="flex-1 text-sm-s font-semibold text-text truncate">{player.name}</span>
+      {/* Name + optional breakdown strip */}
+      <div className="flex-1 min-w-0">
+        <span className="block text-sm-s font-semibold text-text truncate">{player.name}</span>
+        {showBreakdown && (
+          <BreakdownBadges
+            breakdown={breakdown}
+            isCaptain={isCaptain}
+            isViceCaptain={isViceCaptain}
+          />
+        )}
+      </div>
       {isStarter && onCaptain && (
         <button
           type="button"
@@ -1731,6 +1823,17 @@ function LineupRow({
           )}
           title="Vicecapitán (x1.5 puntos)"
         >V</button>
+      )}
+      {/* Closed round: show captain/vice badge (read-only) */}
+      {!isOpen && isStarter && isCaptain && (
+        <span className="w-8 h-8 rounded-full text-xs font-black flex items-center justify-center flex-shrink-0 bg-yellow-400 text-black">
+          C
+        </span>
+      )}
+      {!isOpen && isStarter && isViceCaptain && (
+        <span className="w-8 h-8 rounded-full text-xs font-black flex items-center justify-center flex-shrink-0 bg-slate-300 text-black">
+          V
+        </span>
       )}
     </div>
   );
