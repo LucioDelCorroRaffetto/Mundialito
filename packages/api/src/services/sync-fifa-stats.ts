@@ -27,7 +27,16 @@
  *                   tournament occurrence)
  *   5     Substitution (IdPlayer in, IdSubPlayer out)
  *  39     Goal direct from free-kick
- *  41     Goal from penalty
+ *  41     Goal from penalty (also used for penalty CONVERTED in shootout — see Period)
+ *  60     Penalty saved by goalkeeper (shootout only)
+ *  65     Penalty missed / off target (shootout only)
+ *
+ * IMPORTANTE — Type 41 en tanda vs en juego:
+ *   FIFA usa el mismo Type 41 para penales convertidos en el juego normal
+ *   Y para penales convertidos en la tanda (Period 11). La distinción es el
+ *   Period: si Period === 11 (tanda) el evento NO debe sumar al bucket.goals
+ *   del jugador (la tanda no cuenta como gol en el fantasy real) y se emite
+ *   como 'penalty_goal' en el timeline. Si Period < 11 (juego / ET) sí suma.
  */
 import { eq, and, inArray } from 'drizzle-orm';
 import { db } from '../db/index.js';
@@ -182,11 +191,20 @@ function hasFinalWhistle(events: { Type: number; EventDescription?: FifaLocaleSt
 // Event-type sets. FIFA Type 34 = OwnGoal (acreditado al jugador que marca
 // en contra, no al equipo que anota). Lo tratamos separado para mostrarlo
 // con ícono distinto y NO sumar al bucket.goals del jugador.
-const GOAL_TYPES     = new Set([0, 39, 41]);
-const OWN_GOAL_TYPES = new Set([34]);
-const ASSIST_TYPES   = new Set([1]);
-const YELLOW_TYPES   = new Set([2]);
-const RED_TYPES      = new Set([3]);
+//
+// GOAL_TYPES incluye Type 41 (penal convertido) pero la lógica de parseo
+// discrimina por Period (11 = tanda de penales) antes de sumar al bucket.
+// Ver el comentario en la cabecera del archivo.
+const GOAL_TYPES          = new Set([0, 39, 41]);
+const OWN_GOAL_TYPES      = new Set([34]);
+const ASSIST_TYPES        = new Set([1]);
+const YELLOW_TYPES        = new Set([2]);
+const RED_TYPES           = new Set([3]);
+// Tipos nuevos — exclusivos de la tanda de penales (Period 11 en FIFA):
+const PENALTY_SAVE_TYPES  = new Set([60]);  // Penal atajado (arquero)
+const PENALTY_MISS_TYPES  = new Set([65]);  // Penal errado (fuera/poste)
+// FIFA_SHOOTOUT_PERIOD: el número de Period que FIFA asigna a la tanda.
+const FIFA_SHOOTOUT_PERIOD = 11;
 
 const inFlight = new Set<number>();
 
@@ -461,7 +479,14 @@ async function doSync(matchId: number): Promise<SyncStatsResult> {
     // los puede recibir.
     // Own goals SÍ pueden ser de un GK (arquero que mete en su propio arco),
     // así que no los incluimos en eventDiscardsGK.
-    const eventDiscardsGK = GOAL_TYPES.has(ev.Type) || RED_TYPES.has(ev.Type);
+    // Heurística de desambiguación por posición:
+    //  - goles, rojas, penal errado/convertido → casi nunca un GK. Si hay
+    //    un único candidato no-GK, ese gana.
+    //  - penal atajado (Type 60) → es el ARQUERO. Invertimos: si hay un
+    //    único candidato GK, ese gana (ver bloque de des-ambigüedad abajo).
+    //  - asistencias, amarillas, own goals → cualquier posición puede; no filtramos.
+    const eventDiscardsGK = GOAL_TYPES.has(ev.Type) || RED_TYPES.has(ev.Type)
+      || PENALTY_MISS_TYPES.has(ev.Type);
 
     // Resolve the team. Three sources in order of confidence:
     //   1. ev.IdTeam → previously-seen mapping in `teamIdByFifaIdTeam`.
@@ -570,6 +595,12 @@ async function doSync(matchId: number): Promise<SyncStatsResult> {
       const nonGK = candidates.filter((c) => c.position !== 'GK');
       if (nonGK.length === 1) candidates = nonGK;
     }
+    // Caso inverso: penal atajado → el jugador ES el arquero. Si hay un único
+    // GK entre los candidatos, ese gana (descartamos no-GK).
+    if (candidates.length > 1 && PENALTY_SAVE_TYPES.has(ev.Type)) {
+      const gk = candidates.filter((c) => c.position === 'GK');
+      if (gk.length === 1) candidates = gk;
+    }
     // Desambiguar por nombre completo cuando FIFA prefija con nombre o
     // inicial. Caso típico: "Diego GOMEZ (Paraguay)" con dos GOMEZ en
     // el plantel (Diego MID, Gustavo DEF). El first FIFA token ("diego")
@@ -598,12 +629,12 @@ async function doSync(matchId: number): Promise<SyncStatsResult> {
     return winner;
   }
 
-  // Eventos individuales con minuto — para el timeline en la UI. Solo
-  // guardamos gol/asist/amarilla/roja + sustituciones (sub_in/sub_out).
+  // Eventos individuales con minuto — para el timeline en la UI.
+  // Incluye gol/asist/amarilla/roja + sustituciones + eventos de tanda.
   interface TimelineEvent {
     playerId: number;
     teamId: number;
-    type: 'goal' | 'own_goal' | 'assist' | 'yellow' | 'red' | 'sub_in' | 'sub_out';
+    type: 'goal' | 'own_goal' | 'assist' | 'yellow' | 'red' | 'sub_in' | 'sub_out' | 'penalty_miss' | 'penalty_save' | 'penalty_goal';
     minute: number | null;
     period: number | null;
   }
@@ -632,7 +663,21 @@ async function doSync(matchId: number): Promise<SyncStatsResult> {
     const bucket = ensureBucket(player.id);
     bucket.played = true;
     let eventType: TimelineEvent['type'] | null = null;
-    if (GOAL_TYPES.has(ev.Type)) { bucket.goals += 1; eventType = 'goal'; }
+    if (GOAL_TYPES.has(ev.Type)) {
+      // FIFA usa Type 41 tanto para penales en juego (Period < 11) como para
+      // penales convertidos en la tanda (Period 11). La tanda NO suma al
+      // bucket.goals del jugador porque en el fantasy real la tanda no cuenta
+      // como gol (los puntos de gol ya los otorgaron los que marcaron en 90'+30').
+      // Para la UI emitimos 'penalty_goal' en vez de 'goal' para que la
+      // cronología de la definición quede completa y simétrica.
+      if (ev.Type === 41 && ev.Period === FIFA_SHOOTOUT_PERIOD) {
+        eventType = 'penalty_goal';
+        // No incrementamos bucket.goals — la tanda no suma fantasy.
+      } else {
+        bucket.goals += 1;
+        eventType = 'goal';
+      }
+    }
     // Own goals NO suman al bucket.goals del jugador (el gol va al marcador
     // del equipo contrario, que ya maneja sync-scores). Solo se registran
     // en el timeline para mostrarlo con ícono propio (⚽ (OG)).
@@ -640,6 +685,12 @@ async function doSync(matchId: number): Promise<SyncStatsResult> {
     else if (ASSIST_TYPES.has(ev.Type)) { bucket.assists += 1; eventType = 'assist'; }
     else if (YELLOW_TYPES.has(ev.Type)) { bucket.yellow += 1; eventType = 'yellow'; }
     else if (RED_TYPES.has(ev.Type)) { bucket.red = true; eventType = 'red'; }
+    // Penal atajado — se acredita al arquero que ataja (IdPlayer en el evento).
+    // No modifica ningún bucket de stats fantasy; solo alimenta el timeline.
+    else if (PENALTY_SAVE_TYPES.has(ev.Type)) { eventType = 'penalty_save'; }
+    // Penal errado (fuera, al poste) — se acredita al jugador que pateó.
+    // No modifica ningún bucket de stats fantasy; solo alimenta el timeline.
+    else if (PENALTY_MISS_TYPES.has(ev.Type)) { eventType = 'penalty_miss'; }
 
     // FIFA usa números impares para fases de juego (3=1T, 5=2T, 7=ET1,
     // 9=ET2, 11=penales) y números pares para los "intermedios"

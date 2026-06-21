@@ -1157,6 +1157,38 @@ const EVENT_LABEL: Record<MatchTimelineEvent['type'], EventDisplay> = {
     label: 'Sale',
     render: ({ size = 12 }) => <ArrowRightLeft size={size} className="text-rose-500 rotate-90 scale-y-[-1]" aria-label="Sale" />,
   },
+  // Tanda de penales — los tres tipos son exclusivos de period=5 (shootout).
+  // 'penalty_goal': penal convertido. Usamos ⚽ con badge "P" para diferenciarlo
+  // visualmente de un gol en juego sin confundir al usuario.
+  penalty_goal: {
+    label: 'Penal convertido',
+    render: ({ size = 14 }) => (
+      <span className="relative inline-flex items-center justify-center" aria-label="Penal convertido">
+        <span style={{ fontSize: size }}>⚽</span>
+        <span className="absolute -bottom-0.5 -right-0.5 text-[6px] leading-none font-black text-emerald-400">✓</span>
+      </span>
+    ),
+  },
+  // 'penalty_miss': pateó y erró (afuera o al poste). X roja sobre silueta de pelota.
+  penalty_miss: {
+    label: 'Penal errado',
+    render: ({ size = 14 }) => (
+      <span className="relative inline-flex items-center justify-center" aria-label="Penal errado">
+        <span style={{ fontSize: size }} className="opacity-40">⚽</span>
+        <span className="absolute inset-0 flex items-center justify-center text-[8px] leading-none font-black text-red-500">✕</span>
+      </span>
+    ),
+  },
+  // 'penalty_save': atajado por el arquero. Guante (mano) para representar la atajada.
+  penalty_save: {
+    label: 'Penal atajado',
+    render: ({ size = 14 }) => (
+      <span className="relative inline-flex items-center justify-center" aria-label="Penal atajado">
+        <span style={{ fontSize: size }} className="opacity-40">⚽</span>
+        <span className="absolute inset-0 flex items-center justify-center text-[8px] leading-none font-black text-sky-500">🧤</span>
+      </span>
+    ),
+  },
 };
 
 function MatchEvents({

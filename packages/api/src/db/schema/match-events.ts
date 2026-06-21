@@ -15,7 +15,18 @@ import { teams } from './teams.js';
  * GROUP BY en hot paths. La duplicación cuesta poco — el sync escribe
  * ambas tablas en la misma corrida.
  *
- * Tipo de eventos: 'goal', 'assist', 'yellow', 'red', 'sub_in', 'sub_out'.
+ * Tipo de eventos: 'goal', 'assist', 'yellow', 'red', 'sub_in', 'sub_out',
+ * 'penalty_miss', 'penalty_save', 'penalty_goal'.
+ *
+ * Los tres últimos son exclusivos de la tanda de penales (Period 11 en FIFA,
+ * normalizado a period=5 en nuestra DB):
+ *   'penalty_goal'  — penal convertido en la tanda (FIFA Type 41, Period 11)
+ *   'penalty_miss'  — penal errado en la tanda (FIFA Type 65)
+ *   'penalty_save'  — penal atajado en la tanda (FIFA Type 60)
+ * Se diferencian de 'goal' (penal en juego) para que la UI muestre la
+ * cronología completa de la definición sin inflar las estadísticas de goles
+ * fantasy (la tanda no cuenta como gol en el juego).
+ *
  * SQLite no enforce el enum a nivel DB; la restricción vive solo en el tipo TS.
  */
 export const matchEvents = sqliteTable(
@@ -25,7 +36,7 @@ export const matchEvents = sqliteTable(
     matchId: integer('match_id').notNull().references(() => matches.id, { onDelete: 'cascade' }),
     playerId: integer('player_id').notNull().references(() => players.id, { onDelete: 'cascade' }),
     teamId: integer('team_id').notNull().references(() => teams.id, { onDelete: 'cascade' }),
-    type: text('type', { enum: ['goal', 'own_goal', 'assist', 'yellow', 'red', 'sub_in', 'sub_out'] }).notNull(),
+    type: text('type', { enum: ['goal', 'own_goal', 'assist', 'yellow', 'red', 'sub_in', 'sub_out', 'penalty_miss', 'penalty_save', 'penalty_goal'] }).notNull(),
     minute: integer('minute'),  // null = no se publicó el minuto en el feed
     period: integer('period'),  // 1=1T, 2=2T, 3=ET1, 4=ET2, 5=penales
   },
