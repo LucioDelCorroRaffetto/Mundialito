@@ -33,10 +33,16 @@ const GOAL_TYPES = new Set([0, 39, 41]);
 const ASSIST_TYPES = new Set([1]);
 const YELLOW_TYPES = new Set([2]);
 const RED_TYPES = new Set([3]);
+// La tanda de penales (Period 11) usa Type 41 pero NO cuenta como gol — igual
+// que en sync-fifa-stats.ts. Lo replicamos acá para que el self-test siga
+// siendo un espejo fiel del parser real si algún día se apunta a un partido
+// con definición por penales.
+const FIFA_SHOOTOUT_PERIOD = 11;
 
 interface FifaLocaleString { Locale: string; Description: string }
 interface FifaTimelineEvent {
   Type: number;
+  Period?: number | null;
   IdPlayer?: string | null;
   IdSubPlayer?: string | null;
   IdTeam?: string | null;
@@ -121,7 +127,7 @@ export async function diagnoseFifaFlow(): Promise<DiagnoseResult> {
       b = { g: 0, a: 0, y: 0, r: 0 };
       playerKeyCounts.set(key, b);
     }
-    if (GOAL_TYPES.has(ev.Type)) { b.g += 1; goals += 1; }
+    if (GOAL_TYPES.has(ev.Type) && !(ev.Type === 41 && ev.Period === FIFA_SHOOTOUT_PERIOD)) { b.g += 1; goals += 1; }
     else if (ASSIST_TYPES.has(ev.Type)) { b.a += 1; assists += 1; }
     else if (YELLOW_TYPES.has(ev.Type)) { b.y += 1; yellow += 1; }
     else if (RED_TYPES.has(ev.Type)) { b.r = 1; red += 1; }
