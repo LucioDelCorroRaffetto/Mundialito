@@ -106,26 +106,47 @@ async function runSync(label: string, options: SyncScoresOptions) {
  * (este tick corre 24/7, no queremos pegarle a ESPN/FIFA cuando no hay fútbol).
  */
 async function runLiveSync() {
+  // Pre-check barato ANTES de tomar el lock: si no hay partidos en vivo no
+  // tocamos el guard ni ninguna fuente externa (este tick corre 24/7).
+  const live = await db
+    .select({ id: matches.id })
+    .from(matches)
+    .where(eq(matches.status, 'live'))
+    .catch(() => [] as { id: number }[]);
+  if (live.length === 0) return;
+
   if (syncInFlight) return; // un sync (3min o vivo) ya está corriendo
   syncInFlight = true;
   try {
-    const live = await db
-      .select({ id: matches.id })
-      .from(matches)
-      .where(eq(matches.status, 'live'))
-      .catch(() => [] as { id: number }[]);
-    if (live.length === 0) return;
-
     // Score por ESPN (sin key, sin cuota) para que el marcador se mueva rápido
-    // sin quemar football-data. football-data sigue siendo la fuente
-    // autoritativa cada 3 min y corrige cualquier discrepancia.
-    await syncScoresFromEspn(todayUTC()).catch((err) =>
-      console.error('[LiveSync] ESPN score error:', err),
-    );
+    // sin quemar football-data. Pedimos hoy + ayer UTC porque un partido que
+    // arranca cerca de medianoche UTC sigue "live" pasada la medianoche y
+    // ESPN interpreta `dates` en horario del Este (Gotcha #3) — sin `ayer`
+    // ese partido se quedaría sin refresco de score en esos ticks.
+    // football-data sigue siendo autoritativo cada 3 min y corrige cualquier
+    // discrepancia.
+    const [espnT, espnY] = await Promise.all([
+      syncScoresFromEspn(todayUTC()).catch((err) => {
+        console.error('[LiveSync] ESPN score error (today):', err);
+        return null;
+      }),
+      syncScoresFromEspn(yesterdayUTC()).catch((err) => {
+        console.error('[LiveSync] ESPN score error (yesterday):', err);
+        return null;
+      }),
+    ]);
+    const espnSynced = (espnT?.synced ?? 0) + (espnY?.synced ?? 0);
 
     // Timeline FIFA + cooling break + cierre por pitazo final.
     const res = await syncLiveMatches();
-    if (res.eventsSynced > 0 || res.anyFinalized) invalidateForecastCache();
+
+    // Invalida el cache de forecast si CUALQUIER fuente movió algo — incluido
+    // un gol que ESPN ya reflejó pero que FIFA todavía no publicó en la
+    // timeline (lag de hasta ~30s), para no servir score viejo hasta el
+    // próximo tick.
+    if (espnSynced > 0 || res.eventsSynced > 0 || res.anyFinalized) {
+      invalidateForecastCache();
+    }
   } catch (err) {
     console.error('[LiveSync] unexpected error:', err);
   } finally {
