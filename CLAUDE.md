@@ -11,6 +11,34 @@
 > error que ya cometimos, agregalo a **Gotchas**. El objetivo es que la próxima
 > sesión arranque sabiendo qué está bien, qué está mal y por qué se hizo cada cosa.
 
+## 🛑 Protocolo OBLIGATORIO para cada sesión y cada agente
+
+Esto **no es opcional** y aplica a la sesión principal Y a cualquier sub-agente
+que se lance sobre este proyecto.
+
+**Al EMPEZAR (antes de tocar nada):**
+
+1. **Leé este archivo COMPLETO** — es la fuente de verdad: arquitectura, reglas
+   de negocio, gotchas y bitácora. Ya rompimos cosas en producción por ignorar
+   un gotcha que estaba documentado acá. No empieces a trabajar sin haberlo leído.
+2. Si vas a delegar en sub-agentes, **pasales explícitamente la orden de leer
+   este archivo** (ruta absoluta) antes de que empiecen. Un agente que arranca
+   "en frío" sin este contexto es peligroso sobre una app en vivo.
+
+**Al TERMINAR (antes de cerrar la tarea):**
+
+3. **Dejá contexto de lo que investigaste y trabajaste.** Agregá una entrada a la
+   **Bitácora** (final del archivo) documentando, sí o sí:
+   - **✅ Lo bueno**: qué quedó funcionando, verificado o blindado.
+   - **⚠️ Lo malo**: bugs encontrados, fragilidades, deuda técnica y pendientes
+     — **aunque no los hayas arreglado**. Dejá registro para la próxima sesión.
+   - **Qué cambió y por qué.**
+4. Si descubrís un error que ya cometimos (o uno nuevo fácil de repetir),
+   sumalo a **Gotchas**.
+
+Documentar el contexto (lo bueno y lo malo) es parte de la tarea, no un extra.
+Si trabajaste y no dejaste rastro en la Bitácora, la tarea no está terminada.
+
 ## Qué es
 
 PWA mobile-first de prode + fantasy del Mundial 2026 entre amigos. Gratis, sin
@@ -251,6 +279,83 @@ FIFA.com no necesita key.
 
 > Orden cronológico inverso (lo nuevo arriba). Cada entrada: **qué cambió y por qué**.
 > Agregá una entrada cada vez que cambies un comportamiento por una razón.
+
+### 2026-06-21 — Auditoría con 5 agentes + primer batch de fixes y tests
+
+Sesión de auditoría completa (front, backend API, pipeline sync/scoring, research,
+testing) en modo "auditar y proponer", seguida de la implementación del batch de
+mayor ROI y menor riesgo. **App en vivo (fase de grupos) — no se deployó nada
+todavía; los cambios viven en la rama `chore/audit-fixes-tests-context`.**
+
+**✅ Lo bueno (hecho y verificado):**
+- **Infra de tests creada de cero.** Antes `npm test` estaba roto (apuntaba a un
+  `vitest.config.ts` inexistente) y `packages/api` no tenía Vitest. Ahora:
+  `vitest.config.ts` en raíz (jsdom, `passWithNoTests`) y en `packages/api`
+  (node), scripts `test`/`test:watch` en ambos, y los tests excluidos del build
+  `tsc` (`packages/api/tsconfig.json` → `exclude`). El binario de vitest se
+  hoistea desde el root, no hay install separado en la API.
+- **35 tests pasando** (lógica pura, sin DB): `scoring`, `fantasy-scoring`,
+  `match-helpers` (lock kickoff-5min + fail-safe), `fantasy-rounds` (regresión
+  semis ×2 congelada) y `fifa-parse`.
+- **Helpers de parseo FIFA extraídos** de `services/sync-fifa-stats.ts` a
+  `lib/fifa-parse.ts` (`parseDescription`, `normName`, `editDistanceAtMostOne`,
+  `hasFinalWhistle`, `FINAL_WHISTLE_TYPE`, `FifaLocaleString`). Movida pura, sin
+  cambio de comportamiento, para testearlos sin arrastrar la capa de DB.
+- **`SYNC_SECRET` ahora obligatorio en producción** (`app.ts`): si falta en prod,
+  `/sync` responde 503 en vez de quedar abierto. En dev se mantiene la apertura
+  sin secret para no romper el testing local. **PENDIENTE OPERATIVO: setear
+  `SYNC_SECRET` en Render y en cron-job.org antes de mergear/deployar, sino el
+  cron deja de funcionar.**
+- **Fix `reconcile`**: al auto-finalizar un partido (camino de último recurso a
+  las 3h30m), ahora dispara `syncFifaStatsForMatch()` fire-and-forget como ya
+  hacen sync-scores/sync-espn. Antes ese camino cerraba el match sin stats FIFA
+  → todos los titulares quedaban en 0 fantasy esa fecha.
+- Auditoría confirmó **mucho ya blindado**: finalize idempotente, score por
+  identidad, rechazo de hermanos ambiguos, tanda no infla fantasy, guard
+  finished→live, "finished sin scores" ignorado, transacciones en ligas, sin
+  fugas de email, lock fail-safe.
+
+**✅ Segundo batch de fixes (aplicados, `tsc` API+front = 0, 35 tests verdes):**
+- **ESPN no cierra un KO empatado sin ganador** (`sync-espn.ts`): si la tanda no
+  trae el flag `winner`, el match se **mantiene `live`** ese tick (no se finaliza
+  ni se puntúa) y se cierra cuando el ganador aparece (próximo tick o
+  football-data). Antes podía persistir 1-1 y "todo empate puntúa 5". Solo retiene
+  en la *transición* a finished; un match ya finished no se toca.
+- **Front `matches.tsx`**: la lista filtra TODAS las predicciones del match y solo
+  muestra marcador/`+pts` si son idénticas en todas las ligas; si divergen, sigue
+  marcando "pronosticado" (`hasPrediction`) pero el detalle queda para match-detail.
+- **Authz/lock**: `ensureMyTeam` valida membresía de liga (403 si no); `upsert-scorers`
+  rechaza con 409 si el match está lockeado; `delete-account` ahora es transaccional
+  (transfer admin + deletes atómicos); rate-limit usa el **último** hop de
+  `X-Forwarded-For` (el del proxy de Render, no spoofeable) en vez del primero.
+- **Observabilidad**: `/health` hace `SELECT 1` con timeout 2.5s (503 si la DB no
+  responde); `morgan('combined')` en prod (`'dev'` en local).
+- **Código muerto / docs**: sacado el header `x-user-hour` (front) y los tips que
+  mentían (`night_owl` removido; "logros suman puntos" → dan XP). README corregido
+  (lock 5min, logros = XP).
+
+**⚠️ Lo que queda pendiente (decisiones, no olvidos):**
+- 🔴 **Warmth de Render = SPOF** (operacional, no código): lo único que evita el
+  cold start es cron-job.org cada 3min. Falta pinger de respaldo a `/health` +
+  alertas de fallo en cron-job.org. → Ver instrucciones de Render/cron entregadas.
+- 🟡 **`update-match` (admin) no transaccional**: NO se tocó a propósito — su loop
+  de scoring toca el path del vivo; aplicar entre partidos con cuidado.
+- 🟡 **Refresh token sin rotación** (30d): **decisión de no bajarlo** durante el
+  Mundial — desloguearía gente en plena fase final. Post-Mundial: rotación + TTL menor.
+- 🟢 **`meta.total` = page size** en leaderboard: cosmético con ~40 users; sin tocar.
+- ❓ **`OPENING_LOCK_UTC`**: código = `2026-06-19`, doc decía `2026-06-11`. Hoy (21/6)
+  ambas ya pasaron y el server valida contra el lock del primer partido, así que es
+  inocuo ahora. Confirmar si el `19/6` fue una extensión intencional del deadline.
+- 🟢 **No hay config de ESLint en el repo** (`npm run lint` falla: "couldn't find a
+  configuration file"). Gap pre-existente — agregar un `eslint.config.js` algún día.
+
+**Limpieza:** se borraron las 3 worktrees ya mergeadas (`feat/fantasy-deadline-push`,
+`feat/fantasy-player-breakdown`, `feat/timeline-penalties`); las ramas quedan.
+
+**Verificación de este checkout:** `cd packages/api && npm install` (las deps no
+venían) → `npx tsc --noEmit` (API) = 0; `npx tsc --noEmit` (raíz, front) = 0;
+`cd packages/api && npm test` = 35 ok. El front no tiene tests aún
+(`vitest run` en raíz = passWithNoTests).
 
 ### 2026-06-20 — Tick interno de alta frecuencia para el vivo (lag de ~3min)
 - **Síntoma**: durante un partido, el gol, el minuto y el cooling break tardaban

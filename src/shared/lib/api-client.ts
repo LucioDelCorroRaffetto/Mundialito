@@ -12,9 +12,6 @@ export const apiClient = axios.create({
 apiClient.interceptors.request.use((config) => {
   const token = useAuthStore.getState().token;
   if (token) config.headers.Authorization = `Bearer ${token}`;
-  // Hint for time-of-day achievements (e.g. night_owl). The server never
-  // requires this header; it just uses it when present.
-  config.headers['x-user-hour'] = String(new Date().getHours());
   return config;
 });
 

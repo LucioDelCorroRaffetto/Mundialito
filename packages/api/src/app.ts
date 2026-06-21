@@ -11,6 +11,7 @@ import { reconcileMatchStatuses } from './services/reconcile-matches.js';
 import { syncFixtureTimes } from './services/fixture-time-sync.js';
 import { reconcileSquadsFromWikipedia } from './services/squad-reconcile.js';
 import { invalidateForecastCache } from './services/forecast-service.js';
+import { libsqlClient } from './db/client.js';
 
 export const app = express();
 
@@ -32,15 +33,46 @@ app.use(cors({
   credentials: true,
 }));
 app.use(express.json());
-app.use(morgan('dev'));
+// 'combined' in prod (timestamp + IP + UA — useful for "what happened at
+// 19:43?" during a live match); 'dev' (terse, colorized) locally.
+app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
 app.use(tokenParse);
 
-app.get('/health', (_req, res) => res.json({ status: 'ok' }));
+// Health check that actually touches the DB. A bare {status:'ok'} reports
+// healthy even when Turso is down, which defeats alerting. Short timeout so a
+// hung DB doesn't hang the probe (and trips a 503 the host can act on).
+app.get('/health', async (_req, res) => {
+  try {
+    await Promise.race([
+      libsqlClient.execute('SELECT 1'),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('db timeout')), 2500)),
+    ]);
+    return res.json({ status: 'ok', db: 'up' });
+  } catch {
+    return res.status(503).json({ status: 'degraded', db: 'down' });
+  }
+});
 
-// Public sync endpoint — intended to be called by an external cron service
-// (e.g. cron-job.org every 3 min). Secured by optional SYNC_SECRET env var.
+// Sync endpoint — intended to be called by an external cron service
+// (e.g. cron-job.org every 3 min). Secured by SYNC_SECRET.
+//
+// This endpoint drives the authoritative live-scoring path (scores + FIFA
+// timeline + finalize + reconcile + squad reconcile) and leans on a rate-
+// limited external feed (football-data: 10 req/min). Leaving it open lets
+// anyone exhaust that quota or force finalize/reconcile mid-match. In
+// production we therefore REFUSE to serve it unless SYNC_SECRET is set, and
+// always require the header to match — there is no "secret missing → open"
+// fallback anymore.
 app.post('/sync', async (req, res) => {
   const secret = process.env.SYNC_SECRET;
+  // In production a missing secret means the endpoint would be wide open —
+  // refuse to serve it instead. In dev (no NODE_ENV=production) we keep the
+  // old behaviour of allowing an unauthenticated call when no secret is set,
+  // so local testing of the sync path stays frictionless.
+  if (process.env.NODE_ENV === 'production' && !secret) {
+    console.error('[sync] SYNC_SECRET is not set — refusing to expose /sync in production');
+    return res.status(503).json({ error: 'sync disabled: SYNC_SECRET not configured' });
+  }
   if (secret && req.headers['x-sync-secret'] !== secret) {
     return res.status(401).json({ error: 'Unauthorized' });
   }

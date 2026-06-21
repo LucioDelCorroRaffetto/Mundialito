@@ -2,7 +2,8 @@ import { Request, Response } from 'express';
 import { z } from 'zod';
 import { eq, and } from 'drizzle-orm';
 import { db } from '../../../db/index.js';
-import { fantasyTeams } from '../../../db/schema/index.js';
+import { fantasyTeams, leagueMembers } from '../../../db/schema/index.js';
+import { AppError } from '../../../lib/errors.js';
 
 export const ensureMyTeamSchema = z.object({
   leagueId: z.number().int().positive(),
@@ -12,6 +13,18 @@ export const ensureMyTeamSchema = z.object({
 export async function ensureMyTeamHandler(req: Request, res: Response) {
   const userId = req.user!.id;
   const { leagueId, name } = req.body as z.infer<typeof ensureMyTeamSchema>;
+
+  // Refuse to create a fantasy team in a league the user doesn't belong to —
+  // otherwise anyone could seed rows in foreign (incl. other users' personal)
+  // leagues just by passing an arbitrary leagueId.
+  const membership = await db
+    .select({ id: leagueMembers.userId })
+    .from(leagueMembers)
+    .where(and(eq(leagueMembers.userId, userId), eq(leagueMembers.leagueId, leagueId)))
+    .get();
+  if (!membership) {
+    throw new AppError('FORBIDDEN', 'Not a member of this league', 403);
+  }
 
   await db
     .insert(fantasyTeams)

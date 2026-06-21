@@ -46,28 +46,34 @@ export async function deleteAccountHandler(req: Request, res: Response) {
 
   const adminedLeagues = await db.select().from(leagues).where(eq(leagues.adminId, userId));
 
-  for (const league of adminedLeagues) {
-    if (league.isPersonal) {
-      await db.delete(leagues).where(eq(leagues.id, league.id));
-      continue;
+  // All mutations in one transaction: admin transfer + league deletes + the
+  // user delete must succeed or fail together. A crash mid-way previously
+  // could leave a league with its admin already transferred but the user
+  // still present (or vice versa) — an inconsistent state.
+  await db.transaction(async (tx) => {
+    for (const league of adminedLeagues) {
+      if (league.isPersonal) {
+        await tx.delete(leagues).where(eq(leagues.id, league.id));
+        continue;
+      }
+      // Pick the oldest remaining member as new admin. asc(joinedAt) is the
+      // fairest tiebreaker — the person who's been around longest.
+      const successor = await tx
+        .select()
+        .from(leagueMembers)
+        .where(and(eq(leagueMembers.leagueId, league.id), ne(leagueMembers.userId, userId)))
+        .orderBy(asc(leagueMembers.joinedAt))
+        .limit(1)
+        .get();
+      if (successor) {
+        await tx.update(leagues).set({ adminId: successor.userId }).where(eq(leagues.id, league.id));
+      } else {
+        await tx.delete(leagues).where(eq(leagues.id, league.id));
+      }
     }
-    // Pick the oldest remaining member as new admin. asc(joinedAt) is the
-    // fairest tiebreaker — the person who's been around longest.
-    const successor = await db
-      .select()
-      .from(leagueMembers)
-      .where(and(eq(leagueMembers.leagueId, league.id), ne(leagueMembers.userId, userId)))
-      .orderBy(asc(leagueMembers.joinedAt))
-      .limit(1)
-      .get();
-    if (successor) {
-      await db.update(leagues).set({ adminId: successor.userId }).where(eq(leagues.id, league.id));
-    } else {
-      await db.delete(leagues).where(eq(leagues.id, league.id));
-    }
-  }
 
-  await db.delete(users).where(eq(users.id, userId));
+    await tx.delete(users).where(eq(users.id, userId));
+  });
 
   return res.status(204).send();
 }

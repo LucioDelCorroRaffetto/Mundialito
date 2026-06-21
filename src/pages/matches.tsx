@@ -345,7 +345,16 @@ export function MatchesPage() {
   );
 
   function renderMatchRow(match: Match) {
-    const prediction = (myPredictionsData?.data ?? []).find((p) => p.matchId === match.id);
+    // A user in multiple leagues can have DIFFERENT predictions per league for
+    // the same match. `/predictions/mine` (no leagueId) returns one row per
+    // league, so a `.find()` would surface an arbitrary league's score/points.
+    // We still flag "predicted" via `hasPrediction`, but only show a concrete
+    // score+points when every league agrees; otherwise we defer the per-league
+    // detail to match-detail (which has the divergent view).
+    const matchPredictions = (myPredictionsData?.data ?? []).filter((p) => p.matchId === match.id);
+    const hasPrediction = matchPredictions.length > 0;
+    const uniqueScores = new Set(matchPredictions.map((p) => `${p.homeScore}-${p.awayScore}`));
+    const prediction = uniqueScores.size === 1 ? matchPredictions[0] : undefined;
     const homeTeam = getTeam(teamMap, match.homeTeamId);
     const awayTeam = getTeam(teamMap, match.awayTeamId);
     const isLive = match.status === 'live';
@@ -402,7 +411,7 @@ export function MatchesPage() {
                   FT
                 </span>
               )
-            ) : prediction ? (
+            ) : hasPrediction ? (
               <CheckCircle2 size={18} className="text-green-400" />
             ) : (
               <Clock size={18} className="text-muted" />

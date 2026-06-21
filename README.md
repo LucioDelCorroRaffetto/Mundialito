@@ -32,7 +32,7 @@ Una PWA **mobile-first** para vivir el Mundial 2026 con tus amigos. Predecí res
 | Resultado exacto | 5 pts — acertás el marcador exacto |
 | Diferencia + ganador | 3 pts |
 | Solo el ganador | 1 pt |
-| Lock automático | 1h antes del partido, sin trampas |
+| Lock automático | 5 min antes del kickoff, sin trampas |
 | Predicciones de torneo | Campeón · Finalista · Goleador · Revelación |
 | Goleadores por partido | +2 pts c/u, hasta 2 por equipo |
 
@@ -50,7 +50,8 @@ Una PWA **mobile-first** para vivir el Mundial 2026 con tus amigos. Predecí res
 
 ### 🏆 Logros
 - 20 logros desbloqueables (primera predicción, racha perfecta, etc.)
-- Cada logro suma **puntos reales** al leaderboard global
+- Cada logro otorga **XP** (sube de nivel y desbloquea títulos) — no suma
+  puntos al leaderboard, que se rige solo por aciertos de pronóstico
 
 ### 📱 PWA nativa
 - Instalable en iOS y Android como app nativa
@@ -152,7 +153,7 @@ Mundialito/
 - [x] Prode con lock automático
 - [x] Ligas privadas con WebSocket
 - [x] Fantasy team builder
-- [x] 20 logros con puntos reales
+- [x] 20 logros que otorgan XP (niveles + títulos)
 - [x] Cuadro de torneo visual (bracket con colores por ronda)
 - [x] Leaderboard global + por liga
 - [x] PWA instalable + push notifications

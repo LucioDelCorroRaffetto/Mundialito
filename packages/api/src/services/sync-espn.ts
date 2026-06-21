@@ -287,6 +287,14 @@ export async function syncScoresFromEspn(date: string): Promise<SyncScoresResult
       // user who actually predicted Argentina-wins gets 0. ESPN exposes the
       // shootout winner via `competition.status.type.detail` or an "OT" /
       // "SO" tag; we use `winner: true` on the competitor object when set.
+      // When a knockout went to penalties but ESPN hasn't published WHICH side
+      // won yet (the `winner` flag lags the FINISHED status, common on its
+      // unofficial scoreboard), closing the match now would persist a tied
+      // score and award every "empate" predictor 5 pts while the user who
+      // actually picked the winner gets 0. In that case we HOLD the match as
+      // live for this tick; a later tick — or football-data, which carries the
+      // shootout winner reliably — finalizes it once the winner is known.
+      let shootoutWinnerUnknown = false;
       if (newStatus === 'finished' && newHomeScore != null && newAwayScore != null) {
         const detail = (event.status.type as { detail?: string; description?: string }).detail
           ?? (event.status.type as { description?: string }).description
@@ -297,6 +305,10 @@ export async function syncScoresFromEspn(date: string): Promise<SyncScoresResult
           const awayWinnerFlag = (awayComp as unknown as { winner?: boolean })?.winner === true;
           if (homeWinnerFlag && !awayWinnerFlag) newHomeScore += 1;
           else if (awayWinnerFlag && !homeWinnerFlag) newAwayScore += 1;
+          // Shootout but no (or contradictory) winner flag yet → don't finalize
+          // a tied KO. Only hold while TRANSITIONING into finished; if the
+          // match was already finished (e.g. FIFA closed it), leave it be.
+          else if (ourMatch.status !== 'finished') shootoutWinnerUnknown = true;
         }
       }
 
@@ -305,8 +317,12 @@ export async function syncScoresFromEspn(date: string): Promise<SyncScoresResult
       // 'live' NO debe des-finalizarlo. Mantenemos finished/full_time; las
       // correcciones de score de abajo siguen aplicando.
       const downgradeBlocked = ourMatch.status === 'finished' && newStatus !== 'finished';
-      const effStatus = downgradeBlocked ? 'finished' : newStatus;
-      const effLiveStatus = downgradeBlocked ? (ourMatch.liveStatus ?? 'full_time') : newLiveStatus;
+      const effStatus = shootoutWinnerUnknown
+        ? 'live'
+        : downgradeBlocked ? 'finished' : newStatus;
+      const effLiveStatus = shootoutWinnerUnknown
+        ? (ourMatch.liveStatus ?? 'in_play')
+        : downgradeBlocked ? (ourMatch.liveStatus ?? 'full_time') : newLiveStatus;
 
       const statusChanged = ourMatch.status !== effStatus;
       const scoreChanged  = ourMatch.homeScore !== newHomeScore || ourMatch.awayScore !== newAwayScore;
@@ -325,8 +341,10 @@ export async function syncScoresFromEspn(date: string): Promise<SyncScoresResult
 
       synced++;
 
-      // Score predictions when match finishes
-      if (newStatus === 'finished' && newHomeScore !== null && newAwayScore !== null) {
+      // Score predictions when match finishes. Skip while holding a shootout
+      // whose winner ESPN hasn't published — scoring a tied KO would credit
+      // the wrong predictors.
+      if (newStatus === 'finished' && !shootoutWinnerUnknown && newHomeScore !== null && newAwayScore !== null) {
         anyMatchFinished = true;
         const matchPredictions = await db.select().from(predictions).where(eq(predictions.matchId, ourMatch.id));
         for (const pred of matchPredictions) {
