@@ -252,6 +252,53 @@ FIFA.com no necesita key.
 > Orden cronológico inverso (lo nuevo arriba). Cada entrada: **qué cambió y por qué**.
 > Agregá una entrada cada vez que cambies un comportamiento por una razón.
 
+### 2026-06-20 — Tick interno de alta frecuencia para el vivo (lag de ~3min)
+- **Síntoma**: durante un partido, el gol, el minuto y el cooling break tardaban
+  ~2-3 min en aparecer. El cooling break (dura ~2-3 min) casi siempre se mostraba
+  tarde o se perdía.
+- **Causa raíz**: la timeline FIFA + cooling break + cierre por pitazo solo
+  corrían desde `POST /sync` (cadencia del cron externo cron-job.org, ~3 min). El
+  timer interno de `auto-sync` solo hacía **scores** (football-data), no FIFA.
+- **Fix**: se extrajo el bloque FIFA-en-vivo de `app.ts` a `syncLiveMatches()`
+  (`services/sync-live.ts`), reusado por `/sync` y por un **nuevo timer interno
+  de 45s** (`runLiveSync` en `auto-sync.ts`) que SOLO actúa si hay partidos en
+  vivo. Usa **ESPN** (sin key/cuota) para el score y FIFA (público) para
+  timeline/cooling break/finalize. football-data sigue intacto cada 3 min como
+  fuente autoritativa. Serializado con `runSync` vía `syncInFlight`. ESPN pide
+  ayer+hoy UTC (partidos cruzando medianoche). Resultado: lag ~3min → ~45s.
+- **Keys (verificado)**: ESPN y FIFA **no usan key** (APIs públicas ya en uso).
+  football-data es la única con cuota. API-Football tiene key pero su free tier
+  bloquea WC2026 (inútil). No buscar "activar" ESPN/FIFA.
+- **Deploy**: hacerlo **entre partidos** (toca el path de scoring del vivo).
+
+### 2026-06-20 — Penales: errado/atajado en timeline + tanda no infla fantasy
+- **Qué cambió**: la cronología ahora muestra **penal errado (FIFA Type 65)** y
+  **penal atajado (Type 60)**. Antes solo se veían los convertidos, y en una
+  tanda eso dejaba la cronología incompleta/asimétrica.
+- **Bug latente corregido**: FIFA usa **Type 41 tanto para penal en juego como en
+  la tanda (Period 11)**. El parser sumaba los penales de la tanda como goles
+  fantasy (+4 a +6 por jugador). Ahora, si `Type 41 && Period === 11` se emite
+  `penalty_goal` al timeline pero **NO** suma a `bucket.goals`. Penal en juego/ET
+  (Period < 11) sí suma.
+- **Gotcha del dedupe**: la tanda no trae `MatchMinute`, así que varios penales
+  del mismo jugador (un arquero que ataja 2) colisionaban en la clave natural
+  `type:minute:period:playerId`. Se asigna un **minuto sintético incremental** por
+  evento de tanda como desempate estable (la UI muestra "Penales", no el número).
+- Nuevos tipos en enum `match_events`, `TimelineEvent`, `MatchTimelineEvent` y
+  `EVENT_LABEL`. `diagnose-fifa-flow` replica la exclusión de la tanda.
+
+### 2026-06-20 — Fantasy: push de deadline + desglose de puntos por jugador
+- **Push de deadline**: nuevo job `send-fantasy-deadline-reminders.ts` (worker)
+  que avisa ~30 min antes del deadline de cada fecha (armar 11/capitán). Antes el
+  único push era de pronósticos. Mismo patrón anti-spam (ventana [now+25,now+30],
+  cron 5min). Los deadlines se **espejan** de `lib/fantasy-rounds.ts` (el worker
+  no depende de `packages/api`) — mantener en sync (ver Gotcha #10).
+- **Desglose por jugador**: el lineup de una fecha cerrada ahora muestra los
+  puntos fantasy por titular con su detalle (gol/asist/valla/tarjetas), capitán
+  ×2 / vice ×1.5. Backend reusa `calculateFantasyPoints` (única fuente de verdad);
+  valla invicta derivada por identidad de equipo. Al entrar a una fecha cerrada la
+  vista arranca en "lista" (donde se ve el desglose).
+
 ### 2026-06-19 — Cierre rápido por "final whistle" de FIFA (lag de cierre)
 - **Síntoma**: un partido seguía mostrándose "EN VIVO" ~10-15 min después de
   terminar. Medido: delay sistemático de ~10-15 min entre el pitazo y que lo
