@@ -16,8 +16,9 @@ import cron from 'node-cron';
 // once apiFixtureId is backfilled and the three bugs are fully resolved.
 // import { pollLiveMatches } from './jobs/poll-live.js';
 import { sendDeadlineReminders } from './jobs/send-deadline-reminders.js';
+import { sendFantasyDeadlineReminders } from './jobs/send-fantasy-deadline-reminders.js';
 
-// Every 5 minutes: deadline reminders
+// Every 5 minutes: prediction deadline reminders
 cron.schedule('*/5 * * * *', async () => {
   try {
     await sendDeadlineReminders();
@@ -26,5 +27,14 @@ cron.schedule('*/5 * * * *', async () => {
   }
 });
 
+// Every 5 minutes: fantasy lineup deadline reminders
+cron.schedule('*/5 * * * *', async () => {
+  try {
+    await sendFantasyDeadlineReminders();
+  } catch (err) {
+    console.error('[worker] fantasy-deadline-reminders error:', err);
+  }
+});
+
 console.log('Mundialito worker started');
-console.log('Jobs: deadline-reminders (*/5min). poll-live is DISABLED — API auto-sync owns scoring.');
+console.log('Jobs: deadline-reminders (*/5min), fantasy-deadline-reminders (*/5min). poll-live is DISABLED — API auto-sync owns scoring.');
