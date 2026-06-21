@@ -639,6 +639,13 @@ async function doSync(matchId: number): Promise<SyncStatsResult> {
     period: number | null;
   }
   const timeline: TimelineEvent[] = [];
+  // Contador de eventos de la tanda de penales (Period 11). FIFA no publica
+  // MatchMinute para la tanda, así que varios penales del mismo jugador (un
+  // arquero que ataja 2, p.ej.) colisionarían en la clave natural de dedupe
+  // (type:minute:period:playerId) y el 2do se perdería. Le damos a cada evento
+  // de tanda un minuto sintético incremental como desempate estable — la UI
+  // muestra 'Penales' (no el número), así que no afecta la pantalla.
+  let shootoutSeq = 0;
 
   function parseMinute(raw: string | null | undefined): number | null {
     if (!raw) return null;
@@ -721,7 +728,11 @@ async function doSync(matchId: number): Promise<SyncStatsResult> {
       : parsedMinute == null && fifaPeriod === 8 ? 105 // pre-ET2 cae al inicio del ET2
       : parsedMinute == null && fifaPeriod === 10 ? 120 // pre-penales cae al inicio de los penales
       : null;
-    const minute = parsedMinute ?? syntheticMinute;
+    // En la tanda (Period 11) forzamos un minuto sintético incremental por
+    // evento — único y estable entre syncs (FIFA devuelve los eventos en orden)
+    // — para que la clave natural de dedupe distinga penales del mismo jugador.
+    const minute =
+      fifaPeriod === FIFA_SHOOTOUT_PERIOD ? 120 + shootoutSeq++ : (parsedMinute ?? syntheticMinute);
 
     if (eventType) {
       timeline.push({

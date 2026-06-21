@@ -1347,7 +1347,7 @@ function MatchEvents({
             const isHome = displaySideIsHome(ev);
             const sub = isSub(ev.type);
             const isFresh = ev.id === freshEventId;
-            const isGoal = ev.type === 'goal' || ev.type === 'own_goal';
+            const isGoal = ev.type === 'goal' || ev.type === 'own_goal' || ev.type === 'penalty_goal';
             return (
               <motion.div
                 key={ev.id}
