@@ -1367,11 +1367,27 @@ function PerRoundLineupTab({ squadPlayers }: { squadPlayers: Player[] }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lineupData, activeSlug, squadKey]);
 
+  // Desglose de puntos por jugador de la fecha cerrada — viene en lineupData.
+  // Lo indexamos por playerId para alimentar cada LineupRow (el `draft` solo
+  // lleva flags de titular/capitán, no el breakdown).
+  const breakdownByPlayer = useMemo(() => {
+    const m = new Map<number, FantasyPlayerBreakdown | null>();
+    for (const r of lineupData?.data ?? []) m.set(r.playerId, r.breakdown ?? null);
+    return m;
+  }, [lineupData]);
+
   const starterCount = draft.filter((p) => p.isStarter).length;
   const captainPicked = draft.some((p) => p.isCaptain);
   const vicePicked = draft.some((p) => p.isViceCaptain);
   const roundInfo = rounds.find((r) => r.slug === activeSlug);
   const isOpen = roundInfo?.isOpen ?? false;
+
+  // Al cambiar de fecha: si está cerrada arrancamos en vista lista (donde se
+  // ve el desglose de puntos por jugador); si está abierta, en cancha (para
+  // editar el 11). El usuario puede togglear manualmente dentro de la fecha.
+  useEffect(() => {
+    setLineupView(isOpen ? 'pitch' : 'list');
+  }, [activeSlug, isOpen]);
 
   function toggle(playerId: number) {
     if (!isOpen) return;
@@ -1568,6 +1584,7 @@ function PerRoundLineupTab({ squadPlayers }: { squadPlayers: Player[] }) {
                         onToggle={() => toggle(row.playerId)}
                         onCaptain={() => setCaptain(row.playerId)}
                         onVice={() => setVice(row.playerId)}
+                        breakdown={breakdownByPlayer.get(row.playerId)}
                       />
                     );
                   })}
