@@ -43,6 +43,13 @@ import { db } from '../db/index.js';
 import { matches, players, playerMatchStats, teams, matchEvents } from '../db/schema/index.js';
 import { recomputeAllFantasyPoints } from './fantasy-scoring-service.js';
 import { notifyAdmin } from '../lib/notify-admin.js';
+import {
+  type FifaLocaleString,
+  hasFinalWhistle,
+  editDistanceAtMostOne,
+  normName,
+  parseDescription,
+} from '../lib/fifa-parse.js';
 
 const FIFA_BASE = 'https://api.fifa.com/api/v3';
 const FIFA_COMPETITION_ID = '17';   // FIFA World Cup
@@ -148,11 +155,6 @@ const FIFA_NAME_TO_CODE: Record<string, string> = {
   'new zealand':    'NZL',
 };
 
-interface FifaLocaleString {
-  Locale: string;
-  Description: string;
-}
-
 interface FifaTimelineEvent {
   Type: number;
   Period: number;
@@ -176,16 +178,6 @@ export interface SyncStatsResult {
   /** True si la timeline trae el evento "final whistle" (Type 26): el
    *  partido terminó según FIFA, normalmente antes que football-data/ESPN. */
   finalWhistle?: boolean;
-}
-
-// FIFA Type 26 = "The final whistle sounds." Señal de fin de partido.
-const FINAL_WHISTLE_TYPE = 26;
-function hasFinalWhistle(events: { Type: number; EventDescription?: FifaLocaleString[] }[]): boolean {
-  return events.some(
-    (ev) =>
-      ev.Type === FINAL_WHISTLE_TYPE ||
-      (ev.EventDescription?.[0]?.Description ?? '').toLowerCase().includes('final whistle'),
-  );
 }
 
 // Event-type sets. FIFA Type 34 = OwnGoal (acreditado al jugador que marca
@@ -234,77 +226,9 @@ export async function syncFifaStatsForMatch(
   }
 }
 
-/**
- * Levenshtein-1 truncado: devuelve true sii la distancia es 0 o 1.
- * Mucho más barato que computar la matriz completa cuando solo querés
- * saber si toleramos 1 typo (substitution/insertion/deletion) entre
- * transliteraciones del estilo "Mohebbi" vs "Mohebi", "Solskjær" vs
- * "Solskjaer". No usar para nombres de < 5 chars — la tolerancia ahí
- * mata el matcher (rieselgo de "Mota" matchee "Sota").
- */
-function editDistanceAtMostOne(a: string, b: string): boolean {
-  if (a === b) return true;
-  const la = a.length;
-  const lb = b.length;
-  if (Math.abs(la - lb) > 1) return false;
-  // Recorré simultáneamente, permití a lo sumo 1 "tropiezo".
-  let i = 0;
-  let j = 0;
-  let diffs = 0;
-  while (i < la && j < lb) {
-    if (a[i] === b[j]) {
-      i++;
-      j++;
-      continue;
-    }
-    if (++diffs > 1) return false;
-    if (la === lb) { i++; j++; }     // substitution
-    else if (la > lb) i++;           // deletion en a
-    else j++;                        // insertion en a / deletion en b
-  }
-  if (i < la || j < lb) diffs++;     // sobra una letra al final
-  return diffs <= 1;
-}
-
-function normName(s: string): string {
-  return s
-    .toLowerCase()
-    .normalize('NFD')
-    // eslint-disable-next-line no-misleading-character-class
-    .replace(/[̀-ͯ]/g, '')
-    .replace(/['’`´ʹ]/g, '')
-    .replace(/[.,\-]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
-/**
- * Extract a player surname (+ optional country) from a FIFA event description.
- * Supports the two formats FIFA emits:
- *   "FODEN (England) scores!!"                  → surname=FODEN, country=England
- *   "GANA (Senegal) is booked by the referee."  → surname=GANA,  country=Senegal
- *   "Assisted by KANE."                         → surname=KANE,  country=null
- *   "ROBERTS (in) comes off the bench to ..."   → surname=ROBERTS, country=null
- *
- * When country is null the caller must resolve it from `IdTeam` on the event
- * (which FIFA always populates for events that involve a player).
- */
-function parseDescription(desc: string | undefined): { surname: string; country: string | null } | null {
-  if (!desc) return null;
-  // Pattern A: "SURNAME (Country) ..." — country present.
-  const a = desc.match(/^([A-ZÁÉÍÓÚÑÜÇA-zÀ-ÿ' .-]+?)\s*\(([^)]+)\)/);
-  if (a) {
-    const country = a[2].trim();
-    // Reject parenthetical text that is clearly NOT a country, e.g. "(in)",
-    // "(out)", "(yellow card)".
-    const looksLikeCountry = country.length >= 3 && !/^(in|out|penalty|red card|yellow card)$/i.test(country);
-    return { surname: a[1].trim(), country: looksLikeCountry ? country : null };
-  }
-  // Pattern B: "Assisted by SURNAME." — country comes from IdTeam.
-  const b = desc.match(/^Assisted by\s+([A-ZÁÉÍÓÚÑÜÇA-zÀ-ÿ' .-]+?)\.?\s*$/);
-  if (b) return { surname: b[1].trim(), country: null };
-  return null;
-}
+// Helpers de parseo puro (editDistanceAtMostOne, normName, parseDescription,
+// hasFinalWhistle) se movieron a ../lib/fifa-parse.ts para poder testearlos
+// sin arrastrar la capa de DB. Se importan arriba.
 
 interface RosterPlayer {
   id: number;

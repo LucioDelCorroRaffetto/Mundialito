@@ -24,8 +24,8 @@ const LOADING_MESSAGES = [
 const TIPS = [
   '⚽ La primera predicción vale doble en las charlas del asado.',
   '📊 Acertar el marcador exacto suma 5 pts. ¡Jugátela!',
-  '🏆 Los logros también suman puntos al ranking.',
-  '🌟 Hay un logro secreto para los que abren la app a las 3am.',
+  '🏆 Los logros te suben de nivel y desbloquean títulos.',
+  '⭐ En Fantasy, tu capitán suma puntos x2 cada fecha.',
   '🎯 Pronosticá los 72 partidos de grupos y desbloqueás un logro.',
   '🔔 Activá las notificaciones para el aviso de 30 min antes de cada partido.',
   '👑 Podés armar tu propia liga y desafiar a tus amigos.',

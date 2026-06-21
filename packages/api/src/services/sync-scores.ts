@@ -115,6 +115,7 @@ interface OurMatch {
   liveStatus: string | null;
   homeTeamCode: string;
   awayTeamCode: string;
+  scoreLocked: boolean;
 }
 
 /**
@@ -244,6 +245,7 @@ export async function syncScores(options: SyncScoresOptions = {}): Promise<SyncS
       liveStatus: matches.liveStatus,
       homeTeamId: matches.homeTeamId,
       awayTeamId: matches.awayTeamId,
+      scoreLocked: matches.scoreLocked,
     })
     .from(matches);
   const allTeams = await db.select({ id: teams.id, code: teams.code }).from(teams);
@@ -257,6 +259,7 @@ export async function syncScores(options: SyncScoresOptions = {}): Promise<SyncS
     liveStatus: m.liveStatus,
     homeTeamCode: m.homeTeamId != null ? (codeById.get(m.homeTeamId) ?? '') : '',
     awayTeamCode: m.awayTeamId != null ? (codeById.get(m.awayTeamId) ?? '') : '',
+    scoreLocked: m.scoreLocked === 1,
   }));
 
   // --- Process each fd match ---
@@ -279,10 +282,12 @@ export async function syncScores(options: SyncScoresOptions = {}): Promise<SyncS
       const downgradeBlocked = ourMatch.status === 'finished' && newStatus === 'live';
       const effStatus = downgradeBlocked ? 'finished' : newStatus;
 
-      // Check if anything changed
+      // Check if anything changed. When the score is admin-locked, the feed
+      // must NOT move it (football-data once published ESP-KSA 5-0 for a 4-0
+      // game), so treat the score as unchanged regardless of what the feed says.
       const statusChanged = ourMatch.status !== effStatus;
-      const scoreChanged =
-        ourMatch.homeScore !== newHomeScore || ourMatch.awayScore !== newAwayScore;
+      const scoreChanged = !ourMatch.scoreLocked &&
+        (ourMatch.homeScore !== newHomeScore || ourMatch.awayScore !== newAwayScore);
       // Guard against spurious feed regressions on a match we already marked
       // finished: if our row is 'finished' and the new payload would un-set
       // full_time (a stray IN_PLAY tick after FT), we keep the existing
@@ -298,8 +303,10 @@ export async function syncScores(options: SyncScoresOptions = {}): Promise<SyncS
       if (!statusChanged && !scoreChanged && !liveStatusChanged) continue;
 
       const updatePayload: Record<string, unknown> = { status: effStatus, liveStatus: effectiveLiveStatus };
-      if (newHomeScore !== null) updatePayload.homeScore = newHomeScore;
-      if (newAwayScore !== null) updatePayload.awayScore = newAwayScore;
+      if (!ourMatch.scoreLocked) {
+        if (newHomeScore !== null) updatePayload.homeScore = newHomeScore;
+        if (newAwayScore !== null) updatePayload.awayScore = newAwayScore;
+      }
 
       // If a previously-finished match reverts to scheduled (POSTPONED
       // corrections upstream), clear scores and unscore the predictions.
@@ -310,7 +317,7 @@ export async function syncScores(options: SyncScoresOptions = {}): Promise<SyncS
       // sólo limpiamos si el nuevo estado es claramente 'scheduled'. Un
       // payload finished sin scores es ruido y se ignora: dejamos los
       // valores que ya tenemos persistidos.
-      if (ourMatch.status === 'finished' && newStatus === 'scheduled') {
+      if (ourMatch.status === 'finished' && newStatus === 'scheduled' && !ourMatch.scoreLocked) {
         updatePayload.homeScore = null;
         updatePayload.awayScore = null;
         updatePayload.liveStatus = null;
@@ -334,11 +341,14 @@ export async function syncScores(options: SyncScoresOptions = {}): Promise<SyncS
 
       synced++;
 
-      // Recalculate prediction points when the match just became finished
+      // Recalculate prediction points when the match just became finished.
+      // Skip when score-locked: predictions were already scored against the
+      // admin-corrected result; re-scoring here would use the (wrong) feed score.
       if (
         newStatus === 'finished' &&
         newHomeScore !== null &&
-        newAwayScore !== null
+        newAwayScore !== null &&
+        !ourMatch.scoreLocked
       ) {
         anyMatchFinished = true;
 

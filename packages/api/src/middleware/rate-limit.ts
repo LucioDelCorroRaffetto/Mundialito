@@ -31,12 +31,20 @@ export function rateLimit({
   routeKey: string;
 }) {
   return (req: Request, res: Response, next: NextFunction) => {
-    // Respect a reverse proxy if it sets X-Forwarded-For (Render does).
-    // Fall back to remoteAddress otherwise.
-    const ip =
-      (req.headers['x-forwarded-for']?.toString().split(',')[0].trim()) ||
-      req.socket.remoteAddress ||
-      'unknown';
+    // Derive the client IP from X-Forwarded-For, taking the LAST entry — the
+    // one appended by the closest trusted proxy (Render's LB) — not the first.
+    // A client can prepend arbitrary values to XFF to spoof the leftmost IP
+    // and bypass the limiter (password spray with a rotating fake IP each
+    // request); it cannot forge the hop the proxy itself adds. Fall back to
+    // the raw socket address when there is no proxy header.
+    const xff = req.headers['x-forwarded-for'];
+    const hops = (Array.isArray(xff) ? xff.join(',') : xff ?? '')
+      .split(',')
+      .map((h) => h.trim())
+      .filter(Boolean);
+    const ip = hops.length > 0
+      ? hops[hops.length - 1]
+      : (req.socket.remoteAddress || 'unknown');
     const key = `${ip}:${routeKey}`;
     const now = Date.now();
 

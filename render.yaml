@@ -41,6 +41,10 @@ services:
         sync: false
       - key: API_FOOTBALL_KEY
         sync: false
+      # Requerido en producción: sin esto el endpoint POST /sync responde 503.
+      # Mismo valor que usa el worker y el cron externo (header x-sync-secret).
+      - key: SYNC_SECRET
+        sync: false
 
   # ── Worker (Cron Job — cada 2 min) ──────────────────────────────────────────
   - type: cron

@@ -2,8 +2,9 @@ import { Request, Response } from 'express';
 import { z } from 'zod';
 import { and, eq } from 'drizzle-orm';
 import { db } from '../../../db/index.js';
-import { predictions, predictionScorers } from '../../../db/schema/index.js';
+import { predictions, predictionScorers, matches } from '../../../db/schema/index.js';
 import { AppError, NotFoundError } from '../../../lib/errors.js';
+import { isLocked } from '../../../lib/match-helpers.js';
 
 export const upsertScorersSchema = z.object({
   matchId: z.number().int().positive(),
@@ -36,6 +37,15 @@ export async function upsertScorersHandler(req: Request, res: Response) {
     .get();
 
   if (!prediction) throw new NotFoundError('Prediction');
+
+  // Reject edits once the match is locked (kickoff − 5min). Mirrors
+  // upsert-prediction: without this, scorer picks could be changed after
+  // kickoff or post-match.
+  const match = await db.select().from(matches).where(eq(matches.id, matchId)).get();
+  if (!match) throw new NotFoundError('Match');
+  if (isLocked(match.predictionLockUtc)) {
+    throw new AppError('LOCKED', 'Prediction lock has passed for this match', 409);
+  }
 
   if (scorers.length === 0) {
     throw new AppError('VALIDATION_ERROR', 'scorers array cannot be empty', 400);

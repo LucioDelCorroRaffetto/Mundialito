@@ -32,11 +32,14 @@ export async function updateMatchHandler(req: Request, res: Response) {
   const match = await db.select().from(matches).where(eq(matches.id, matchId)).get();
   if (!match) throw new NotFoundError('Match');
 
-  // Build update payload
+  // Build update payload. When an admin sets a score by hand, lock it so the
+  // score feeds (sync-scores/sync-espn) stop overwriting it — they were the
+  // reason it was wrong in the first place.
   const updatePayload: Record<string, unknown> = {};
   if (homeScore !== undefined) updatePayload.homeScore = homeScore;
   if (awayScore !== undefined) updatePayload.awayScore = awayScore;
   if (status !== undefined) updatePayload.status = status;
+  if (homeScore !== undefined || awayScore !== undefined) updatePayload.scoreLocked = 1;
 
   if (Object.keys(updatePayload).length === 0) {
     return res.status(400).json({ error: { code: 'VALIDATION_ERROR', message: 'No fields to update' } });

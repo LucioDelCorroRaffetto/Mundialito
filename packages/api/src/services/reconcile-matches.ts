@@ -15,6 +15,7 @@ import { matches, predictions } from '../db/schema/index.js';
 import { calculatePoints } from '../lib/scoring.js';
 import { checkAchievements } from './achievement-service.js';
 import { recomputeAllFantasyPoints } from './fantasy-scoring-service.js';
+import { syncFifaStatsForMatch } from './sync-fifa-stats.js';
 
 const FIVE_MIN_MS  = 5 * 60 * 1000;
 const TWELVE_H_MS  = 12 * 60 * 60 * 1000;
@@ -118,6 +119,16 @@ export async function reconcileMatchStatuses(): Promise<ReconcileResult> {
       anyFinished = true;
       console.log(`[reconcile] match ${m.id} auto live→finished (kickoff ${(age / 3600000).toFixed(1)}h ago, ${m.homeScore}-${m.awayScore})`);
       await scoreMatchPredictions(m.id, m.homeScore, m.awayScore);
+      // Pull FIFA player stats for this match too. The score+ESPN feeds
+      // trigger this on their own finish transitions, but when reconcile is
+      // the path that closes the match (both feeds dropped FINISHED and FIFA
+      // never gave the final whistle), nothing else populates
+      // player_match_stats — leaving every starter on 0 fantasy points for
+      // the round. Self-dedupes by matchId; fire-and-forget so a FIFA outage
+      // doesn't block the reconcile pass.
+      syncFifaStatsForMatch(m.id).catch((err) =>
+        console.error(`[reconcile] FIFA stats sync failed for match ${m.id}:`, err),
+      );
     } catch (err) {
       result.errors.push(`auto-finish match ${m.id}: ${String(err)}`);
     }

@@ -44,6 +44,17 @@ export const matches = sqliteTable('matches', {
   currentMinute: text('current_minute'),
   homeScore: integer('home_score'),
   awayScore: integer('away_score'),
+  /**
+   * Manual score override. When 1, the score sync feeds (sync-scores /
+   * sync-espn) will NOT overwrite home_score/away_score nor re-score
+   * predictions for this match — the admin set the result by hand because a
+   * feed was wrong. Status/liveStatus still sync normally. Set by the admin
+   * update-match endpoint (and by hand when correcting a bad feed result).
+   * Caso real (jun-2026): football-data publicó ESP-KSA 5-0 cuando terminó
+   * 4-0 (ESPN y la timeline FIFA = 4 goles); sin este flag el sync revertía
+   * la corrección cada 3 min.
+   */
+  scoreLocked: integer('score_locked').notNull().default(0),
   apiFixtureId: integer('api_fixture_id'), // nullable — API-Football fixture ID (no longer used in free tier)
   // FIFA.com API identifiers for the per-match timeline endpoint. We use
   // FIFA's public API for player stats (goals/assists/cards) because
