@@ -96,6 +96,7 @@ interface OurMatch {
   liveStatus: string | null;
   homeTeamCode: string;
   awayTeamCode: string;
+  scoreLocked: boolean;
 }
 
 /**
@@ -238,6 +239,7 @@ export async function syncScoresFromEspn(date: string): Promise<SyncScoresResult
       liveStatus: matches.liveStatus,
       homeTeamId: matches.homeTeamId,
       awayTeamId: matches.awayTeamId,
+      scoreLocked: matches.scoreLocked,
     })
     .from(matches);
   const allTeams = await db.select({ id: teams.id, code: teams.code }).from(teams);
@@ -251,6 +253,7 @@ export async function syncScoresFromEspn(date: string): Promise<SyncScoresResult
     liveStatus: m.liveStatus,
     homeTeamCode: m.homeTeamId != null ? (codeById.get(m.homeTeamId) ?? '') : '',
     awayTeamCode: m.awayTeamId != null ? (codeById.get(m.awayTeamId) ?? '') : '',
+    scoreLocked: m.scoreLocked === 1,
   }));
 
   for (const event of events) {
@@ -324,14 +327,18 @@ export async function syncScoresFromEspn(date: string): Promise<SyncScoresResult
         ? (ourMatch.liveStatus ?? 'in_play')
         : downgradeBlocked ? (ourMatch.liveStatus ?? 'full_time') : newLiveStatus;
 
+      // Admin-locked score → the feed must not move it (see sync-scores).
       const statusChanged = ourMatch.status !== effStatus;
-      const scoreChanged  = ourMatch.homeScore !== newHomeScore || ourMatch.awayScore !== newAwayScore;
+      const scoreChanged  = !ourMatch.scoreLocked &&
+        (ourMatch.homeScore !== newHomeScore || ourMatch.awayScore !== newAwayScore);
       const liveStatusChanged = ourMatch.liveStatus !== effLiveStatus;
       if (!statusChanged && !scoreChanged && !liveStatusChanged) continue;
 
       const updatePayload: Record<string, unknown> = { status: effStatus, liveStatus: effLiveStatus };
-      if (newHomeScore !== null) updatePayload.homeScore = newHomeScore;
-      if (newAwayScore !== null) updatePayload.awayScore = newAwayScore;
+      if (!ourMatch.scoreLocked) {
+        if (newHomeScore !== null) updatePayload.homeScore = newHomeScore;
+        if (newAwayScore !== null) updatePayload.awayScore = newAwayScore;
+      }
 
       const [updatedMatch] = await db
         .update(matches)
@@ -344,7 +351,7 @@ export async function syncScoresFromEspn(date: string): Promise<SyncScoresResult
       // Score predictions when match finishes. Skip while holding a shootout
       // whose winner ESPN hasn't published — scoring a tied KO would credit
       // the wrong predictors.
-      if (newStatus === 'finished' && !shootoutWinnerUnknown && newHomeScore !== null && newAwayScore !== null) {
+      if (newStatus === 'finished' && !shootoutWinnerUnknown && !ourMatch.scoreLocked && newHomeScore !== null && newAwayScore !== null) {
         anyMatchFinished = true;
         const matchPredictions = await db.select().from(predictions).where(eq(predictions.matchId, ourMatch.id));
         for (const pred of matchPredictions) {

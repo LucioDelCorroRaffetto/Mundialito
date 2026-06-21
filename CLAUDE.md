@@ -249,6 +249,13 @@ FIFA.com no necesita key.
     `AVG(home_score-away_score)` debe apuntar al favorito (confiable solo con
     favorito claro). El fix de "score por identidad" (#13) hace que el display
     invertido sea inofensivo PARA LOS SCORES, pero NO para los pronósticos.
+15. **Una fuente puede estar simplemente MAL** (no solo desincronizada).
+    football-data.org publicó ESP-KSA 5-0 cuando terminó 4-0 (ESPN y FIFA = 4 goles).
+    Como `/sync` prioriza football-data, revertía la corrección cada tick. Para esos
+    casos: **`matches.score_locked = 1`** (lo setea el admin al editar el score; los
+    syncs respetan el flag y dejan de pisar score + de re-puntuar). Para diagnosticar
+    un score sospechoso: comparar `match_events` (goles FIFA) vs el score del feed —
+    si difieren, FIFA/ESPN suelen tener razón. Ver Bitácora 2026-06-21.
 
 ## Pendientes conocidos (no bugs, decisiones)
 
@@ -279,6 +286,27 @@ FIFA.com no necesita key.
 
 > Orden cronológico inverso (lo nuevo arriba). Cada entrada: **qué cambió y por qué**.
 > Agregá una entrada cada vez que cambies un comportamiento por una razón.
+
+### 2026-06-21 — Override de score (`scoreLocked`) + fix ESP-KSA 5-0→4-0
+
+- **Síntoma**: el partido 39 (España-Arabia, grupo H) mostraba **5-0** pero terminó
+  **4-0**.
+- **Causa raíz**: **football-data.org publicó 5-0** (dato erróneo de la fuente).
+  ESPN decía 4-0 (ESP ganador) y la **timeline FIFA tenía 4 goles** (3 + 1 en contra)
+  — las dos fuentes correctas. Como `/sync` prioriza football-data y el partido
+  seguía en la ventana (yesterday+today), cada tick volvía a pisar el score a 5-0.
+- **Fix estructural**: nueva columna **`matches.score_locked`** (0/1). Cuando es 1,
+  `sync-scores` y `sync-espn` **no** tocan home/away score **ni** re-puntúan las
+  predicciones de ese match (status/liveStatus siguen sincronizando normal). El
+  endpoint admin `update-match` ahora **setea `score_locked=1`** cuando un admin
+  edita el score a mano. Migración idempotente: `src/scripts/add-score-locked-column.ts`.
+- **Fix de datos (prod)**: match 39 → 4-0 + `score_locked=1`; re-puntuadas sus
+  predicciones contra 4-0 → **3 pronósticos de "5-0" que estaban mal acreditados con
+  5 pts (exacto contra el 5-0 corrupto) bajaron a 1 pt**. Fantasy intacto (se basa en
+  `player_match_stats` de FIFA = 4 goles, no en el score; valla por away=0 sin cambio).
+- ⚠️ **Orden de deploy**: la corrección de datos solo **se mantiene** una vez
+  deployado este código (el guard de `score_locked`). Con el código viejo corriendo,
+  el sync puede revertir el 4-0 a 5-0 en el próximo tick. Deployar **entre partidos**.
 
 ### 2026-06-21 — Auditoría con 5 agentes + primer batch de fixes y tests
 
