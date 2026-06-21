@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '@/shared/lib/api-client';
+import type { FantasyPlayerBreakdown } from '@/shared/types/api';
 
 export interface FantasyRoundInfo {
   slug: string;
@@ -23,6 +24,8 @@ export interface FantasyLineupPlayer {
     teamFlag: string;
     teamName: string;
   } | null;
+  /** Populated only when the round is closed (deadline passed). */
+  breakdown: FantasyPlayerBreakdown | null;
 }
 
 export interface FantasyLineupData {
