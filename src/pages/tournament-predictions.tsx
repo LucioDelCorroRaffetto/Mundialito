@@ -380,7 +380,7 @@ function ForecastTopCandidates() {
             style={{ gridTemplateColumns: '1.5rem 1.2rem 1fr repeat(6, 2.6rem)' }}
           >
             <span className="text-muted font-bold tabular-nums">{i + 1}</span>
-            <span>{row.teamFlag}</span>
+            <TeamFlag code={row.teamCode} emoji={row.teamFlag} size={16} />
             <span className="text-text font-semibold truncate pr-1">{row.teamName}</span>
             {FORECAST_ROUNDS.map((r) => {
               const val = row[r.key];
