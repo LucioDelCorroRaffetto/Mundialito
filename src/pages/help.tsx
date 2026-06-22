@@ -1,7 +1,9 @@
 import { useNavigate } from 'react-router-dom';
+import { motion } from 'framer-motion';
 import { ArrowLeft, Share2, Download, Users, CheckCircle2 } from 'lucide-react';
 import { usePwaInstall } from '@/shared/hooks/use-pwa-install';
 import { Button } from '@/shared/components/ui/button';
+import { staggerContainer, staggerItem, useMotionPrefs } from '@/shared/lib/motion';
 
 /**
  * Guía de onboarding para gente no técnica ("el primo de mi novia"):
@@ -31,23 +33,26 @@ const WHATSAPP_MESSAGE = encodeURIComponent(
   `Después te paso el código de nuestra liga 🏆`,
 );
 
-function Step({ n, title, children }: { n: number; title: string; children: React.ReactNode }) {
+function Step({ n, title, children, reduced }: { n: number; title: string; children: React.ReactNode; reduced: boolean }) {
   return (
-    <div className="flex gap-3 p-4 rounded-xl bg-card border border-border">
-      <span className="w-8 h-8 rounded-full bg-accent text-accent-on font-display font-bold flex items-center justify-center flex-shrink-0">
+    <motion.div variants={staggerItem(reduced)} className="flex gap-3 p-4 rounded-xl bg-card border border-border">
+      <span className="w-8 h-8 rounded-full bg-accent text-accent-on font-display font-bold flex items-center justify-center flex-shrink-0" aria-hidden="true">
         {n}
       </span>
       <div className="flex-1 min-w-0">
-        <p className="text-base-s font-bold text-text mb-1">{title}</p>
+        <p className="text-base-s font-bold text-text mb-1">
+          <span className="sr-only">Paso {n}: </span>{title}
+        </p>
         <div className="text-sm-s text-muted leading-relaxed">{children}</div>
       </div>
-    </div>
+    </motion.div>
   );
 }
 
 export function HelpPage() {
   const navigate = useNavigate();
   const { isInstallable, isInstalled, install } = usePwaInstall();
+  const { reduced } = useMotionPrefs();
   const platform = detectPlatform();
 
   return (
@@ -62,9 +67,14 @@ export function HelpPage() {
         3 pasos para jugar el prode del Mundial con tus amigos.
       </p>
 
-      <div className="flex flex-col gap-3 px-4">
+      <motion.div
+        className="flex flex-col gap-3 px-4"
+        variants={staggerContainer(reduced, 0.06)}
+        initial="initial"
+        animate="animate"
+      >
         {/* ── Paso 1: instalar ─────────────────────────────────────────── */}
-        <Step n={1} title="Instalá la app en tu teléfono">
+        <Step n={1} title="Instalá la app en tu teléfono" reduced={reduced}>
           {isInstalled ? (
             <p className="flex items-center gap-2 text-green-600 dark:text-green-300 font-semibold">
               <CheckCircle2 size={16} /> ¡Ya la tenés instalada!
@@ -98,7 +108,7 @@ export function HelpPage() {
         </Step>
 
         {/* ── Paso 2: cuenta ───────────────────────────────────────────── */}
-        <Step n={2} title="Creá tu cuenta">
+        <Step n={2} title="Creá tu cuenta" reduced={reduced}>
           <p>
             Con <strong className="text-text">Google es 1 toque</strong>, o registrate con
             email y contraseña. Ya podés dejar tus pronósticos — no hace falta liga para empezar.
@@ -106,7 +116,7 @@ export function HelpPage() {
         </Step>
 
         {/* ── Paso 3: liga ─────────────────────────────────────────────── */}
-        <Step n={3} title="Armá la liga con tus amigos">
+        <Step n={3} title="Armá la liga con tus amigos" reduced={reduced}>
           <ol className="list-decimal ml-4 space-y-1 mb-3">
             <li>Andá a <strong className="text-text">Ligas → + Nueva</strong></li>
             <li>Poné un nombre (ej: "Los del asado")</li>
@@ -124,15 +134,15 @@ export function HelpPage() {
         </Step>
 
         {/* ── Bonus ────────────────────────────────────────────────────── */}
-        <div className="flex gap-3 p-4 rounded-xl bg-accent-soft border border-accent-border">
+        <motion.div variants={staggerItem(reduced)} className="flex gap-3 p-4 rounded-xl bg-accent-soft border border-accent-border">
           <Users size={20} className="text-accent flex-shrink-0 mt-0.5" />
           <p className="text-sm-s text-muted leading-relaxed">
             <strong className="text-text">Tip:</strong> activá las notificaciones en{' '}
             <strong className="text-text">Perfil → Configuración</strong> para que te avise
             antes de que cierren los pronósticos de cada partido.
           </p>
-        </div>
-      </div>
+        </motion.div>
+      </motion.div>
     </div>
   );
 }

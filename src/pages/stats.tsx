@@ -5,6 +5,7 @@ import { useLeaderboards, type LeaderboardRow } from '@/shared/hooks/use-stats';
 import { SkeletonList } from '@/shared/components/skeleton';
 import { TeamFlag } from '@/shared/components/ui/team-flag';
 import { cn } from '@/shared/lib/cn';
+import { staggerContainer, staggerItem, useMotionPrefs } from '@/shared/lib/motion';
 
 type TabId = 'goals' | 'assists' | 'yellow' | 'red';
 
@@ -31,6 +32,7 @@ const PODIUM = [
 ];
 
 function LeaderboardList({ rows, color, emptyMsg, unit }: { rows: LeaderboardRow[]; color: string; emptyMsg: string; unit: [string, string] }) {
+  const { reduced } = useMotionPrefs();
   if (rows.length === 0) {
     return (
       <div className="px-4 py-10 text-center">
@@ -39,7 +41,12 @@ function LeaderboardList({ rows, color, emptyMsg, unit }: { rows: LeaderboardRow
     );
   }
   return (
-    <div className="px-4 flex flex-col gap-1.5">
+    <motion.div
+      className="px-4 flex flex-col gap-1.5"
+      variants={staggerContainer(reduced, 0.03)}
+      initial="initial"
+      animate="animate"
+    >
       {rows.map((row, i) => {
         const podium = i < 3 ? PODIUM[i] : null;
         // Mostramos el rank "dense" — empatados comparten posición, evita
@@ -59,9 +66,7 @@ function LeaderboardList({ rows, color, emptyMsg, unit }: { rows: LeaderboardRow
               </div>
             )}
             <motion.div
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: Math.min(i * 0.02, 0.3) }}
+              variants={staggerItem(reduced)}
               className={cn(
                 'flex items-center gap-3 p-3 rounded-xl border transition-colors',
                 podium
@@ -119,7 +124,7 @@ function LeaderboardList({ rows, color, emptyMsg, unit }: { rows: LeaderboardRow
           </div>
         );
       })}
-    </div>
+    </motion.div>
   );
 }
 
@@ -145,15 +150,17 @@ export function StatsPage() {
 
       {/* Tabs — sticky para que al scrollear largas tablas (38+ goleadores)
           el usuario siga viendo qué métrica está mirando y pueda alternar. */}
-      <div className="sticky top-0 z-10 flex gap-1 overflow-x-auto no-scrollbar px-4 pt-1 pb-3 bg-bg/95 backdrop-blur border-b border-border">
+      <div role="tablist" aria-label="Métrica del torneo" className="sticky top-0 z-10 flex gap-1 overflow-x-auto no-scrollbar px-4 pt-1 pb-3 bg-bg/95 backdrop-blur border-b border-border">
         {TABS.map(({ id, label, Icon, color }) => {
           const active = tab === id;
           return (
             <button
               key={id}
               type="button"
+              role="tab"
               onClick={() => setTab(id)}
               aria-pressed={active}
+              aria-selected={active}
               className={cn(
                 'flex-shrink-0 flex items-center gap-1.5 text-sm-s font-semibold px-3 py-1.5 rounded-full transition-colors',
                 active

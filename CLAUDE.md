@@ -287,6 +287,77 @@ FIFA.com no necesita key.
 > Orden cronológico inverso (lo nuevo arriba). Cada entrada: **qué cambió y por qué**.
 > Agregá una entrada cada vez que cambies un comportamiento por una razón.
 
+### 2026-06-22 — Fix banderas Copa (Windows) + badge "No pronosticaste"
+
+Dos fixes puntuales reportados desde la UI, deployados por separado (commits
+`e1b6002` y `999d0a1`) con `live=0`.
+
+- **Banderas de la tabla Monte Carlo (Oloráculo) no se veían en desktop/Windows**
+  (`tournament-predictions.tsx`). La tabla pintaba la bandera como emoji crudo
+  (`<span>{row.teamFlag}</span>`). **Windows no renderiza los emoji de bandera**
+  (regional indicators) y muestra el código de 2 letras. Fix: usar `<TeamFlag
+  code={row.teamCode} emoji={row.teamFlag} size={16} />` (imagen flagcdn con
+  fallback a emoji), mismo patrón que el resto de la app (stats.tsx). Barrido:
+  era el ÚNICO caso de emoji crudo de bandera en el código.
+- **Badge "FT" ambiguo en partidos finalizados sin pronóstico** (`matches.tsx`).
+  El `FT` no distinguía "no pronosticaste" de "pronóstico sin puntos". Se agrega
+  una línea tenue en cursiva "No pronosticaste" cuando `isFinished && !hasPrediction`
+  (el caso multi-liga divergente sigue difiriéndose al detalle). Nota: se evitó
+  `text-muted/70` (los tokens `var()` sin `<alpha-value>` no soportan el modificador
+  de opacidad → CSS inválido, mismo tipo de bug que `translate-x-5.5`); se usó
+  `text-muted italic`.
+
+### 2026-06-22 — Ronda profunda UX/perf (4 agentes paralelos) — APROBADA por auditor
+
+Segunda pasada "más a fondo" sobre la base ya deployada. 4 agentes con file-ownership
+disjunto (core / ligas+perfil / feature / infra compartida). Solo presentacional +
+perf de render + a11y — `git diff` sobre `shared/hooks`, `shared/stores`,
+`scoring.ts`, `levels.ts`, `packages` = VACÍO (confirmado por auditor). Verificación:
+`tsc -b` 0, `npm run test` 5/5, `npm run build` OK. Auditado por agente independiente:
+**APROBADO** (sin violaciones de alcance, keys de stagger estables, memo seguro,
+focus-trap correcto). Commit consolidado tras esperar `live=0`.
+
+> ⚠️ NOTA OPERATIVA: una primera corrida de esta ronda se cortó por límite de sesión
+> de los sub-agentes y dejó JSX sin cerrar (home.tsx/stats.tsx no compilaban). Se
+> stasheó lo roto (`git stash`) y se relanzó con instrucción de "edición atómica /
+> dejar el archivo compilable". Lección: en pasadas multi-agente largas, verificar
+> `tsc -b` del árbol consolidado ANTES de cualquier deploy; un agente cortado puede
+> dejar el árbol roto.
+
+- ✅ **Adopción de las primitivas de `motion.ts`** (creadas el 21/6, hasta ahora sin
+  consumir): `staggerContainer`/`staggerItem`/`useMotionPrefs` en listas de
+  leaderboard, matches (secciones + filas), home (ligas + próximos), league-detail
+  (standings), profile/user-profile (logros), achievements (grids), stats, fantasy
+  (standings), tournament-predictions (Monte Carlo), help (pasos). **Stagger solo en
+  mount, NO en polling**: keys de contenedor estables → el refetch actualiza filas
+  sin re-disparar la entrada (verificado contra polls reales 30/60s). Degradan a
+  opacity-only con reduce-motion.
+- ✅ **Performance**: `React.memo` en `LeaderboardRow`, `Row` (standings),
+  `MatchEvents` (timeline de match-detail, re-render en poll live de 45s),
+  `StatCard`, `FantasyGuide`, `BreakdownBadges`. `useMemo` en derivaciones
+  (entries/top3/rest/myEntry, predictedIds, locked). Las props de datos cambian de
+  referencia en refetch → las filas con score en vivo SÍ se actualizan (memo no las
+  congela).
+- ✅ **Focus management en modales** (`achievement-card-modal`, `share-sheet`):
+  focus-trap (foco inicial, ciclo Tab/Shift+Tab, restauración al cerrar, Escape,
+  `role=dialog`/`aria-modal`/`aria-labelledby`), lock de scroll. share-sheet no tenía
+  Escape ni lock. Independiente de animación (ok con reduce-motion). El `useFocusTrap`
+  quedó DUPLICADO en los 2 modales (deuda: extraer a `shared/lib/use-focus-trap.ts`).
+- ✅ **Tap-targets ≥44px**: chips de filtro/status tabs de matches (sin romper el
+  scroll horizontal), botones icon-only "Volver"/"Compartir"/Settings en ligas/perfil,
+  botones de modales. Cierra la deuda "Volver ~34px" en esas páginas (pendiente en
+  fantasy/tournament-predictions/match-detail).
+- ✅ **A11y**: roles de tablist/tab/switch, `aria-pressed`/`aria-selected`/`aria-current`,
+  labels de inputs, `aria-busy` en button loading, `error-boundary` con botón real,
+  empty-state de catálogo vacío en achievements, `sr-only "Paso N"` en help.
+- ✅ **Fix de auditoría aplicado pre-deploy**: `league-detail.tsx` usaba
+  `key={standings.length}` en el contenedor de stagger → re-animaba la tabla ante
+  alta/baja de miembros. Quitada la key (consistente con leaderboard/home).
+- ⚠️ **Pendiente (deuda menor post-torneo)**: `LineupRow` (fantasy) y las 7 PickCards
+  (tournament-predictions) no se memoizaron/animaron (requerían refactor estructural).
+  Front sigue sin tests de componente (solo el drift-guard de levels.ts). `useFocusTrap`
+  duplicado. tab-bar/sidebar sin cambios (ya cumplían / desktop-only).
+
 ### 2026-06-21 — Pasada UX/UI multi-agente (4 agentes paralelos, presentacional)
 
 Cuatro agentes en paralelo con propiedad de archivos particionada (paleta/tema,

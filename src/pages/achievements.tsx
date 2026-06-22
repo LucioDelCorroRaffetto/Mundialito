@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Lock, Sparkles, Check } from 'lucide-react';
+import { Lock, Sparkles, Check, Trophy } from 'lucide-react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAllAchievements, useMyAchievements, type Achievement } from '@/shared/hooks/use-achievements';
 import { SkeletonList } from '@/shared/components/skeleton';
@@ -10,6 +10,7 @@ import { useAuthStore } from '@/shared/stores/auth-store';
 import { computeLevel } from '@/shared/lib/levels';
 import { apiClient } from '@/shared/lib/api-client';
 import { cn } from '@/shared/lib/cn';
+import { staggerContainer, staggerItem, useMotionPrefs } from '@/shared/lib/motion';
 
 const TIER_RING: Record<string, string> = {
   bronze: 'border-amber-700/40 hover:border-amber-500/70',
@@ -25,6 +26,7 @@ export function AchievementsPage() {
   const setMeInStore = useAuthStore((s) => s.login);
   const token = useAuthStore((s) => s.token);
   const queryClient = useQueryClient();
+  const { reduced } = useMotionPrefs();
   const [selected, setSelected] = useState<{ achievement: Achievement; earned: boolean; earnedAt?: string } | null>(null);
 
   const all = allData?.data ?? [];
@@ -78,6 +80,31 @@ export function AchievementsPage() {
 
   if (allLoading) return <div className="p-4"><SkeletonList count={8} /></div>;
 
+  // Catálogo vacío (logros aún no sincronizados / fallo de carga sin error
+  // duro): mostramos un empty-state claro en vez del header + barra de
+  // progreso en 0/0, que se ve roto.
+  if (all.length === 0) {
+    return (
+      <div className="flex flex-col min-h-full animate-fade-in pb-8">
+        <div className="px-4 pt-6 pb-2">
+          <h1 className="text-2xl-s font-display font-bold text-text">Logros</h1>
+        </div>
+        <div className="mx-4 mt-6 p-6 rounded-xl bg-card border border-border flex flex-col items-center gap-4 text-center">
+          <div className="w-12 h-12 rounded-full bg-accent/10 flex items-center justify-center">
+            <Trophy size={22} className="text-accent" />
+          </div>
+          <div>
+            <p className="text-base-s font-bold text-text">Todavía no hay logros</p>
+            <p className="text-sm-s text-muted mt-1 leading-relaxed">
+              El catálogo de logros aún no está disponible. Volvé en un rato —
+              vas a poder desbloquearlos jugando el prode.
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col gap-4 pb-8 animate-fade-in">
       <div className="px-4 pt-6 pb-2">
@@ -122,15 +149,18 @@ export function AchievementsPage() {
           <h2 className="text-xs-s font-semibold text-muted uppercase tracking-wider mb-3">
             Desbloqueados
           </h2>
-          <div className="grid grid-cols-2 gap-3">
-            {earned.map((a, i) => {
+          <motion.div
+            className="grid grid-cols-2 gap-3"
+            variants={staggerContainer(reduced)}
+            initial="initial"
+            animate="animate"
+          >
+            {earned.map((a) => {
               const isCurrentTitle = a.slug === selectedTitleSlug;
               return (
                 <motion.div
                   key={a.slug}
-                  initial={{ opacity: 0, scale: 0.9 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  transition={{ delay: i * 0.05 }}
+                  variants={staggerItem(reduced)}
                   className={cn(
                     'p-4 rounded-xl bg-card border flex flex-col gap-2 transition-colors relative',
                     isCurrentTitle
@@ -162,6 +192,8 @@ export function AchievementsPage() {
                   <button
                     type="button"
                     disabled={titleMutation.isPending}
+                    aria-pressed={isCurrentTitle}
+                    aria-label={isCurrentTitle ? `Quitar "${a.name}" como título` : `Usar "${a.name}" como título`}
                     onClick={() => titleMutation.mutate(isCurrentTitle ? null : a.slug)}
                     className={cn(
                       'mt-1 text-[11px] font-semibold rounded-md py-1.5 px-2 border transition-colors',
@@ -181,7 +213,7 @@ export function AchievementsPage() {
                 </motion.div>
               );
             })}
-          </div>
+          </motion.div>
         </div>
       )}
 
@@ -191,15 +223,18 @@ export function AchievementsPage() {
           <h2 className="text-xs-s font-semibold text-muted uppercase tracking-wider mb-3">
             Por desbloquear
           </h2>
-          <div className="grid grid-cols-2 gap-3">
-            {locked.map((a, i) => (
+          <motion.div
+            className="grid grid-cols-2 gap-3"
+            variants={staggerContainer(reduced)}
+            initial="initial"
+            animate="animate"
+          >
+            {locked.map((a) => (
               <motion.button
                 key={a.slug}
                 type="button"
                 onClick={() => openCard(a, false)}
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: i * 0.03 }}
+                variants={staggerItem(reduced)}
                 className={cn(
                   'p-4 rounded-xl bg-card border flex flex-col gap-2 text-left opacity-60 hover:opacity-100 transition-opacity',
                   TIER_RING[a.tier] ?? 'border-border',
@@ -218,7 +253,7 @@ export function AchievementsPage() {
                 </span>
               </motion.button>
             ))}
-          </div>
+          </motion.div>
         </div>
       )}
 

@@ -1,3 +1,4 @@
+import { memo, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { BarChart2, ChevronRight, RotateCw } from 'lucide-react';
@@ -6,6 +7,7 @@ import { SkeletonList } from '@/shared/components/skeleton';
 import { useGlobalLeaderboard, type LeaderboardEntry, type TopBadge } from '@/shared/hooks/use-leaderboard';
 import { useAuthStore } from '@/shared/stores/auth-store';
 import { UserLevelBadge } from '@/shared/components/user-level-badge';
+import { staggerContainer, staggerItem, useMotionPrefs } from '@/shared/lib/motion';
 
 const MEDAL_COLORS = [
   // Each medal carries a colour for both modes so the gold/silver/bronze
@@ -84,14 +86,20 @@ function PodiumCard({ entry, place }: { entry: LeaderboardEntry; place: 0 | 1 | 
   );
 }
 
-function LeaderboardRow({ entry, isMe }: { entry: LeaderboardEntry; isMe: boolean }) {
+const LeaderboardRow = memo(function LeaderboardRow({
+  entry,
+  isMe,
+  reduced,
+}: {
+  entry: LeaderboardEntry;
+  isMe: boolean;
+  reduced: boolean;
+}) {
   const initials = entry.username.slice(0, 1).toUpperCase();
   return (
     <Link to={`/u/${entry.userId}`}>
     <motion.div
-      initial={{ opacity: 0, x: -8 }}
-      animate={{ opacity: 1, x: 0 }}
-      transition={{ delay: (entry.rank - 3) * 0.03 }}
+      variants={staggerItem(reduced)}
       className={cn(
         'flex items-center gap-3 px-4 py-3 border-b border-border last:border-0 hover:bg-elevated transition-colors',
         isMe && 'bg-accent-soft hover:bg-accent-soft/80'
@@ -133,18 +141,27 @@ function LeaderboardRow({ entry, isMe }: { entry: LeaderboardEntry; isMe: boolea
     </motion.div>
     </Link>
   );
-}
+});
 
 export function LeaderboardPage() {
   const { data, isLoading, isError, refetch, isFetching } = useGlobalLeaderboard(50);
   const currentUser = useAuthStore((s) => s.user);
+  const { reduced } = useMotionPrefs();
 
-  const entries = data?.data ?? [];
+  const entries = useMemo(() => data?.data ?? [], [data]);
   const showPodium = entries.length >= 1 && entries[0].totalPoints > 0;
-  const top3 = showPodium ? entries.slice(0, 3) : [];
-  const rest = showPodium ? entries.slice(3) : entries;
+  const { top3, rest } = useMemo(
+    () => ({
+      top3: showPodium ? entries.slice(0, 3) : [],
+      rest: showPodium ? entries.slice(3) : entries,
+    }),
+    [entries, showPodium],
+  );
 
-  const myEntry = entries.find((e) => e.userId === currentUser?.id);
+  const myEntry = useMemo(
+    () => entries.find((e) => e.userId === currentUser?.id),
+    [entries, currentUser?.id],
+  );
 
   if (isLoading) {
     return (
@@ -230,13 +247,22 @@ export function LeaderboardPage() {
             <span className="flex-1 text-xs text-muted">Jugador</span>
             <span className="text-xs text-muted">Pts</span>
           </div>
-          {rest.map((entry) => (
-            <LeaderboardRow
-              key={entry.userId}
-              entry={entry}
-              isMe={entry.userId === currentUser?.id}
-            />
-          ))}
+          {/* Stagger sólo en mount: la key del contenedor es estable, así el
+              polling de TanStack actualiza filas sin re-disparar la entrada. */}
+          <motion.div
+            variants={staggerContainer(reduced)}
+            initial="initial"
+            animate="animate"
+          >
+            {rest.map((entry) => (
+              <LeaderboardRow
+                key={entry.userId}
+                entry={entry}
+                isMe={entry.userId === currentUser?.id}
+                reduced={reduced}
+              />
+            ))}
+          </motion.div>
         </div>
       )}
 

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, memo } from 'react';
 import { Navigate, useNavigate, useParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { ArrowLeft, Star, Target, Crosshair, ClipboardList, Sparkles } from 'lucide-react';
@@ -8,6 +8,7 @@ import { useUserProfile } from '@/shared/hooks/use-user-profile';
 import { UserLevelCard, UserLevelBadge } from '@/shared/components/user-level-badge';
 import { AchievementCardModal } from '@/shared/components/achievement-card-modal';
 import { computeLevel } from '@/shared/lib/levels';
+import { staggerContainer, staggerItem, useMotionPrefs } from '@/shared/lib/motion';
 import type { Achievement } from '@/shared/hooks/use-achievements';
 
 // Tier chip colours with explicit light + dark variants. Without these the
@@ -19,20 +20,22 @@ const TIER_COLORS: Record<string, string> = {
   bronze:   'bg-amber-600/25 text-amber-800 border-amber-600/60 dark:bg-amber-700/20 dark:text-amber-500 dark:border-amber-700/40',
 };
 
-function StatCard({
+const StatCard = memo(function StatCard({
   icon,
   label,
   value,
   accentClass = 'text-accent',
+  reduced = false,
 }: {
   icon: React.ReactNode;
   label: string;
   value: string | number;
   accentClass?: string;
+  reduced?: boolean;
 }) {
   return (
     <motion.div
-      whileHover={{ y: -2 }}
+      whileHover={reduced ? undefined : { y: -2 }}
       transition={{ type: 'spring', stiffness: 280, damping: 18 }}
       className="relative flex flex-col items-center gap-1 p-3 rounded-xl bg-card border border-border overflow-hidden"
     >
@@ -46,7 +49,7 @@ function StatCard({
       <span className="relative text-[10px] text-muted text-center leading-tight uppercase tracking-wider font-bold">{label}</span>
     </motion.div>
   );
-}
+});
 
 /** Shimmering gold ring used around the admin avatar */
 function GoldRing({ children }: { children: React.ReactNode }) {
@@ -87,6 +90,7 @@ export function UserProfilePage() {
   const { userId: userIdParam } = useParams<{ userId: string }>();
   const navigate = useNavigate();
   const currentUser = useAuthStore((s) => s.user);
+  const { reduced } = useMotionPrefs();
 
   const userId = Number(userIdParam);
 
@@ -107,7 +111,7 @@ export function UserProfilePage() {
     return (
       <div className="flex flex-col min-h-full animate-fade-in">
         <div className="flex items-center gap-3 px-4 pt-5 pb-4">
-          <button onClick={() => navigate(-1)} className="p-2 rounded-md bg-elevated border border-border" aria-label="Volver">
+          <button onClick={() => navigate(-1)} className="flex items-center justify-center min-h-[44px] min-w-[44px] p-2 rounded-md bg-elevated border border-border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent" aria-label="Volver">
             <ArrowLeft size={18} className="text-text" />
           </button>
         </div>
@@ -122,12 +126,12 @@ export function UserProfilePage() {
     return (
       <div className="flex flex-col min-h-full animate-fade-in">
         <div className="flex items-center gap-3 px-4 pt-5 pb-4">
-          <button onClick={() => navigate(-1)} className="p-2 rounded-md bg-elevated border border-border" aria-label="Volver">
+          <button onClick={() => navigate(-1)} className="flex items-center justify-center min-h-[44px] min-w-[44px] p-2 rounded-md bg-elevated border border-border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent" aria-label="Volver">
             <ArrowLeft size={18} className="text-text" />
           </button>
           <div className="flex-1 min-w-0">
-            <div className="animate-pulse h-5 bg-white/10 rounded w-32 mb-1" />
-            <div className="animate-pulse h-3 bg-white/10 rounded w-20" />
+            <div className="animate-pulse h-5 bg-black/10 dark:bg-white/10 rounded w-32 mb-1" />
+            <div className="animate-pulse h-3 bg-black/10 dark:bg-white/10 rounded w-20" />
           </div>
         </div>
         <div className="px-4 flex flex-col gap-4">
@@ -152,7 +156,7 @@ export function UserProfilePage() {
     return (
       <div className="flex flex-col min-h-full animate-fade-in">
         <div className="flex items-center gap-3 px-4 pt-5 pb-4">
-          <button onClick={() => navigate(-1)} className="p-2 rounded-md bg-elevated border border-border" aria-label="Volver">
+          <button onClick={() => navigate(-1)} className="flex items-center justify-center min-h-[44px] min-w-[44px] p-2 rounded-md bg-elevated border border-border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent" aria-label="Volver">
             <ArrowLeft size={18} className="text-text" />
           </button>
         </div>
@@ -198,7 +202,7 @@ export function UserProfilePage() {
           <div className="relative flex items-center gap-3 px-4 pt-5 pb-3">
             <button
               onClick={() => navigate(-1)}
-              className="p-2 rounded-md bg-elevated border border-border"
+              className="flex items-center justify-center min-h-[44px] min-w-[44px] p-2 rounded-md bg-elevated border border-border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
               aria-label="Volver"
             >
               <ArrowLeft size={18} className="text-text" />
@@ -229,7 +233,7 @@ export function UserProfilePage() {
           <div className="relative flex items-center gap-3 px-4 pt-5 pb-3">
             <button
               onClick={() => navigate(-1)}
-              className="p-2 rounded-md bg-elevated border border-border"
+              className="flex items-center justify-center min-h-[44px] min-w-[44px] p-2 rounded-md bg-elevated border border-border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
               aria-label="Volver"
             >
               <ArrowLeft size={18} className="text-text" />
@@ -348,18 +352,21 @@ export function UserProfilePage() {
             label="Puntos"
             value={profile.stats.totalPoints}
             accentClass="text-amber-400"
+            reduced={reduced}
           />
           <StatCard
             icon={<Crosshair size={16} />}
             label="Exactos"
             value={profile.stats.exactScores}
             accentClass="text-emerald-400"
+            reduced={reduced}
           />
           <StatCard
             icon={<ClipboardList size={16} />}
             label="Jugados"
             value={profile.stats.totalPredictions}
             accentClass="text-sky-400"
+            reduced={reduced}
           />
         </div>
         {/* Precisión + resultados acertados — info extra que valía la pena
@@ -376,12 +383,14 @@ export function UserProfilePage() {
               // precisión" cuando todos los aciertos eran exactos.
               value={profile.stats.exactScores + profile.stats.correctResults}
               accentClass="text-violet-400"
+              reduced={reduced}
             />
             <StatCard
               icon={<span className="text-xs">%</span>}
               label="Precisión"
               value={`${accuracy}%`}
               accentClass="text-fuchsia-400"
+              reduced={reduced}
             />
           </div>
         )}
@@ -420,8 +429,13 @@ export function UserProfilePage() {
             <p className="text-xs-s text-muted/70 text-center">Hacé pronósticos y unite a ligas para empezar</p>
           </div>
         ) : (
-          <div className="flex flex-col gap-2">
-            {profile.achievements.map((a, i) => {
+          <motion.div
+            className="flex flex-col gap-2"
+            variants={staggerContainer(reduced)}
+            initial="initial"
+            animate="animate"
+          >
+            {profile.achievements.map((a) => {
               const isPresidentBadge = a.slug === 'presidente_fifa';
               return (
                 <motion.button
@@ -434,11 +448,11 @@ export function UserProfilePage() {
                       earnedAt: a.earnedAt,
                     })
                   }
-                  initial={{ opacity: 0, x: -8 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: i * 0.04 }}
+                  variants={staggerItem(reduced)}
                   className={cn(
-                    'relative overflow-hidden p-3 rounded-xl border flex items-center gap-3 transition-transform hover:-translate-y-0.5 text-left',
+                    'relative overflow-hidden p-3 rounded-xl border flex items-center gap-3 transition-transform text-left',
+                    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent',
+                    !reduced && 'hover:-translate-y-0.5',
                     isPresidentBadge
                       ? 'bg-gradient-to-r from-amber-100 to-yellow-50 border-amber-400/60 dark:from-yellow-500/10 dark:to-amber-600/5 dark:border-yellow-500/30'
                       : 'bg-card border-border',
@@ -483,7 +497,7 @@ export function UserProfilePage() {
                 </motion.button>
               );
             })}
-          </div>
+          </motion.div>
         )}
       </div>
 

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, memo } from 'react';
 import { useParams, useNavigate, Navigate, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { ArrowLeft, Share2, Users, Trophy, ChevronRight, Pencil, X, Check } from 'lucide-react';
@@ -10,6 +10,7 @@ import { LeagueBannerPicker } from '@/shared/components/ui/image-picker';
 import { useLeague, useLeagueStandings, useLeaveLeague, useUpdateLeague, type StandingRow } from '@/shared/hooks/use-leagues';
 import { useAuthStore } from '@/shared/stores/auth-store';
 import { podiumStyle } from '@/shared/components/logros-gate-banner';
+import { staggerContainer, staggerItem, useMotionPrefs } from '@/shared/lib/motion';
 
 const TABS = ['Tabla', 'Info'] as const;
 type Tab = (typeof TABS)[number];
@@ -109,22 +110,20 @@ function LeagueDescriptionBlock({
   );
 }
 
-function Row({ row, isMe }: { row: StandingRow; isMe: boolean }) {
+const Row = memo(function Row({ row, isMe, reduced }: { row: StandingRow; isMe: boolean; reduced: boolean }) {
   const initials = row.username.slice(0, 1).toUpperCase();
   // Podium spots get medal styling. The "me" highlight wins when it overlaps —
   // people care more about finding themselves than seeing a medal anyway.
   const podium = podiumStyle(row.position);
 
   return (
-    <motion.div
-      initial={{ opacity: 0, x: -8 }}
-      animate={{ opacity: 1, x: 0 }}
-      transition={{ delay: row.position * 0.04 }}
-    >
+    <motion.div variants={staggerItem(reduced)}>
       <Link
         to={`/u/${row.userId}`}
+        aria-current={isMe ? 'true' : undefined}
         className={cn(
           'flex items-center gap-3 px-4 py-3 border-b last:border-0 cursor-pointer transition-colors',
+          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent',
           isMe
             ? 'bg-accent-soft hover:bg-accent-soft/80 border-border'
             : podium
@@ -184,11 +183,12 @@ function Row({ row, isMe }: { row: StandingRow; isMe: boolean }) {
       </Link>
     </motion.div>
   );
-}
+});
 
 export function LeagueDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { reduced } = useMotionPrefs();
   const [tab, setTab] = useState<Tab>('Tabla');
   const [shareOpen, setShareOpen] = useState(false);
 
@@ -216,7 +216,7 @@ export function LeagueDetailPage() {
     return (
       <div className="flex flex-col min-h-full animate-fade-in">
         <div className="flex items-center gap-3 px-4 pt-5 pb-4">
-          <button onClick={() => navigate(-1)} className="p-2 rounded-md bg-elevated border border-border" aria-label="Volver">
+          <button onClick={() => navigate(-1)} className="flex items-center justify-center min-h-[44px] min-w-[44px] p-2 rounded-md bg-elevated border border-border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent" aria-label="Volver">
             <ArrowLeft size={18} className="text-text" />
           </button>
           <div className="flex-1 min-w-0">
@@ -245,14 +245,14 @@ export function LeagueDetailPage() {
       )}
 
       <div className="flex items-center gap-3 px-4 pt-5 pb-4">
-        <button onClick={() => navigate(-1)} className="p-2 rounded-md bg-elevated border border-border" aria-label="Volver">
+        <button onClick={() => navigate(-1)} className="flex items-center justify-center min-h-[44px] min-w-[44px] p-2 rounded-md bg-elevated border border-border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent" aria-label="Volver">
           <ArrowLeft size={18} className="text-text" />
         </button>
         <div className="flex-1 min-w-0">
           <h1 className="text-lg-s font-display font-bold text-text truncate">{league.name}</h1>
           <p className="text-sm-s text-muted">código: {league.code}</p>
         </div>
-        <button onClick={() => setShareOpen(true)} className="p-2 rounded-md bg-elevated border border-border" aria-label="Compartir">
+        <button onClick={() => setShareOpen(true)} className="flex items-center justify-center min-h-[44px] min-w-[44px] p-2 rounded-md bg-elevated border border-border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent" aria-label="Compartir">
           <Share2 size={18} className="text-text" />
         </button>
       </div>
@@ -269,13 +269,16 @@ export function LeagueDetailPage() {
         </div>
       )}
 
-      <div className="flex gap-1 px-4 mb-0">
+      <div role="tablist" aria-label="Secciones de la liga" className="flex gap-1 px-4 mb-0">
         {TABS.map((t) => (
           <button
             key={t}
+            role="tab"
+            aria-selected={tab === t}
             onClick={() => setTab(t)}
             className={cn(
-              'flex-1 py-2 rounded-md text-sm-s font-semibold transition-colors',
+              'flex-1 min-h-[44px] py-2.5 rounded-md text-sm-s font-semibold transition-colors',
+              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent',
               tab === t ? 'bg-accent text-accent-on' : 'bg-card border border-border text-muted hover:text-text'
             )}
           >
@@ -297,13 +300,27 @@ export function LeagueDetailPage() {
               <SkeletonList count={5} />
             </div>
           ) : standings.length === 0 ? (
-            <div className="py-8 text-center">
-              <p className="text-sm-s text-muted">Todavía no hay posiciones</p>
+            <div className="py-10 px-6 flex flex-col items-center gap-3 text-center">
+              <div className="w-12 h-12 rounded-full bg-accent/15 flex items-center justify-center">
+                <Trophy size={22} className="text-accent" />
+              </div>
+              <div>
+                <p className="text-base-s font-bold text-text">Todavía no hay posiciones</p>
+                <p className="text-sm-s text-muted mt-1 max-w-xs">
+                  La tabla se arma cuando los miembros empiezan a sumar puntos con sus pronósticos.
+                </p>
+              </div>
             </div>
           ) : (
-            standings.map((row) => (
-              <Row key={row.userId} row={row} isMe={row.userId === currentUser?.id} />
-            ))
+            <motion.div
+              variants={staggerContainer(reduced)}
+              initial="initial"
+              animate="animate"
+            >
+              {standings.map((row) => (
+                <Row key={row.userId} row={row} isMe={row.userId === currentUser?.id} reduced={reduced} />
+              ))}
+            </motion.div>
           )}
         </div>
       )}

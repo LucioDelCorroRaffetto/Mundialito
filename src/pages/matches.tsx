@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { ChevronRight, Clock, CheckCircle2, Check, X } from 'lucide-react';
+import { staggerContainer, staggerItem, useMotionPrefs } from '@/shared/lib/motion';
 import { useMatches } from '@/shared/hooks/use-matches';
 import { useTeams, useTeamMap } from '@/shared/hooks/use-teams';
 import { useMyPredictions } from '@/shared/hooks/use-predictions';
@@ -82,6 +83,7 @@ export function MatchesPage() {
   const [mainTab, setMainTab] = useState<MainTab>('Partidos');
   const [statusFilter, setStatusFilter] = useState<StatusTab>('Todos');
   const [groupFilter, setGroupFilter] = useState<string | null>(null);
+  const { reduced } = useMotionPrefs();
 
   // Allow deep-linking to the En vivo filter from the home banner.
   useEffect(() => {
@@ -106,7 +108,10 @@ export function MatchesPage() {
   const matches = matchesResponse?.data ?? [];
   const teams = teamsData ?? [];
 
-  const predictedIds = new Set((myPredictionsData?.data ?? []).map((p) => p.matchId));
+  const predictedIds = useMemo(
+    () => new Set((myPredictionsData?.data ?? []).map((p) => p.matchId)),
+    [myPredictionsData],
+  );
 
   if (isLoading) {
     return (
@@ -227,12 +232,20 @@ export function MatchesPage() {
         </div>
       ) : (
         <>
-          {/* Group filter chips */}
-          <div className="flex gap-1.5 px-4 py-1 pb-3 overflow-x-auto no-scrollbar">
+          {/* Group filter chips.
+              Tap-targets ≥44px (min-h en todos, min-w en los de letra) para
+              cumplir guías de accesibilidad táctil sin agrandar el aspecto
+              compacto del pill ni romper el scroll horizontal de los 12 grupos. */}
+          <div
+            className="flex items-center gap-1.5 px-4 py-1 pb-3 overflow-x-auto no-scrollbar"
+            role="group"
+            aria-label="Filtrar por grupo"
+          >
             <button
               onClick={() => setGroupFilter(null)}
+              aria-pressed={groupFilter === null}
               className={cn(
-                'flex-shrink-0 px-3 py-1.5 rounded-full text-xs-s font-semibold transition-colors whitespace-nowrap border',
+                'flex-shrink-0 inline-flex items-center justify-center px-4 min-h-[44px] rounded-full text-xs-s font-semibold transition-colors whitespace-nowrap border',
                 groupFilter === null
                   ? 'bg-accent text-accent-on border-accent'
                   : 'bg-elevated border-border text-muted hover:text-text',
@@ -244,8 +257,10 @@ export function MatchesPage() {
               <button
                 key={g}
                 onClick={() => setGroupFilter(groupFilter === g ? null : g)}
+                aria-pressed={groupFilter === g}
+                aria-label={`Grupo ${g}`}
                 className={cn(
-                  'flex-shrink-0 w-9 h-8 rounded-full text-xs-s font-bold transition-colors border',
+                  'flex-shrink-0 inline-flex items-center justify-center min-w-[44px] min-h-[44px] rounded-full text-xs-s font-bold transition-colors border',
                   groupFilter === g
                     ? 'bg-accent text-accent-on border-accent'
                     : 'bg-elevated border-border text-muted hover:text-text',
@@ -258,7 +273,11 @@ export function MatchesPage() {
 
           {/* Status filter tabs — the 'En vivo' tab gets a red pulse when
               matches are actually live so it stands out at a glance. */}
-          <div className="flex gap-1.5 px-4 py-1 pb-4 overflow-x-auto no-scrollbar">
+          <div
+            className="flex items-center gap-1.5 px-4 py-1 pb-4 overflow-x-auto no-scrollbar"
+            role="group"
+            aria-label="Filtrar por estado"
+          >
             {STATUS_TABS.map((tab) => {
               const isActive = statusFilter === tab;
               const liveTab = tab === 'En vivo' && liveCount > 0;
@@ -272,8 +291,9 @@ export function MatchesPage() {
                 <button
                   key={tab}
                   onClick={() => setStatusFilter(tab)}
+                  aria-pressed={isActive}
                   className={cn(
-                    'flex-shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs-s font-semibold whitespace-nowrap transition-colors border',
+                    'flex-shrink-0 inline-flex items-center justify-center gap-1.5 px-3.5 min-h-[44px] rounded-full text-xs-s font-semibold whitespace-nowrap transition-colors border',
                     isActive
                       ? liveTab
                         ? 'bg-red-500 text-white border-red-400 shadow-[0_0_12px_rgba(239,68,68,0.45)]'
@@ -302,8 +322,9 @@ export function MatchesPage() {
             {liveSections && liveSections.map((section) => (
               <motion.div
                 key={section.id}
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
+                variants={staggerContainer(reduced)}
+                initial="initial"
+                animate="animate"
                 className="flex flex-col gap-2"
               >
                 <div className="flex items-center gap-2">
@@ -328,8 +349,9 @@ export function MatchesPage() {
             {!liveSections && dates.map((date) => (
               <motion.div
                 key={date}
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
+                variants={staggerContainer(reduced)}
+                initial="initial"
+                animate="animate"
                 className="flex flex-col gap-2"
               >
                 <p className="text-sm-s font-bold text-muted capitalize">{formatDate(date)}</p>
@@ -386,9 +408,7 @@ export function MatchesPage() {
     return (
       <motion.div
         key={match.id}
-        initial={{ opacity: 0, y: 4 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.18 }}
+        variants={staggerItem(reduced)}
       >
         <Link
           to={`/matches/${match.id}`}

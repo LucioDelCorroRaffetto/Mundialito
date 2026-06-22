@@ -6,12 +6,14 @@ import { toast } from 'sonner';
 import { cn } from '@/shared/lib/cn';
 import { useMyLeagues, useJoinLeague, useSearchLeagues } from '@/shared/hooks/use-leagues';
 import { SkeletonList } from '@/shared/components/skeleton';
+import { staggerContainer, staggerItem, useMotionPrefs, tapScale } from '@/shared/lib/motion';
 
 const TABS = ['Mis ligas', 'Explorar'] as const;
 type Tab = (typeof TABS)[number];
 
 export function LeaguesPage() {
   const navigate = useNavigate();
+  const { reduced } = useMotionPrefs();
   const [tab, setTab] = useState<Tab>('Mis ligas');
   const [rawQuery, setRawQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
@@ -47,13 +49,16 @@ export function LeaguesPage() {
         <p className="text-sm-s text-muted mt-0.5">Competí con tus amigos por la cima de la tabla</p>
       </div>
 
-      <div className="flex gap-1 px-4 pb-3 pt-1">
+      <div role="tablist" aria-label="Filtrar ligas" className="flex gap-1 px-4 pb-3 pt-1">
         {TABS.map((t) => (
           <button
             key={t}
+            role="tab"
+            aria-selected={tab === t}
             onClick={() => setTab(t)}
             className={cn(
-              'flex-1 py-2 rounded-md text-sm-s font-semibold transition-colors',
+              'flex-1 min-h-[44px] py-2.5 rounded-md text-sm-s font-semibold transition-colors',
+              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent',
               tab === t ? 'bg-accent text-accent-on' : 'bg-card border border-border text-muted hover:text-text'
             )}
           >
@@ -97,11 +102,18 @@ export function LeaguesPage() {
             </div>
           )}
 
-          {!myLeaguesLoading && myLeagues.map((league, i) => (
-            <motion.div key={league.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.06 }}>
+          {!myLeaguesLoading && myLeagues.length > 0 && (
+          <motion.div
+            variants={staggerContainer(reduced)}
+            initial="initial"
+            animate="animate"
+            className="flex flex-col gap-3"
+          >
+          {myLeagues.map((league) => (
+            <motion.div key={league.id} variants={staggerItem(reduced)} whileTap={reduced ? undefined : tapScale}>
               <Link
                 to={`/leagues/${league.id}`}
-                className="flex items-center gap-3 p-4 rounded-lg bg-card border border-border hover:border-accent-border transition-colors"
+                className="flex items-center gap-3 p-4 rounded-lg bg-card border border-border hover:border-accent-border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
               >
                 {league.imageUrl ? (
                   <img
@@ -128,6 +140,8 @@ export function LeaguesPage() {
               </Link>
             </motion.div>
           ))}
+          </motion.div>
+          )}
         </div>
       )}
 
@@ -147,8 +161,15 @@ export function LeaguesPage() {
 
           {searchLoading && debouncedQuery.length >= 2 && <SkeletonList count={3} />}
 
-          {!searchLoading && searchResults.map((league, i) => (
-            <motion.div key={league.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.06 }}>
+          {!searchLoading && searchResults.length > 0 && (
+          <motion.div
+            variants={staggerContainer(reduced)}
+            initial="initial"
+            animate="animate"
+            className="flex flex-col gap-3"
+          >
+          {searchResults.map((league) => (
+            <motion.div key={league.id} variants={staggerItem(reduced)}>
               <div className="flex items-center gap-3 p-4 rounded-lg bg-card border border-border">
                 {league.imageUrl ? (
                   <img
@@ -168,13 +189,16 @@ export function LeaguesPage() {
                 <button
                   onClick={() => handleJoin(league.code, league.id)}
                   disabled={joinMutation.isPending}
-                  className="px-3 py-1.5 rounded-md bg-accent text-accent-on text-sm-s font-semibold flex-shrink-0 hover:opacity-90 transition-opacity disabled:opacity-60"
+                  aria-label={`Unirse a la liga ${league.name}`}
+                  className="min-h-[40px] px-4 py-2 rounded-md bg-accent text-accent-on text-sm-s font-semibold flex-shrink-0 hover:opacity-90 transition-opacity disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
                 >
                   Unirse
                 </button>
               </div>
             </motion.div>
           ))}
+          </motion.div>
+          )}
 
           {!searchLoading && debouncedQuery.length >= 2 && searchResults.length === 0 && (
             <div className="mt-2 p-6 rounded-xl bg-card border border-border flex flex-col items-center gap-2 text-center">

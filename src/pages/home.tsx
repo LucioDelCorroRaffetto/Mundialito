@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Plus, Search, Trophy, ChevronRight, AlertCircle, Sparkles, Bell, Volume2, X } from 'lucide-react';
+import { staggerContainer, staggerItem, useMotionPrefs } from '@/shared/lib/motion';
 import { useQueryClient } from '@tanstack/react-query';
 import { useMatches } from '@/shared/hooks/use-matches';
 import { useMyLeagues } from '@/shared/hooks/use-leagues';
@@ -403,6 +404,7 @@ export function HomePage() {
   const { data: fantasyTeamData } = useMyFantasyTeam();
   const { isInstallable, isInstalled, install } = usePwaInstall();
   const username = useAuthStore((s) => s.user?.username);
+  const { reduced } = useMotionPrefs();
 
   const apiMatches = matchesResponse?.data ?? [];
   const liveMatches = apiMatches.filter((m) => m.status === 'live');
@@ -582,15 +584,19 @@ export function HomePage() {
             </Link>
           </div>
 
-          {/* League cards */}
+          {/* League cards. Stagger sólo en mount: keys estables por liga →
+              el refetch de useMyLeagues no re-dispara la entrada. */}
           {hasLeagues ? (
-            <div className="flex flex-col gap-3">
-              {leaguesToShow.map((league, i) => (
+            <motion.div
+              className="flex flex-col gap-3"
+              variants={staggerContainer(reduced)}
+              initial="initial"
+              animate="animate"
+            >
+              {leaguesToShow.map((league) => (
                 <motion.div
                   key={league.id}
-                  initial={{ opacity: 0, y: 12 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: i * 0.08 }}
+                  variants={staggerItem(reduced)}
                 >
                   <Link
                     to={`/leagues/${league.id}`}
@@ -624,7 +630,7 @@ export function HomePage() {
                   </Link>
                 </motion.div>
               ))}
-            </div>
+            </motion.div>
           ) : (
             <div className="flex flex-col items-center gap-3 p-6 rounded-xl bg-card border border-border text-center">
               <span className="text-3xl">🏆</span>
@@ -658,7 +664,7 @@ export function HomePage() {
 
           {/* Upcoming matches — mobile only (shown in right column on desktop) */}
           <div className="md:hidden">
-            <UpcomingMatchesSection upcoming={upcoming} />
+            <UpcomingMatchesSection upcoming={upcoming} reduced={reduced} />
           </div>
 
           {/* Tournament shortcut — mobile only */}
@@ -670,7 +676,7 @@ export function HomePage() {
         {/* ── RIGHT COLUMN (desktop only) ── */}
         <div className="hidden md:flex flex-col gap-5">
           <TournamentShortcut />
-          <UpcomingMatchesSection upcoming={upcoming} />
+          <UpcomingMatchesSection upcoming={upcoming} reduced={reduced} />
         </div>
       </div>
     </div>
@@ -703,8 +709,10 @@ interface UpcomingMatch {
 
 function UpcomingMatchesSection({
   upcoming,
+  reduced,
 }: {
   upcoming: UpcomingMatch[];
+  reduced: boolean;
 }) {
   return (
     <div>
@@ -712,10 +720,15 @@ function UpcomingMatchesSection({
         <h2 className="text-lg font-display font-bold text-text">Próximos partidos</h2>
         <Link to="/matches" className="text-sm text-accent font-semibold">Ver todos</Link>
       </div>
-      <div className="flex flex-col gap-2">
+      <motion.div
+        className="flex flex-col gap-2"
+        variants={staggerContainer(reduced)}
+        initial="initial"
+        animate="animate"
+      >
         {upcoming.map((match) => (
+          <motion.div key={match.id} variants={staggerItem(reduced)}>
           <Link
-            key={match.id}
             to={`/matches/${match.id}`}
             className="flex items-center gap-3 p-3 rounded-lg bg-card border border-border hover:border-accent-border transition-colors"
           >
@@ -736,8 +749,9 @@ function UpcomingMatchesSection({
             </div>
             <ChevronRight size={16} className="text-muted flex-shrink-0" />
           </Link>
+          </motion.div>
         ))}
-      </div>
+      </motion.div>
     </div>
   );
 }

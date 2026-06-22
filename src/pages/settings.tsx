@@ -108,7 +108,7 @@ export function SettingsPage() {
   return (
     <div className="flex flex-col min-h-full animate-fade-in">
       <div className="flex items-center gap-3 px-4 pt-5 pb-6">
-        <button onClick={() => navigate(-1)} className="p-2 rounded-md bg-elevated border border-border" aria-label="Volver">
+        <button onClick={() => navigate(-1)} className="flex items-center justify-center min-h-[44px] min-w-[44px] p-2 rounded-md bg-elevated border border-border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent" aria-label="Volver">
           <ArrowLeft size={18} className="text-text" />
         </button>
         <h1 className="text-xl-s font-display font-bold text-text">Configuración</h1>
@@ -132,11 +132,13 @@ export function SettingsPage() {
                 onClick={() => setFontScale(value)}
                 className={cn(
                   'flex flex-col items-center justify-center gap-1 py-3 px-1 rounded-lg border transition-colors min-h-[68px]',
+                  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent',
                   fontScale === value
                     ? 'bg-accent text-accent-on border-accent'
                     : 'bg-card border-border text-muted hover:border-accent-border',
                 )}
                 aria-pressed={fontScale === value}
+                aria-label={`Tamaño de letra: ${label}`}
               >
                 <span
                   className="font-bold leading-none"
@@ -186,6 +188,7 @@ export function SettingsPage() {
                 value={usernameInput}
                 onChange={(e) => setUsernameInput(e.target.value)}
                 placeholder="ej: lucho_2026"
+                aria-label="Nuevo nombre de usuario"
                 maxLength={30}
                 className="flex-1 px-3 py-2 rounded-lg border border-border bg-elevated text-text text-sm focus:outline-none focus:border-accent"
                 autoFocus
@@ -237,8 +240,11 @@ export function SettingsPage() {
               <button
                 key={value}
                 onClick={() => setMode(value)}
+                aria-pressed={mode === value}
+                aria-label={`Modo ${label}`}
                 className={cn(
-                  'flex-1 flex flex-col items-center gap-1.5 py-3 rounded-lg border transition-colors',
+                  'flex-1 flex flex-col items-center gap-1.5 min-h-[60px] py-3 rounded-lg border transition-colors',
+                  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent',
                   mode === value ? 'bg-accent-soft border-accent text-accent' : 'bg-card border-border text-muted hover:border-accent-border'
                 )}
               >
@@ -256,8 +262,11 @@ export function SettingsPage() {
               <button
                 key={p.key}
                 onClick={() => setAccent(p.key)}
+                aria-pressed={accent === p.key}
+                aria-label={`Color ${p.name}${p.a11y ? ' (accesible)' : ''}`}
                 className={cn(
-                  'flex items-center gap-2 p-3 rounded-lg border transition-colors',
+                  'flex items-center gap-2 min-h-[44px] p-3 rounded-lg border transition-colors',
+                  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent',
                   accent === p.key ? 'border-2 bg-elevated' : 'bg-card border-border hover:border-accent-border'
                 )}
                 style={accent === p.key ? { borderColor: p.color } : undefined}
@@ -280,8 +289,12 @@ export function SettingsPage() {
               // Feedback inmediato: si lo está prendiendo, que escuche cómo suena.
               if (!soundEnabled) setTimeout(() => play('goal'), 50);
             }}
+            role="switch"
+            aria-checked={soundEnabled}
+            aria-label="Sonidos"
             className={cn(
               'flex items-center gap-3 p-4 rounded-lg border transition-colors text-left',
+              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent',
               soundEnabled ? 'bg-accent-soft border-accent-border' : 'bg-card border-border hover:border-accent-border',
             )}
           >
@@ -315,8 +328,12 @@ export function SettingsPage() {
           <button
             onClick={isSubscribed ? unsubscribe : subscribe}
             disabled={pushLoading || !('serviceWorker' in navigator) || !('PushManager' in window)}
+            role="switch"
+            aria-checked={isSubscribed}
+            aria-label="Notificaciones push"
             className={cn(
               'flex items-center gap-3 p-4 rounded-lg border transition-colors text-left',
+              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:opacity-60',
               isSubscribed
                 ? 'bg-accent-soft border-accent'
                 : 'bg-card border-border hover:border-accent-border'
@@ -428,11 +445,12 @@ export function SettingsPage() {
               <p className="text-xs-s text-muted mt-2 leading-snug">
                 Las ligas que administrás se transfieren al miembro más antiguo. Si sos el único miembro, la liga también se borra.
               </p>
-              <label className="block mt-4 text-xs-s text-muted">
+              <label htmlFor="delete-confirm-input" className="block mt-4 text-xs-s text-muted">
                 Para confirmar, escribí{' '}
                 <span className="font-mono text-text">{user?.username}</span>:
               </label>
               <input
+                id="delete-confirm-input"
                 type="text"
                 value={deleteConfirm}
                 onChange={(e) => setDeleteConfirm(e.target.value)}

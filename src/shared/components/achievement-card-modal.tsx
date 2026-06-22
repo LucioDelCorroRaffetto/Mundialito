@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Lock, X } from 'lucide-react';
 import { cn } from '@/shared/lib/cn';
@@ -11,6 +11,67 @@ interface Props {
   earned: boolean;
   earnedAt?: string;
   onClose: () => void;
+}
+
+// Selector de elementos enfocables dentro del diálogo para el focus-trap.
+const FOCUSABLE =
+  'a[href],area[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])';
+
+/**
+ * Focus-trap accesible para modales/sheets. Mientras `active`:
+ *   - Mueve el foco inicial al contenedor (o al primer enfocable).
+ *   - Cicla Tab / Shift+Tab dentro del contenedor (no se escapa al fondo).
+ *   - Restaura el foco al elemento que estaba activo antes de abrir, al cerrar.
+ * No depende de animaciones (cumple aunque haya reduce-motion).
+ */
+function useFocusTrap(active: boolean) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!active) return;
+    const container = containerRef.current;
+    if (!container) return;
+    const previouslyFocused = document.activeElement as HTMLElement | null;
+
+    // Foco inicial: primer enfocable, o el propio contenedor como fallback.
+    const focusables = container.querySelectorAll<HTMLElement>(FOCUSABLE);
+    (focusables[0] ?? container).focus();
+
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key !== 'Tab') return;
+      const els = Array.from(container!.querySelectorAll<HTMLElement>(FOCUSABLE)).filter(
+        (el) => el.offsetParent !== null || el === container,
+      );
+      if (els.length === 0) {
+        e.preventDefault();
+        container!.focus();
+        return;
+      }
+      const first = els[0];
+      const last = els[els.length - 1];
+      const activeEl = document.activeElement as HTMLElement | null;
+      if (e.shiftKey) {
+        if (activeEl === first || activeEl === container || !container!.contains(activeEl)) {
+          e.preventDefault();
+          last.focus();
+        }
+      } else {
+        if (activeEl === last) {
+          e.preventDefault();
+          first.focus();
+        }
+      }
+    }
+
+    container.addEventListener('keydown', onKeyDown);
+    return () => {
+      container.removeEventListener('keydown', onKeyDown);
+      // Restaurar foco al disparador previo si sigue en el DOM.
+      if (previouslyFocused && document.contains(previouslyFocused)) {
+        previouslyFocused.focus();
+      }
+    };
+  }, [active]);
+  return containerRef;
 }
 
 /**
@@ -28,6 +89,8 @@ interface Props {
  */
 export function AchievementCardModal({ achievement, earned, earnedAt, onClose }: Props) {
   const { reduced } = useMotionPrefs();
+  const titleId = useId();
+  const dialogRef = useFocusTrap(!!achievement);
   // Close on Escape + lock body scroll while open. Without the body lock,
   // scrolling on the underlying page bleeds through the backdrop on mobile
   // (especially Safari which doesn't respect the dialog scroll containment).
@@ -66,17 +129,26 @@ export function AchievementCardModal({ achievement, earned, earnedAt, onClose }:
             onClick={onClose}
             aria-label="Cerrar"
             whileTap={reduced ? undefined : tapScale}
-            className="absolute top-4 right-4 p-2 rounded-full bg-white/10 text-white/70 hover:bg-white/20"
+            className="absolute top-4 right-4 inline-flex items-center justify-center min-w-[44px] min-h-[44px] rounded-full bg-white/10 text-white/70 hover:bg-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
           >
-            <X size={16} />
+            <X size={18} />
           </motion.button>
 
-          <div onClick={(e) => e.stopPropagation()}>
+          <div
+            ref={dialogRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={titleId}
+            tabIndex={-1}
+            className="outline-none"
+            onClick={(e) => e.stopPropagation()}
+          >
             <AchievementCard
               achievement={achievement}
               earned={earned}
               earnedAt={earnedAt}
               reduced={reduced}
+              titleId={titleId}
             />
           </div>
         </motion.div>
@@ -99,11 +171,13 @@ function AchievementCard({
   earned,
   earnedAt,
   reduced = false,
+  titleId,
 }: {
   achievement: Achievement;
   earned: boolean;
   earnedAt?: string;
   reduced?: boolean;
+  titleId?: string;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   // Normalised pointer position relative to the card (0..1 on each axis).
@@ -268,6 +342,7 @@ function AchievementCard({
 
           {/* Title */}
           <h2
+            id={titleId}
             className={cn(
               'text-lg font-display font-bold leading-tight',
               earned ? surface.title : 'text-white/80',

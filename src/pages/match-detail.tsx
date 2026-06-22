@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, memo } from 'react';
 import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { ArrowLeft, Clock, MapPin, CheckCircle2, Share2, Users, Plus, Minus, Lock, ArrowRightLeft, Handshake } from 'lucide-react';
@@ -1206,7 +1206,7 @@ const EVENT_LABEL: Record<MatchTimelineEvent['type'], EventDisplay> = {
   },
 };
 
-function MatchEvents({
+const MatchEvents = memo(function MatchEvents({
   events,
   timeline,
   homeTeamCode,
@@ -1432,4 +1432,4 @@ function MatchEvents({
       </div>
     </div>
   );
-}
+});

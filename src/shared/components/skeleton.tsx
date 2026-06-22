@@ -32,6 +32,10 @@ export function SkeletonCard({ className }: { className?: string } = {}) {
   ensureShimmerKeyframes();
   return (
     <div
+      // Placeholder puramente visual: oculto a tecnologías de asistencia para
+      // no anunciarlo como contenido. El estado de carga lo comunica el
+      // contenedor (SkeletonList) o la página.
+      aria-hidden="true"
       className={
         'rounded-xl h-20 w-full bg-black/10 dark:bg-white/10 ' +
         'bg-[linear-gradient(100deg,transparent_30%,rgba(255,255,255,0.18)_50%,transparent_70%)] ' +
@@ -45,7 +49,8 @@ export function SkeletonCard({ className }: { className?: string } = {}) {
 
 export function SkeletonList({ count = 3 }: { count?: number }) {
   return (
-    <div className="space-y-3">
+    <div role="status" aria-busy="true" className="space-y-3">
+      <span className="sr-only">Cargando…</span>
       {Array.from({ length: count }).map((_, i) => <SkeletonCard key={i} />)}
     </div>
   );

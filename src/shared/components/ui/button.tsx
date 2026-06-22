@@ -43,6 +43,8 @@ export const Button = forwardRef<HTMLButtonElement, Props>(function Button(
     <motion.button
       ref={ref}
       disabled={isDisabled}
+      aria-busy={loading || undefined}
+      aria-disabled={isDisabled || undefined}
       // Feedback de tap sutil. Se desactiva con reduce-motion o si está
       // deshabilitado (no debe "responder" cuando no es accionable).
       whileTap={reduced || isDisabled ? undefined : tapScale}
@@ -58,7 +60,13 @@ export const Button = forwardRef<HTMLButtonElement, Props>(function Button(
       {...(rest as HTMLMotionProps<'button'>)}
     >
       {loading ? (
-        <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+        <>
+          <span
+            aria-hidden="true"
+            className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent"
+          />
+          <span className="sr-only">Cargando…</span>
+        </>
       ) : (
         children
       )}

@@ -46,11 +46,15 @@ export class ErrorBoundary extends Component<Props, State> {
   render() {
     if (this.state.hasError) {
       return this.props.fallback ?? (
-        <div className="flex flex-col items-center justify-center h-40 text-muted gap-2">
-          <span className="text-3xl">⚠️</span>
+        <div
+          role="alert"
+          className="flex flex-col items-center justify-center h-40 text-muted gap-3 px-4 text-center"
+        >
+          <span className="text-3xl" aria-hidden="true">⚠️</span>
           <p className="text-sm text-text">Algo salió mal. Intentá recargar.</p>
           <button
-            className="text-xs underline"
+            type="button"
+            className="inline-flex items-center justify-center min-h-[44px] px-5 rounded-md bg-elevated border border-border text-text text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg"
             onClick={() => {
               sessionStorage.removeItem(RELOAD_KEY);
               window.location.reload();

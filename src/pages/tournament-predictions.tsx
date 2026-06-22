@@ -24,6 +24,7 @@ import { SkeletonList } from '@/shared/components/skeleton';
 import { toast } from 'sonner';
 import type { Player, Team } from '@/shared/types/api';
 import { TeamFlag } from '@/shared/components/ui/team-flag';
+import { staggerContainer, staggerItem, useMotionPrefs } from '@/shared/lib/motion';
 
 interface LocalPicks {
   championTeamId: number | null;
@@ -339,6 +340,7 @@ function pct(v: number) { return (v * 100).toFixed(0) + '%'; }
  */
 function ForecastTopCandidates() {
   const { data, isLoading } = useTournamentForecast();
+  const { reduced } = useMotionPrefs();
   const [expanded, setExpanded] = useState(false);
   if (isLoading || !data || data.length === 0) return null;
 
@@ -372,10 +374,16 @@ function ForecastTopCandidates() {
       </div>
 
       {/* Rows */}
-      <div className="flex flex-col divide-y divide-border">
+      <motion.div
+        className="flex flex-col divide-y divide-border"
+        variants={staggerContainer(reduced, 0.025)}
+        initial="initial"
+        animate="animate"
+      >
         {top.map((row, i) => (
-          <div
+          <motion.div
             key={row.teamId}
+            variants={staggerItem(reduced)}
             className="grid items-center px-3 py-1.5 text-xs-s"
             style={{ gridTemplateColumns: '1.5rem 1.2rem 1fr repeat(6, 2.6rem)' }}
           >
@@ -402,9 +410,9 @@ function ForecastTopCandidates() {
                 </span>
               );
             })}
-          </div>
+          </motion.div>
         ))}
-      </div>
+      </motion.div>
     </div>
   );
 }
@@ -707,6 +715,7 @@ export function TournamentPredictionsPage() {
               <button
                 key={league.id}
                 onClick={() => setSelectedLeagueId(league.id)}
+                aria-pressed={selectedLeagueId === league.id}
                 className={cn(
                   'flex-shrink-0 px-3 py-1.5 rounded-full text-xs-s font-semibold whitespace-nowrap border transition-colors',
                   selectedLeagueId === league.id
@@ -891,6 +900,8 @@ export function TournamentPredictionsPage() {
                   key={league.id}
                   type="button"
                   onClick={() => toggleTargetLeague(league.id)}
+                  aria-pressed={checked}
+                  aria-label={`${checked ? 'Quitar' : 'Agregar'} ${league.name}`}
                   className={cn(
                     'flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs-s font-semibold border transition-colors',
                     checked

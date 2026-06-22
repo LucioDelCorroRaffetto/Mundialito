@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef, memo } from 'react';
 import { motion, useDragControls } from 'framer-motion';
 import { ChevronDown, Check, Trophy, Crown, Shield, BarChart2, BookOpen, ChevronRight, Lock, CheckCircle2, Handshake } from 'lucide-react';
 import { cn } from '@/shared/lib/cn';
@@ -14,6 +14,7 @@ import { TeamFlag } from '@/shared/components/ui/team-flag';
 import { useFantasyRounds, useFantasyLineup, useUpsertLineup } from '@/shared/hooks/use-fantasy-lineups';
 import type { LineupPlayerInput } from '@/shared/hooks/use-fantasy-lineups';
 import type { Player, FantasyPlayerBreakdown } from '@/shared/types/api';
+import { staggerContainer, staggerItem, useMotionPrefs } from '@/shared/lib/motion';
 
 const POSITION_COLORS: Record<string, string> = {
   GK: 'bg-yellow-500/20 text-yellow-500',
@@ -801,7 +802,7 @@ export function FantasyPage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 px-4">
+      <div role="tablist" aria-label="Secciones de Fantasy" className="flex gap-1 px-4">
         {([
           { id: 'team', label: 'Mi Equipo' },
           { id: 'standings', label: 'Tabla' },
@@ -809,6 +810,9 @@ export function FantasyPage() {
         ] as { id: Tab; label: string }[]).map((t) => (
           <button
             key={t.id}
+            role="tab"
+            aria-selected={tab === t.id}
+            aria-pressed={tab === t.id}
             onClick={() => setTab(t.id)}
             className={cn(
               'flex-1 py-2 rounded-lg text-xs-s font-semibold transition-colors',
@@ -924,7 +928,7 @@ function ScoreRow({ label, value, highlight }: { label: string; value: string; h
 }
 
 
-function FantasyGuide() {
+const FantasyGuide = memo(function FantasyGuide() {
   return (
     <div className="flex flex-col gap-3 px-4 pb-4">
       <div className="flex items-center gap-2 py-1">
@@ -1084,7 +1088,7 @@ function FantasyGuide() {
       </GuideSection>
     </div>
   );
-}
+});
 
 // ─── Squad picker — choose the 15-player squad ──────────────────────────────
 
@@ -1487,6 +1491,8 @@ function PerRoundLineupTab({ squadPlayers }: { squadPlayers: Player[] }) {
             <button
               key={r.slug}
               onClick={() => setSelectedRound(r.slug)}
+              aria-pressed={activeSlug === r.slug}
+              aria-label={`Fecha ${shortRoundLabel(r.label)}${!r.isOpen ? ' (cerrada)' : ''}`}
               className={cn(
                 'flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs-s font-semibold border transition-colors',
                 activeSlug === r.slug ? 'bg-accent text-accent-on border-accent' : 'bg-elevated border-border text-muted',
@@ -1531,12 +1537,14 @@ function PerRoundLineupTab({ squadPlayers }: { squadPlayers: Player[] }) {
             <div className="flex p-0.5 rounded-lg bg-elevated border border-border">
               <button
                 onClick={() => setLineupView('pitch')}
+                aria-pressed={lineupView === 'pitch'}
                 className={cn('px-2 py-1 rounded text-[10px] font-bold transition-colors', lineupView === 'pitch' ? 'bg-accent text-accent-on' : 'text-muted')}
               >
                 Cancha
               </button>
               <button
                 onClick={() => setLineupView('list')}
+                aria-pressed={lineupView === 'list'}
                 className={cn('px-2 py-1 rounded text-[10px] font-bold transition-colors', lineupView === 'list' ? 'bg-accent text-accent-on' : 'text-muted')}
               >
                 Lista
@@ -1664,7 +1672,7 @@ function PerRoundLineupTab({ squadPlayers }: { squadPlayers: Player[] }) {
  * Mini badge strip — shows goal/assist/clean-sheet/card icons and total
  * points for a closed round. Shown beneath the player name in list view.
  */
-function BreakdownBadges({
+const BreakdownBadges = memo(function BreakdownBadges({
   breakdown,
   isCaptain,
   isViceCaptain,
@@ -1737,7 +1745,7 @@ function BreakdownBadges({
       )}
     </div>
   );
-}
+});
 
 function LineupRow({
   player,
@@ -2108,6 +2116,7 @@ function UserTeamDrawer({
 function FantasyStandings() {
   const { data, isLoading } = useFantasyStandings();
   const currentUser = useAuthStore((s) => s.user);
+  const { reduced } = useMotionPrefs();
   const entries = data ?? [];
   const [viewingUser, setViewingUser] = useState<{ userId: number; username: string; teamName: string } | null>(null);
 
@@ -2130,7 +2139,12 @@ function FantasyStandings() {
 
   return (
     <>
-      <div className="mx-4 rounded-xl bg-card border border-border overflow-hidden">
+      <motion.div
+        className="mx-4 rounded-xl bg-card border border-border overflow-hidden"
+        variants={staggerContainer(reduced, 0.025)}
+        initial="initial"
+        animate="animate"
+      >
         <div className="flex items-center gap-3 px-4 py-2 border-b border-border bg-elevated">
           <span className="w-7 text-center text-xs-s text-muted">#</span>
           <span className="w-8 flex-shrink-0" />
@@ -2143,9 +2157,7 @@ function FantasyStandings() {
           return (
             <motion.button
               key={entry.userId}
-              initial={{ opacity: 0, x: -8 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: Math.min(entry.rank, 20) * 0.02 }}
+              variants={staggerItem(reduced)}
               onClick={() => setViewingUser({ userId: entry.userId, username: entry.username, teamName: entry.teamName })}
               className={cn(
                 'w-full flex items-center gap-3 px-4 py-3 border-b border-border last:border-0 text-left transition-colors hover:bg-elevated',
@@ -2174,7 +2186,7 @@ function FantasyStandings() {
             </motion.button>
           );
         })}
-      </div>
+      </motion.div>
       <p className="text-center text-xs-s text-muted/50 mt-2">Tocá un equipo para ver su plantel</p>
 
       {viewingUser && (

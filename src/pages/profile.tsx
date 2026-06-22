@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo, memo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Settings, ChevronRight, Star, LogOut } from 'lucide-react';
@@ -8,18 +8,20 @@ import { useMyAchievements, useAllAchievements, type Achievement } from '@/share
 import { UserLevelBadge, UserLevelCard } from '@/shared/components/user-level-badge';
 import { AchievementCardModal } from '@/shared/components/achievement-card-modal';
 import { computeLevel } from '@/shared/lib/levels';
+import { staggerContainer, staggerItem, useMotionPrefs } from '@/shared/lib/motion';
 
-function StatCard({ label, value }: { label: string; value: string | number }) {
+const StatCard = memo(function StatCard({ label, value }: { label: string; value: string | number }) {
   return (
     <div className="flex flex-col items-center gap-0.5 p-3 rounded-lg bg-card border border-border">
       <span className="text-2xl-s font-display font-bold text-accent">{value}</span>
       <span className="text-xs-s text-muted text-center leading-tight">{label}</span>
     </div>
   );
-}
+});
 
 export function ProfilePage() {
   const navigate = useNavigate();
+  const { reduced } = useMotionPrefs();
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
   const { data: stats, isLoading: statsLoading } = useMyStats();
@@ -32,10 +34,14 @@ export function ProfilePage() {
     { achievement: Achievement; earned: boolean; earnedAt?: string } | null
   >(null);
 
-  const myAchievementSlugs = new Set((myAchievementsData?.data ?? []).map((a) => a.slug));
+  const myEarned = myAchievementsData?.data ?? [];
   const allAchievements = allAchievementsData?.data ?? [];
-  const myEarned = (myAchievementsData?.data ?? []);
-  const locked = allAchievements.filter((a) => !myAchievementSlugs.has(a.slug));
+  // Locked = catalog minus earned. Memoized so the Set + filter don't rebuild
+  // on every render (e.g. opening/closing the achievement modal).
+  const locked = useMemo(() => {
+    const earnedSlugs = new Set(myEarned.map((a) => a.slug));
+    return allAchievements.filter((a) => !earnedSlugs.has(a.slug));
+  }, [myEarned, allAchievements]);
 
   const handleLogout = () => {
     logout();
@@ -77,7 +83,7 @@ export function ProfilePage() {
         </div>
         <Link
           to="/settings"
-          className="p-2 rounded-md bg-elevated border border-border hover:border-accent-border transition-colors"
+          className="flex items-center justify-center min-h-[44px] min-w-[44px] p-2 rounded-md bg-elevated border border-border hover:border-accent-border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
           aria-label="Configuración"
         >
           <Settings size={20} className="text-muted" />
@@ -113,7 +119,12 @@ export function ProfilePage() {
         </div>
 
         {myEarned.length > 0 && (
-          <div className="flex flex-col gap-2 mb-3">
+          <motion.div
+            className="flex flex-col gap-2 mb-3"
+            variants={staggerContainer(reduced)}
+            initial="initial"
+            animate="animate"
+          >
             {myEarned.map((a) => (
               <motion.button
                 key={a.slug}
@@ -121,10 +132,9 @@ export function ProfilePage() {
                 onClick={() =>
                   setSelectedCard({ achievement: a, earned: true, earnedAt: a.earnedAt })
                 }
-                initial={{ opacity: 0, x: -8 }}
-                animate={{ opacity: 1, x: 0 }}
-                whileHover={{ y: -1 }}
-                className="flex items-center gap-3 p-3 rounded-lg bg-card border border-accent-border text-left hover:border-accent transition-colors"
+                variants={staggerItem(reduced)}
+                whileHover={reduced ? undefined : { y: -1 }}
+                className="flex items-center gap-3 p-3 rounded-lg bg-card border border-accent-border text-left hover:border-accent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
               >
                 <span className="text-2xl-s">{a.icon}</span>
                 <div className="flex-1 min-w-0">
@@ -134,7 +144,7 @@ export function ProfilePage() {
                 <span className="text-xs-s text-accent font-semibold">+{a.xpReward} XP</span>
               </motion.button>
             ))}
-          </div>
+          </motion.div>
         )}
 
         <div className="flex flex-col gap-2">
@@ -143,7 +153,7 @@ export function ProfilePage() {
               key={a.slug}
               type="button"
               onClick={() => setSelectedCard({ achievement: a, earned: false })}
-              className="flex items-center gap-3 p-3 rounded-lg bg-elevated border border-border opacity-60 hover:opacity-100 transition-opacity text-left"
+              className="flex items-center gap-3 p-3 rounded-lg bg-elevated border border-border opacity-60 hover:opacity-100 transition-opacity text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:opacity-100"
             >
               <span className="text-2xl-s grayscale">{a.icon}</span>
               <div className="flex-1 min-w-0">
