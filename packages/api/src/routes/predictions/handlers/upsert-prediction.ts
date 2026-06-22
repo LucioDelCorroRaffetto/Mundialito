@@ -88,11 +88,11 @@ export async function upsertPredictionHandler(req: Request, res: Response) {
     results.push(row);
   }
 
-  // Optional hint from the client: the user's local hour (0-23). Used for the
-  // night_owl logro since the server doesn't know the user's timezone.
-  const rawHour = req.header('x-user-hour');
-  const userHour = rawHour != null && /^\d+$/.test(rawHour) ? Number(rawHour) : undefined;
-  checkAchievements(req.user!.id, { type: 'prediction_saved', matchId, userHour })
+  // The night_owl logro (which needed the client's local hour via the
+  // x-user-hour header) was removed from the catalog, and the frontend no
+  // longer sends the header. The event type still accepts an optional userHour
+  // (see achievement-service.ts) in case the logro is ever re-introduced.
+  checkAchievements(req.user!.id, { type: 'prediction_saved', matchId })
     .catch(() => {});
 
   // Backwards-compat shape: when targeting a single league, return the row directly.

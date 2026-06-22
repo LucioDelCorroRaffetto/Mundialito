@@ -14,6 +14,12 @@ import { eq, sql } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import { matches, predictions, teams } from '../db/schema/index.js';
 import { calculatePoints } from '../lib/scoring.js';
+import {
+  normalizeEspnCode,
+  resolveCompetitors,
+  resolveShootoutScore,
+  shouldRescorePredictions,
+} from '../lib/score-sync.js';
 import { recomputeAllFantasyPoints } from './fantasy-scoring-service.js';
 import { broadcastMatchUpdate } from '../ws/broadcast.js';
 import { checkAchievements } from './achievement-service.js';
@@ -100,22 +106,6 @@ interface OurMatch {
 }
 
 /**
- * ESPN's 3-letter abbreviation → our `teams.code`. Almost all are identical
- * (SUI, BIH, MEX, KOR, …); the handful of exceptions live here. ESPN uses
- * RSA for South Africa where we use ZAF (the same divergence the FIFA
- * backfill handles). Add entries if a match ever logs an unmatched code.
- */
-const ESPN_CODE_TO_OURS: Record<string, string> = {
-  RSA: 'ZAF', // South Africa
-};
-
-function normalizeEspnCode(code: string | undefined | null): string {
-  if (!code) return '';
-  const upper = code.toUpperCase();
-  return ESPN_CODE_TO_OURS[upper] ?? upper;
-}
-
-/**
  * Match an ESPN event to our DB row by kickoff window AND team identity.
  *
  * The kickoff-only matcher used to collapse two concurrent same-slot fixtures
@@ -148,36 +138,6 @@ function findMatch(ourMatches: OurMatch[], event: EspnEvent): OurMatch | undefin
     (m) => Math.abs(new Date(m.kickoffUtc).getTime() - espnTime) <= TEN_MIN,
   );
   return sameSlot.length === 1 ? sameSlot[0] : undefined;
-}
-
-/**
- * Resolve which ESPN competitor is OUR home team and which is OUR away team,
- * by matching team codes — NOT by ESPN's own homeAway flag. ESPN and our DB
- * sometimes disagree on which side is "home"; assigning scores by position
- * would then attach each team's goals to the wrong side. When the codes can't
- * be resolved (missing abbreviations) we fall back to ESPN's orientation.
- */
-function resolveCompetitors(
-  ourMatch: OurMatch,
-  competitors: EspnCompetitor[],
-): { home: EspnCompetitor | undefined; away: EspnCompetitor | undefined } {
-  const espnHome = competitors.find((c) => c.homeAway === 'home');
-  const espnAway = competitors.find((c) => c.homeAway === 'away');
-  const codeHome = normalizeEspnCode(espnHome?.team.abbreviation);
-  const codeAway = normalizeEspnCode(espnAway?.team.abbreviation);
-
-  if (codeHome && codeAway && ourMatch.homeTeamCode && ourMatch.awayTeamCode) {
-    if (codeHome === ourMatch.homeTeamCode && codeAway === ourMatch.awayTeamCode) {
-      return { home: espnHome, away: espnAway };
-    }
-    if (codeHome === ourMatch.awayTeamCode && codeAway === ourMatch.homeTeamCode) {
-      // ESPN lists the teams in the opposite order to us → swap so scores
-      // land on the correct side.
-      return { home: espnAway, away: espnHome };
-    }
-  }
-  // Unresolvable by identity — keep ESPN's orientation as a best effort.
-  return { home: espnHome, away: espnAway };
 }
 
 // ─── Main export ─────────────────────────────────────────────────────────────
@@ -297,23 +257,18 @@ export async function syncScoresFromEspn(date: string): Promise<SyncScoresResult
       // actually picked the winner gets 0. In that case we HOLD the match as
       // live for this tick; a later tick — or football-data, which carries the
       // shootout winner reliably — finalizes it once the winner is known.
-      let shootoutWinnerUnknown = false;
-      if (newStatus === 'finished' && newHomeScore != null && newAwayScore != null) {
-        const detail = (event.status.type as { detail?: string; description?: string }).detail
-          ?? (event.status.type as { description?: string }).description
-          ?? '';
-        const wasShootout = /penalt|shootout|tiros|tanda/i.test(detail);
-        if (wasShootout && newHomeScore === newAwayScore) {
-          const homeWinnerFlag = (homeComp as unknown as { winner?: boolean })?.winner === true;
-          const awayWinnerFlag = (awayComp as unknown as { winner?: boolean })?.winner === true;
-          if (homeWinnerFlag && !awayWinnerFlag) newHomeScore += 1;
-          else if (awayWinnerFlag && !homeWinnerFlag) newAwayScore += 1;
-          // Shootout but no (or contradictory) winner flag yet → don't finalize
-          // a tied KO. Only hold while TRANSITIONING into finished; if the
-          // match was already finished (e.g. FIFA closed it), leave it be.
-          else if (ourMatch.status !== 'finished') shootoutWinnerUnknown = true;
-        }
-      }
+      const detail = (event.status.type as { detail?: string; description?: string }).detail
+        ?? (event.status.type as { description?: string }).description
+        ?? '';
+      const shootout = resolveShootoutScore(newStatus, newHomeScore, newAwayScore, {
+        detail,
+        homeWinnerFlag: (homeComp as unknown as { winner?: boolean })?.winner === true,
+        awayWinnerFlag: (awayComp as unknown as { winner?: boolean })?.winner === true,
+        alreadyFinished: ourMatch.status === 'finished',
+      });
+      newHomeScore = shootout.homeScore;
+      newAwayScore = shootout.awayScore;
+      const shootoutWinnerUnknown = shootout.shootoutWinnerUnknown;
 
       // Si ya marcamos el partido finished (ej. por el final whistle de FIFA,
       // que se adelanta a ESPN ~10 min), un tick de ESPN que todavía reporta
@@ -351,13 +306,20 @@ export async function syncScoresFromEspn(date: string): Promise<SyncScoresResult
       // Score predictions when match finishes. Skip while holding a shootout
       // whose winner ESPN hasn't published — scoring a tied KO would credit
       // the wrong predictors.
-      if (newStatus === 'finished' && !shootoutWinnerUnknown && !ourMatch.scoreLocked && newHomeScore !== null && newAwayScore !== null) {
+      if (shouldRescorePredictions({
+        newStatus,
+        shootoutWinnerUnknown,
+        scoreLocked: ourMatch.scoreLocked,
+        homeScore: newHomeScore,
+        awayScore: newAwayScore,
+      })) {
         anyMatchFinished = true;
         const matchPredictions = await db.select().from(predictions).where(eq(predictions.matchId, ourMatch.id));
         for (const pred of matchPredictions) {
           const pts = calculatePoints(
             { homeScore: pred.homeScore, awayScore: pred.awayScore },
-            { homeScore: newHomeScore, awayScore: newAwayScore },
+            // shouldRescorePredictions guarantees both are non-null here.
+            { homeScore: newHomeScore!, awayScore: newAwayScore! },
           );
           await db.update(predictions).set({ points: pts, updatedAt: sql`(datetime('now'))` }).where(eq(predictions.id, pred.id));
           // Fire the same prediction_scored event the football-data.org

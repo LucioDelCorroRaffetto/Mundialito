@@ -46,9 +46,9 @@ export class ErrorBoundary extends Component<Props, State> {
   render() {
     if (this.state.hasError) {
       return this.props.fallback ?? (
-        <div className="flex flex-col items-center justify-center h-40 text-white/60 gap-2">
+        <div className="flex flex-col items-center justify-center h-40 text-muted gap-2">
           <span className="text-3xl">⚠️</span>
-          <p className="text-sm">Algo salió mal. Intentá recargar.</p>
+          <p className="text-sm text-text">Algo salió mal. Intentá recargar.</p>
           <button
             className="text-xs underline"
             onClick={() => {

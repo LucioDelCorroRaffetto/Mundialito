@@ -1,4 +1,7 @@
 import webpush from 'web-push';
+import { eq } from 'drizzle-orm';
+import { db } from '../db/index.js';
+import { pushSubscriptions } from '../db/schema/index.js';
 
 // VAPID keys must be set in environment
 const VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY ?? '';
@@ -34,9 +37,18 @@ export async function sendPushNotification(
       JSON.stringify(payload),
     );
   } catch (err: any) {
-    // 410 Gone = subscription expired
-    if (err?.statusCode === 410) {
-      console.log('[push] Subscription expired, endpoint:', subscription.endpoint);
+    // 410 Gone / 404 = subscription is permanently dead. Delete it so it stops
+    // accumulating and being iterated on every future send. The endpoint has a
+    // UNIQUE index, so deleting by endpoint removes exactly this dead row.
+    if (err?.statusCode === 410 || err?.statusCode === 404) {
+      console.log('[push] Subscription expired — deleting endpoint:', subscription.endpoint);
+      try {
+        await db
+          .delete(pushSubscriptions)
+          .where(eq(pushSubscriptions.endpoint, subscription.endpoint));
+      } catch (delErr: any) {
+        console.error('[push] Failed to delete expired subscription:', delErr?.message);
+      }
     } else {
       console.error('[push] Send error:', err?.message);
     }
