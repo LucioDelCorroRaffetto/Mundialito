@@ -1,6 +1,8 @@
 import { NavLink } from 'react-router-dom';
+import { motion } from 'framer-motion';
 import { Home, Users, User, Calendar, BarChart2, Star, Trophy, Goal } from 'lucide-react';
 import { cn } from '@/shared/lib/cn';
+import { springSnappy, tapScale, useMotionPrefs } from '@/shared/lib/motion';
 
 const BASE_TABS = [
   { to: '/home',        label: 'Inicio',   Icon: Home },
@@ -15,6 +17,7 @@ const BASE_TABS = [
 
 export function TabBar() {
   const tabs = BASE_TABS;
+  const { reduced } = useMotionPrefs();
 
   // Taller tab bar (64px) gives older fingers a 48px+ tappable area for
   // each tab, which is the WCAG / Apple HIG minimum. Icons + labels also
@@ -28,7 +31,7 @@ export function TabBar() {
               to={to}
               className={({ isActive }) =>
                 cn(
-                  'flex flex-col items-center justify-center gap-1 h-full w-full transition-colors',
+                  'relative flex flex-col items-center justify-center gap-1 h-full w-full transition-colors',
                   isActive ? 'text-accent' : 'text-text/70 hover:text-text'
                 )
               }
@@ -36,10 +39,24 @@ export function TabBar() {
             >
               {({ isActive }) => (
                 <>
+                  {/* Indicador activo animado: una barra que se desliza entre
+                      tabs vía layoutId compartido. Con reduce-motion el
+                      layout animation queda neutralizado (aparece sin
+                      desplazarse). */}
+                  {isActive && (
+                    <motion.span
+                      layoutId="tabbar-active-indicator"
+                      className="absolute top-0 left-1/2 h-0.5 w-8 -translate-x-1/2 rounded-full bg-accent"
+                      transition={reduced ? { duration: 0 } : springSnappy}
+                    />
+                  )}
                   {/* Icon wrapper — fixed 24×24 so strokeWidth change doesn't shift layout */}
-                  <span className="flex items-center justify-center w-6 h-6 flex-shrink-0">
+                  <motion.span
+                    className="flex items-center justify-center w-6 h-6 flex-shrink-0"
+                    whileTap={reduced ? undefined : tapScale}
+                  >
                     <Icon size={24} strokeWidth={isActive ? 2.5 : 2} />
-                  </span>
+                  </motion.span>
                   <span className="text-[11px] font-semibold leading-none">{label}</span>
                 </>
               )}

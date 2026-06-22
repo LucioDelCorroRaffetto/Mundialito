@@ -287,6 +287,79 @@ FIFA.com no necesita key.
 > Orden cronológico inverso (lo nuevo arriba). Cada entrada: **qué cambió y por qué**.
 > Agregá una entrada cada vez que cambies un comportamiento por una razón.
 
+### 2026-06-21 — Pasada UX/UI multi-agente (4 agentes paralelos, presentacional)
+
+Cuatro agentes en paralelo con propiedad de archivos particionada (paleta/tema,
+animaciones, UX/UI flujos core, UX/UI secundarias). Solo cambios presentacionales
+sobre app en vivo — nada toca lógica de negocio, data fetching, hooks, scoring ni
+shape de datos. Verificación consolidada al final: `tsc -b` limpio, `npm run test`
+5/5 verde. (`npm run lint` falla por config preexistente del monorepo —ESLint busca
+config en `packages/api`—, ajeno a estos cambios.) Sin commit ni deploy.
+
+**Agente 1 — Paleta & contraste WCAG** (`src/theme/*`, `index.css`):
+- **coral y magenta ahora cumplen AA**: usaban texto BLANCO sobre el acento (2.78 y
+  3.38, fallaban el 4.5 de texto). Cambiados a texto OSCURO `#0a0e1a` → 6.91 y 5.67.
+  `a11y: false → true`.
+- **lime y teal**: estaban marcados `a11y: false` de más; medidos dan 15.40 y 10.09
+  con su texto oscuro. Flag corregido a `true`.
+- **text-muted del modo claro FALLABA AA** (4.12 sobre bg-deep, 4.23 sobre card).
+  Subido 0.55 → 0.64 → 4.86/5.05 ✓. Dark 0.55 → 0.60 (ya pasaba; más aire).
+  `:root` de index.css sincronizado. Borde claro 0.08 → 0.10 (casi invisible).
+- 2 paletas nuevas AA: **sky** `#5AB8FF` (8.81) y **rose** `#FF7A99` (7.71). El
+  picker las toma solo vía `accentList`. Tabla de ratios documentada en `palettes.ts`.
+- ✅ Verificado sin cambios: WC26 tri-anfitrión OK en ambos modos; team-colors.ts ya cumplía.
+- ⚠️ Ratios calculados a mano (fórmula WCAG); shells `node` denegados en la sesión.
+
+**Agente 2 — Primitivas de motion + micro-interacciones** (`src/shared/lib/motion.ts`
+NUEVO, `button/skeleton/tab-bar/sidebar/share-sheet/achievement-card-modal`, `router.tsx`):
+- Nuevo `motion.ts`: variants/transitions/curvas consistentes (fade/slide/scale/sheet/
+  stagger, spring de tap, `EASE`/`DURATION`, `useMotionPrefs`). Mobile-first (150–320ms),
+  solo transform/opacity. Todos los helpers aceptan flag `reduced` para degradar.
+- Micro-interacciones: `whileTap` en `button.tsx`; indicador activo animado con
+  `layoutId` en tab-bar y sidebar; **shimmer** en skeleton (reemplaza pulse plano);
+  entrada/salida prolija de share-sheet y achievement-card-modal vía primitivas.
+- **Reduce-motion blindado en JS**: el CSS ya neutralizaba animaciones CSS, pero las de
+  framer-motion no degradaban solas. `achievement-card-modal` ahora corta con `reduced`
+  el RAF auto-sweep, el tilt 3D y los loops infinitos conic/foil. Fade-in de ruta en
+  `router.tsx` es CSS (clase `animate-fade-in`) para no interferir con Suspense/
+  `lazyWithReload` (Gotcha #2).
+- APIs públicas intactas; `SkeletonCard` sumó `className?` opcional.
+- ⚠️ `staggerContainer`/`staggerItem` quedaron disponibles pero ningún componente los
+  consume aún — pensados para listas en páginas. app-shell y user-level-badge sin tocar.
+
+**Agente 3 — UX/UI flujos core** (home, matches, match-detail, leagues, league-detail, leaderboard):
+- **leaderboard.tsx**: tenía un agujero real — sin manejo de error mostraba el vacío
+  engañoso "Todavía no hay posiciones". Ahora estado de error con botón Reintentar
+  (refetch) + estado vacío genuino como card accionable con CTA a /matches. `aria-label`
+  en BadgeChip (antes solo `title`).
+- **matches.tsx**: el error mostraba `error.message` crudo sin reintento → mensaje
+  amigable + botón Reintentar.
+- **leagues.tsx**: corregido HTML inválido (`<button>` anidado dentro de `<Link>`/`<a>`)
+  en las cards "Crear liga"/"Unirse" — ahora el Link es el contenedor. Header con
+  subtítulo; `aria-label` en búsqueda.
+- `loading="lazy"` en avatares de league-detail standings y podio del leaderboard.
+- ⚠️ Chips de filtro de grupo en matches (36×32px, <44px) se dejaron (agrandarlos rompe
+  el scroll horizontal de 12 chips). match-detail.tsx (~1436 líneas) sin tocar — refactor
+  de tamaño queda como deuda post-torneo. home.tsx ya cubierta por auditorías previas.
+
+**Agente 4 — UX/UI secundarias + onboarding** (login, register, settings, stats; resto auditado sin cambios):
+- **Bug visual real en Settings**: el thumb del toggle de notificaciones usaba
+  `translate-x-5.5`, clase **inexistente** en Tailwind (no hay `5.5` en la scale ni en
+  el config) → no emitía CSS, el switch nunca se movía a "on". Corregido a
+  `translate-x-[22px]`.
+- **Bug de copy en Stats**: el divisor entre tramos de igual total mostraba
+  `{total} {total===1?'·':'·'}` (ambas ramas iguales) → "2 ·". Ahora "2 goles"/"1 gol"
+  con el sustantivo correcto por pestaña (goles/asistencias/amarillas/rojas, sing/plural)
+  vía nueva prop `unit`.
+- A11y: `role="alert"` en errores de login y register; `aria-label` en botones
+  icon-only Guardar/Cancelar del username en Settings; `aria-pressed` en tabs de Stats;
+  error de login de `text-sm` → `text-sm-s` (escalable). Register sumó el link
+  "¿Primera vez? → /ayuda" que login ya tenía (paridad de onboarding).
+- ⚠️ Botón "Volver" (~34px tap, <44px) es patrón global; no se cambió solo en estas
+  páginas para no romper consistencia → mejora global post-torneo. fantasy.tsx,
+  tournament-predictions.tsx, profile, user-profile, help, splash, achievements:
+  auditadas, ya bien estructuradas, sin cambios.
+
 ### 2026-06-21 — Segunda auditoría multi-agente + batch de fixes seguros y tests P0
 
 Segunda pasada de auditoría (agentes de research, frontend, backend, testing) en

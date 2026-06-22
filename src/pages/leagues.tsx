@@ -44,6 +44,7 @@ export function LeaguesPage() {
     <div className="flex flex-col gap-0 animate-fade-in">
       <div className="px-4 pt-6 pb-2">
         <h1 className="text-2xl-s font-display font-bold text-text">Ligas</h1>
+        <p className="text-sm-s text-muted mt-0.5">Competí con tus amigos por la cima de la tabla</p>
       </div>
 
       <div className="flex gap-1 px-4 pb-3 pt-1">
@@ -64,17 +65,19 @@ export function LeaguesPage() {
       {tab === 'Mis ligas' && (
         <div className="flex flex-col gap-3 px-4 pb-4">
           <div className="flex gap-3">
-            <Link to="/leagues/create" className="flex-1">
-              <button className="w-full flex flex-col items-center gap-2 p-4 rounded-lg bg-card border border-dashed border-accent-border hover:bg-accent-soft transition-colors">
-                <Plus size={22} className="text-accent" />
-                <span className="text-sm-s font-semibold text-accent">Crear liga</span>
-              </button>
+            <Link
+              to="/leagues/create"
+              className="flex-1 flex flex-col items-center gap-2 p-4 rounded-lg bg-card border border-dashed border-accent-border hover:bg-accent-soft transition-colors"
+            >
+              <Plus size={22} className="text-accent" />
+              <span className="text-sm-s font-semibold text-accent">Crear liga</span>
             </Link>
-            <Link to="/leagues/join" className="flex-1">
-              <button className="w-full flex flex-col items-center gap-2 p-4 rounded-lg bg-card border border-dashed border-border hover:border-accent-border transition-colors">
-                <Search size={22} className="text-muted" />
-                <span className="text-sm-s font-semibold text-muted">Unirse</span>
-              </button>
+            <Link
+              to="/leagues/join"
+              className="flex-1 flex flex-col items-center gap-2 p-4 rounded-lg bg-card border border-dashed border-border hover:border-accent-border transition-colors"
+            >
+              <Search size={22} className="text-muted" />
+              <span className="text-sm-s font-semibold text-muted">Unirse</span>
             </Link>
           </div>
 
@@ -137,6 +140,7 @@ export function LeaguesPage() {
               value={rawQuery}
               onChange={(e) => setRawQuery(e.target.value)}
               placeholder="Buscar ligas públicas..."
+              aria-label="Buscar ligas públicas"
               className="w-full h-11 pl-9 pr-4 rounded-md bg-card border border-border text-text text-sm-s placeholder:text-muted focus:outline-none focus:border-accent transition-colors"
             />
           </div>

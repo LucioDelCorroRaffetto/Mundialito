@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { BarChart2, ChevronRight } from 'lucide-react';
+import { BarChart2, ChevronRight, RotateCw } from 'lucide-react';
 import { cn } from '@/shared/lib/cn';
 import { SkeletonList } from '@/shared/components/skeleton';
 import { useGlobalLeaderboard, type LeaderboardEntry, type TopBadge } from '@/shared/hooks/use-leaderboard';
@@ -31,8 +31,9 @@ function BadgeChip({ badge }: { badge: TopBadge }) {
         TIER_COLORS[badge.tier] ?? 'bg-elevated text-muted border-border'
       )}
       title={badge.name}
+      aria-label={badge.name}
     >
-      <span>{badge.icon}</span>
+      <span aria-hidden>{badge.icon}</span>
     </span>
   );
 }
@@ -58,7 +59,7 @@ function PodiumCard({ entry, place }: { entry: LeaderboardEntry; place: 0 | 1 | 
           )}
         >
           {entry.avatarUrl ? (
-            <img src={entry.avatarUrl} alt={entry.username} width={48} height={48} className="w-full h-full object-cover" />
+            <img src={entry.avatarUrl} alt={entry.username} width={48} height={48} loading="lazy" className="w-full h-full object-cover" />
           ) : (
             <span className={cn('text-base font-bold', medal.text)}>{initials}</span>
           )}
@@ -135,7 +136,7 @@ function LeaderboardRow({ entry, isMe }: { entry: LeaderboardEntry; isMe: boolea
 }
 
 export function LeaderboardPage() {
-  const { data, isLoading } = useGlobalLeaderboard(50);
+  const { data, isLoading, isError, refetch, isFetching } = useGlobalLeaderboard(50);
   const currentUser = useAuthStore((s) => s.user);
 
   const entries = data?.data ?? [];
@@ -153,6 +154,35 @@ export function LeaderboardPage() {
           <h1 className="text-2xl font-display font-bold text-text">Tabla Global</h1>
         </div>
         <SkeletonList count={10} />
+      </div>
+    );
+  }
+
+  if (isError) {
+    return (
+      <div className="p-4 animate-fade-in">
+        <div className="flex items-center gap-2 mb-4">
+          <BarChart2 size={22} className="text-accent" />
+          <h1 className="text-2xl font-display font-bold text-text">Tabla Global</h1>
+        </div>
+        <div className="mt-2 p-6 rounded-xl bg-card border border-border flex flex-col items-center gap-3 text-center">
+          <span className="text-2xl">⚠️</span>
+          <div>
+            <p className="text-base font-semibold text-text">No pudimos cargar la tabla</p>
+            <p className="text-sm text-muted mt-1 max-w-xs">
+              Revisá tu conexión e intentá de nuevo.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => refetch()}
+            disabled={isFetching}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-accent text-accent-on text-sm font-semibold disabled:opacity-60"
+          >
+            <RotateCw size={15} className={cn(isFetching && 'animate-spin')} />
+            {isFetching ? 'Reintentando...' : 'Reintentar'}
+          </button>
+        </div>
       </div>
     );
   }
@@ -211,9 +241,20 @@ export function LeaderboardPage() {
       )}
 
       {entries.length === 0 && (
-        <div className="flex flex-col items-center py-16 gap-3">
+        <div className="mx-4 p-6 rounded-xl bg-card border border-border flex flex-col items-center py-12 gap-3 text-center">
           <BarChart2 size={40} className="text-muted opacity-40" />
-          <p className="text-sm text-muted">Todavía no hay posiciones</p>
+          <div>
+            <p className="text-base font-semibold text-text">Todavía no hay posiciones</p>
+            <p className="text-sm text-muted mt-1 max-w-xs">
+              La tabla se arma con los puntos de los pronósticos. Dejá los tuyos y aparecé acá.
+            </p>
+          </div>
+          <Link
+            to="/matches"
+            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-accent text-accent-on text-sm font-semibold"
+          >
+            Ir a pronosticar
+          </Link>
         </div>
       )}
     </div>

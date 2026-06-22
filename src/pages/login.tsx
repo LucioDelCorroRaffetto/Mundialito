@@ -93,7 +93,7 @@ export function LoginPage() {
             error={errors.password?.message}
           />
           {error && (
-            <p className="text-sm text-red-400 text-center -mt-1">{error}</p>
+            <p role="alert" className="text-sm-s text-red-400 text-center -mt-1">{error}</p>
           )}
           <Button type="submit" size="lg" fullWidth loading={loginMutation.isPending}>
             Entrar

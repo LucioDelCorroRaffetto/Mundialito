@@ -8,11 +8,11 @@ import { cn } from '@/shared/lib/cn';
 
 type TabId = 'goals' | 'assists' | 'yellow' | 'red';
 
-const TABS: { id: TabId; label: string; Icon: LucideIcon; color: string; emptyMsg: string }[] = [
-  { id: 'goals',   label: 'Goleadores',    Icon: Goal,   color: 'text-emerald-500', emptyMsg: 'Todavía no hay goles registrados' },
-  { id: 'assists', label: 'Asistencias',   Icon: Hand,   color: 'text-blue-400',    emptyMsg: 'Todavía no hay asistencias registradas' },
-  { id: 'yellow',  label: 'Amarillas',     Icon: Square, color: 'text-yellow-500',  emptyMsg: 'Sin amarillas todavía' },
-  { id: 'red',     label: 'Rojas',         Icon: Square, color: 'text-red-500',     emptyMsg: 'Sin rojas todavía' },
+const TABS: { id: TabId; label: string; Icon: LucideIcon; color: string; emptyMsg: string; unit: [string, string] }[] = [
+  { id: 'goals',   label: 'Goleadores',    Icon: Goal,   color: 'text-emerald-500', emptyMsg: 'Todavía no hay goles registrados',        unit: ['gol', 'goles'] },
+  { id: 'assists', label: 'Asistencias',   Icon: Hand,   color: 'text-blue-400',    emptyMsg: 'Todavía no hay asistencias registradas', unit: ['asistencia', 'asistencias'] },
+  { id: 'yellow',  label: 'Amarillas',     Icon: Square, color: 'text-yellow-500',  emptyMsg: 'Sin amarillas todavía',                  unit: ['amarilla', 'amarillas'] },
+  { id: 'red',     label: 'Rojas',         Icon: Square, color: 'text-red-500',     emptyMsg: 'Sin rojas todavía',                      unit: ['roja', 'rojas'] },
 ];
 
 /** Etiqueta breve de posición + color de chip por línea de juego. */
@@ -30,7 +30,7 @@ const PODIUM = [
   { ring: 'ring-orange-400/50', bg: 'bg-orange-600/5', chip: 'bg-orange-400 text-orange-950', icon: '🥉' },
 ];
 
-function LeaderboardList({ rows, color, emptyMsg }: { rows: LeaderboardRow[]; color: string; emptyMsg: string }) {
+function LeaderboardList({ rows, color, emptyMsg, unit }: { rows: LeaderboardRow[]; color: string; emptyMsg: string; unit: [string, string] }) {
   if (rows.length === 0) {
     return (
       <div className="px-4 py-10 text-center">
@@ -54,7 +54,7 @@ function LeaderboardList({ rows, color, emptyMsg }: { rows: LeaderboardRow[]; co
             {isFirstOfTier && (
               <div className="flex items-center gap-2 py-1.5 px-1 text-[10px] uppercase tracking-wider text-muted/60 font-bold">
                 <div className="flex-1 h-px bg-border/60" />
-                <span>{row.total} {row.total === 1 ? '·' : '·'}</span>
+                <span>{row.total} {row.total === 1 ? unit[0] : unit[1]}</span>
                 <div className="flex-1 h-px bg-border/60" />
               </div>
             )}
@@ -153,6 +153,7 @@ export function StatsPage() {
               key={id}
               type="button"
               onClick={() => setTab(id)}
+              aria-pressed={active}
               className={cn(
                 'flex-shrink-0 flex items-center gap-1.5 text-sm-s font-semibold px-3 py-1.5 rounded-full transition-colors',
                 active
@@ -172,7 +173,7 @@ export function StatsPage() {
         {isLoading ? (
           <div className="px-4"><SkeletonList count={8} /></div>
         ) : (
-          <LeaderboardList rows={rows} color={activeTab.color} emptyMsg={activeTab.emptyMsg} />
+          <LeaderboardList rows={rows} color={activeTab.color} emptyMsg={activeTab.emptyMsg} unit={activeTab.unit} />
         )}
       </div>
     </div>

@@ -1,6 +1,7 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Copy, MessageCircle, Share2 } from 'lucide-react';
 import { useState } from 'react';
+import { fadeVariants, sheetVariants, useMotionPrefs } from '@/shared/lib/motion';
 
 interface ShareSheetProps {
   open: boolean;
@@ -12,6 +13,7 @@ interface ShareSheetProps {
 
 export function ShareSheet({ open, onClose, leagueName, code, stakesMeme }: ShareSheetProps) {
   const [copied, setCopied] = useState(false);
+  const { reduced } = useMotionPrefs();
 
   const inviteUrl = `${window.location.origin}/j/${code}`;
   const whatsappText = encodeURIComponent(
@@ -35,17 +37,18 @@ export function ShareSheet({ open, onClose, leagueName, code, stakesMeme }: Shar
       {open && (
         <>
           <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
+            variants={fadeVariants(reduced)}
+            initial="initial"
+            animate="animate"
+            exit="exit"
             className="fixed inset-0 bg-black/50 z-40"
             onClick={onClose}
           />
           <motion.div
-            initial={{ y: '100%' }}
-            animate={{ y: 0 }}
-            exit={{ y: '100%' }}
-            transition={{ type: 'spring', damping: 30, stiffness: 300 }}
+            variants={sheetVariants(reduced)}
+            initial="initial"
+            animate="animate"
+            exit="exit"
             className="fixed bottom-0 left-0 right-0 z-50 bg-card rounded-t-2xl p-6 flex flex-col gap-4"
           >
             <div className="flex items-center justify-between">

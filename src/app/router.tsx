@@ -53,11 +53,22 @@ function PageFallback() {
 }
 
 /** Wraps the page in both an ErrorBoundary and a Suspense boundary so a
- *  failed chunk download or a runtime crash is caught in one go. */
+ *  failed chunk download or a runtime crash is caught in one go.
+ *
+ *  Transición de ruta: un fade-in sutil al montar cada página vía la clase
+ *  CSS `animate-fade-in` (definida en tailwind.config). Se eligió CSS en vez
+ *  de AnimatePresence de framer porque el data-router + Suspense +
+ *  `lazyWithReload` hacen frágil el exit-animation (ver Gotcha #2: el chunk
+ *  puede fallar y forzar reload). El CSS es inofensivo para el lazy loading
+ *  y reduce-motion ya lo neutraliza (`[data-reduce-motion="true"]` en
+ *  index.css). El fade envuelve el contenido, NO el fallback, así el spinner
+ *  de Suspense no parpadea. */
 function Page({ children }: { children: ReactNode }) {
   return (
     <ErrorBoundary>
-      <Suspense fallback={<PageFallback />}>{children}</Suspense>
+      <Suspense fallback={<PageFallback />}>
+        <div className="animate-fade-in">{children}</div>
+      </Suspense>
     </ErrorBoundary>
   );
 }

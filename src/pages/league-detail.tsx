@@ -154,7 +154,7 @@ function Row({ row, isMe }: { row: StandingRow; isMe: boolean }) {
           )}
         >
           {row.avatarUrl ? (
-            <img src={row.avatarUrl} alt={row.username} className="w-full h-full object-cover" />
+            <img src={row.avatarUrl} alt={row.username} loading="lazy" className="w-full h-full object-cover" />
           ) : (
             <span className="text-sm-s font-bold text-text">{initials}</span>
           )}

@@ -203,12 +203,14 @@ export function SettingsPage() {
                 }}
                 disabled={updateUsername.isPending || usernameInput.trim().length < 3}
                 className="p-2 rounded-lg bg-accent text-accent-on disabled:opacity-50"
+                aria-label="Guardar nombre de usuario"
               >
                 <Check size={16} />
               </button>
               <button
                 onClick={() => setEditingUsername(false)}
                 className="p-2 rounded-lg bg-elevated border border-border text-muted"
+                aria-label="Cancelar edición"
               >
                 <X size={16} />
               </button>
@@ -348,7 +350,7 @@ export function SettingsPage() {
             )}>
               <div className={cn(
                 'w-5 h-5 rounded-full bg-white shadow-sm mt-0.5 transition-transform',
-                isSubscribed ? 'translate-x-5.5' : 'translate-x-0.5'
+                isSubscribed ? 'translate-x-[22px]' : 'translate-x-0.5'
               )} />
             </div>
           </button>

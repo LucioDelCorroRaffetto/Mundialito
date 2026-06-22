@@ -1,10 +1,18 @@
 import { forwardRef, type ButtonHTMLAttributes } from 'react';
+import { motion, type HTMLMotionProps } from 'framer-motion';
 import { cn } from '@/shared/lib/cn';
+import { tapScale, useMotionPrefs } from '@/shared/lib/motion';
 
 type Variant = 'primary' | 'secondary' | 'ghost' | 'danger';
 type Size = 'sm' | 'md' | 'lg';
 
-type Props = ButtonHTMLAttributes<HTMLButtonElement> & {
+// Omitimos las props de animación de framer que chocan con los handlers
+// nativos de React (onDrag, onAnimationStart, etc.) — el botón es un control
+// estándar, no necesita exponerlas.
+type Props = Omit<
+  ButtonHTMLAttributes<HTMLButtonElement>,
+  keyof Pick<HTMLMotionProps<'button'>, 'onDrag' | 'onDragEnd' | 'onDragStart' | 'onAnimationStart' | 'onAnimationEnd'>
+> & {
   variant?: Variant;
   size?: Size;
   fullWidth?: boolean;
@@ -28,10 +36,16 @@ export const Button = forwardRef<HTMLButtonElement, Props>(function Button(
   { variant = 'primary', size = 'md', fullWidth, loading, className, children, disabled, ...rest },
   ref
 ) {
+  const { reduced } = useMotionPrefs();
+  const isDisabled = disabled || loading;
+
   return (
-    <button
+    <motion.button
       ref={ref}
-      disabled={disabled || loading}
+      disabled={isDisabled}
+      // Feedback de tap sutil. Se desactiva con reduce-motion o si está
+      // deshabilitado (no debe "responder" cuando no es accionable).
+      whileTap={reduced || isDisabled ? undefined : tapScale}
       className={cn(
         'inline-flex items-center justify-center gap-2 rounded-md font-semibold transition-all whitespace-nowrap',
         'disabled:opacity-50 disabled:cursor-not-allowed',
@@ -41,13 +55,13 @@ export const Button = forwardRef<HTMLButtonElement, Props>(function Button(
         fullWidth && 'w-full',
         className
       )}
-      {...rest}
+      {...(rest as HTMLMotionProps<'button'>)}
     >
       {loading ? (
         <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
       ) : (
         children
       )}
-    </button>
+    </motion.button>
   );
 });

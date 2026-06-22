@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { Lock, X } from 'lucide-react';
 import { cn } from '@/shared/lib/cn';
 import { play } from '@/shared/lib/sounds';
+import { fadeVariants, scaleVariants, tapScale, useMotionPrefs } from '@/shared/lib/motion';
 import type { Achievement, AchievementTier } from '@/shared/hooks/use-achievements';
 
 interface Props {
@@ -26,6 +27,7 @@ interface Props {
  * but greyed out with a lock badge.
  */
 export function AchievementCardModal({ achievement, earned, earnedAt, onClose }: Props) {
+  const { reduced } = useMotionPrefs();
   // Close on Escape + lock body scroll while open. Without the body lock,
   // scrolling on the underlying page bleeds through the backdrop on mobile
   // (especially Safari which doesn't respect the dialog scroll containment).
@@ -52,10 +54,10 @@ export function AchievementCardModal({ achievement, earned, earnedAt, onClose }:
     <AnimatePresence>
       {achievement && (
         <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: 0.18 }}
+          variants={fadeVariants(reduced)}
+          initial="initial"
+          animate="animate"
+          exit="exit"
           className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/70 backdrop-blur-sm"
           onClick={onClose}
         >
@@ -63,6 +65,7 @@ export function AchievementCardModal({ achievement, earned, earnedAt, onClose }:
             type="button"
             onClick={onClose}
             aria-label="Cerrar"
+            whileTap={reduced ? undefined : tapScale}
             className="absolute top-4 right-4 p-2 rounded-full bg-white/10 text-white/70 hover:bg-white/20"
           >
             <X size={16} />
@@ -73,6 +76,7 @@ export function AchievementCardModal({ achievement, earned, earnedAt, onClose }:
               achievement={achievement}
               earned={earned}
               earnedAt={earnedAt}
+              reduced={reduced}
             />
           </div>
         </motion.div>
@@ -94,10 +98,12 @@ function AchievementCard({
   achievement,
   earned,
   earnedAt,
+  reduced = false,
 }: {
   achievement: Achievement;
   earned: boolean;
   earnedAt?: string;
+  reduced?: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   // Normalised pointer position relative to the card (0..1 on each axis).
@@ -110,6 +116,12 @@ function AchievementCard({
   // mouse over them.
   const hoveringRef = useRef(false);
   useEffect(() => {
+    // Con reduce-motion no corremos el barrido continuo: la carta queda
+    // estática (sin RAF loop ni movimiento del brillo).
+    if (reduced) {
+      setPointer({ x: 0.5, y: 0.5, active: false });
+      return;
+    }
     let raf = 0;
     const start = performance.now();
     function frame(now: number) {
@@ -126,7 +138,7 @@ function AchievementCard({
     }
     raf = requestAnimationFrame(frame);
     return () => cancelAnimationFrame(raf);
-  }, []);
+  }, [reduced]);
 
   function onMove(e: React.PointerEvent<HTMLDivElement>) {
     const el = ref.current;
@@ -146,18 +158,19 @@ function AchievementCard({
   }
 
   const tier = achievement.tier;
-  const rotX = pointer.active ? (0.5 - pointer.y) * 12 : 0;
-  const rotY = pointer.active ? (pointer.x - 0.5) * 14 : 0;
+  // El tilt 3D se anula con reduce-motion (carta plana, sin paralaje).
+  const rotX = reduced ? 0 : pointer.active ? (0.5 - pointer.y) * 12 : 0;
+  const rotY = reduced ? 0 : pointer.active ? (pointer.x - 0.5) * 14 : 0;
 
   // Tier-specific surface treatment.
   const surface = SURFACES[tier];
 
   return (
     <motion.div
-      initial={{ opacity: 0, scale: 0.85, y: 20 }}
-      animate={{ opacity: 1, scale: 1, y: 0 }}
-      exit={{ opacity: 0, scale: 0.9 }}
-      transition={{ type: 'spring', stiffness: 320, damping: 24 }}
+      variants={scaleVariants(reduced)}
+      initial="initial"
+      animate="animate"
+      exit="exit"
       className="select-none"
       style={{ perspective: 1000 }}
     >
@@ -195,8 +208,8 @@ function AchievementCard({
         />
 
         {/* Tier-specific extra layers */}
-        {tier === 'platinum' && <PlatinumHolo pointer={pointer} dimmed={!earned} />}
-        {tier === 'gold' && <GoldFoil pointer={pointer} dimmed={!earned} />}
+        {tier === 'platinum' && <PlatinumHolo pointer={pointer} dimmed={!earned} reduced={reduced} />}
+        {tier === 'gold' && <GoldFoil pointer={pointer} dimmed={!earned} reduced={reduced} />}
         {tier === 'silver' && <SilverSheen pointer={pointer} dimmed={!earned} />}
         {tier === 'bronze' && <BronzeWarmth pointer={pointer} dimmed={!earned} />}
 
@@ -462,7 +475,7 @@ function SpecularHighlight({ pointer, dimmed }: LayerProps) {
 }
 
 /** Full rainbow holographic for platinum. */
-function PlatinumHolo({ pointer, dimmed }: LayerProps) {
+function PlatinumHolo({ pointer, dimmed, reduced }: LayerProps & { reduced?: boolean }) {
   const px = pointer.x * 100;
   const py = pointer.y * 100;
   return (
@@ -476,8 +489,8 @@ function PlatinumHolo({ pointer, dimmed }: LayerProps) {
           opacity: dimmed ? 0.25 : 0.5,
           filter: 'blur(8px)',
         }}
-        animate={{ rotate: 360 }}
-        transition={{ duration: 14, repeat: Infinity, ease: 'linear' }}
+        animate={reduced ? undefined : { rotate: 360 }}
+        transition={reduced ? undefined : { duration: 14, repeat: Infinity, ease: 'linear' }}
       />
       {/* Cursor-driven highlight */}
       <div
@@ -511,7 +524,7 @@ function PlatinumHolo({ pointer, dimmed }: LayerProps) {
 }
 
 /** Warm gold foil. */
-function GoldFoil({ pointer, dimmed }: LayerProps) {
+function GoldFoil({ pointer, dimmed, reduced }: LayerProps & { reduced?: boolean }) {
   const px = pointer.x * 100;
   const py = pointer.y * 100;
   return (
@@ -523,8 +536,8 @@ function GoldFoil({ pointer, dimmed }: LayerProps) {
             'linear-gradient(135deg, rgba(255,236,140,0.35) 0%, rgba(255,191,77,0.15) 50%, rgba(255,236,140,0.35) 100%)',
           opacity: dimmed ? 0.3 : 0.7,
         }}
-        animate={{ backgroundPosition: ['0% 0%', '100% 100%', '0% 0%'] }}
-        transition={{ duration: 6, repeat: Infinity, ease: 'easeInOut' }}
+        animate={reduced ? undefined : { backgroundPosition: ['0% 0%', '100% 100%', '0% 0%'] }}
+        transition={reduced ? undefined : { duration: 6, repeat: Infinity, ease: 'easeInOut' }}
       />
       <div
         className="absolute inset-0 mix-blend-overlay pointer-events-none transition-opacity duration-300"

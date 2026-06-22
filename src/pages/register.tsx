@@ -91,7 +91,7 @@ export function RegisterPage() {
             error={errors.password?.message}
           />
           {registerMutation.isError && (
-            <p className="text-sm-s text-red-400 text-center -mt-1">
+            <p role="alert" className="text-sm-s text-red-400 text-center -mt-1">
               {(registerMutation.error as { response?: { data?: { error?: { message?: string } } } })?.response?.data?.error?.message ?? 'Error al crear la cuenta. Intentá de nuevo.'}
             </p>
           )}
@@ -106,6 +106,9 @@ export function RegisterPage() {
             Entrá
           </Link>
         </p>
+        <Link to="/ayuda" className="text-xs-s text-muted hover:text-accent underline underline-offset-2 text-center">
+          ¿Primera vez? Mirá cómo instalar la app y armar tu liga →
+        </Link>
       </motion.div>
     </div>
   );
