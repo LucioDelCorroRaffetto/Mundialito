@@ -24,18 +24,35 @@ export interface FixtureSyncResult {
   errors: string[];
 }
 
+/** Datos por partido que tomamos del calendario FIFA. */
+interface FifaFixture {
+  date: string;
+  venue: string | null;
+  city: string | null;
+}
+
+/** FIFA publica nombres/ciudades como array localizado; preferimos en-GB. */
+function pickLocalized(
+  arr: Array<{ Locale?: string; Description?: string }> | undefined | null,
+): string | null {
+  if (!Array.isArray(arr) || arr.length === 0) return null;
+  const en = arr.find((x) => x?.Locale === 'en-GB') ?? arr[0];
+  return en?.Description?.trim() || null;
+}
+
 /**
- * Fetches FIFA calendar for [from, to) and returns a map fifaIdMatch → ISO date.
- * `from` y `to` se redondean al inicio del día UTC: la API rechaza
- * silenciosamente (responde `null` con HTTP 200) si las horas no son
- * medianoche exacta. Partimos en chunks diarios para garantizar cobertura.
+ * Fetches FIFA calendar for [from, to) and returns a map fifaIdMatch → fixture
+ * (fecha + sede + ciudad). `from` y `to` se redondean al inicio del día UTC:
+ * la API rechaza silenciosamente (responde `null` con HTTP 200) si las horas
+ * no son medianoche exacta. Partimos en chunks diarios para garantizar
+ * cobertura.
  */
 function startOfUtcDay(d: Date): Date {
   return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
 }
 
-async function fetchFifaWindow(from: Date, to: Date): Promise<Map<string, string>> {
-  const out = new Map<string, string>();
+async function fetchFifaWindow(from: Date, to: Date): Promise<Map<string, FifaFixture>> {
+  const out = new Map<string, FifaFixture>();
   const fromMidnight = startOfUtcDay(from).getTime();
   // Para `to` redondeamos hacia ARRIBA, así una ventana de 48h desde las
   // 16:50 UTC cubre HOY (16:50→00:00) + MAÑANA (00:00→24:00).
@@ -50,15 +67,21 @@ async function fetchFifaWindow(from: Date, to: Date): Promise<Map<string, string
     if (!data) continue;
     const ms: any[] = data?.Results ?? [];
     for (const m of ms) {
-      if (m?.IdMatch && m?.Date) out.set(m.IdMatch, m.Date);
+      if (m?.IdMatch && m?.Date) {
+        out.set(m.IdMatch, {
+          date: m.Date,
+          venue: pickLocalized(m?.Stadium?.Name),
+          city: pickLocalized(m?.Stadium?.CityName),
+        });
+      }
     }
   }
   return out;
 }
 
 /**
- * Compara los kickoffs en la DB contra el feed para una ventana dada y
- * actualiza los que difieran en más de 1 min. No toca scores ni status.
+ * Compara los kickoffs (y la sede/ciudad) en la DB contra el feed para una
+ * ventana dada y actualiza los que difieran. No toca scores ni status.
  *
  * @param windowFromMs millis desde now() — default 0 (now).
  * @param windowToMs   millis desde now() — default 48 h.
@@ -72,7 +95,7 @@ export async function syncFixtureTimes(
   const from = new Date(now + windowFromMs);
   const to = new Date(now + windowToMs);
 
-  let fifaIndex: Map<string, string>;
+  let fifaIndex: Map<string, FifaFixture>;
   try {
     fifaIndex = await fetchFifaWindow(from, to);
   } catch (err) {
@@ -85,21 +108,46 @@ export async function syncFixtureTimes(
   const ours = await db.select().from(matches);
   for (const m of ours) {
     if (!m.fifaIdMatch) continue;
-    const fifaDate = fifaIndex.get(m.fifaIdMatch);
-    if (!fifaDate) continue;
+    const fix = fifaIndex.get(m.fifaIdMatch);
+    if (!fix) continue;
+
+    const payload: Partial<{
+      kickoffUtc: string;
+      predictionLockUtc: string;
+      venue: string;
+      city: string;
+    }> = {};
+
+    // Kickoff: actualizamos si difiere más de 1 min.
     const ourTs = new Date(m.kickoffUtc).getTime();
-    const fifaTs = new Date(fifaDate).getTime();
-    if (Math.abs(ourTs - fifaTs) <= 60_000) {
+    const fifaTs = new Date(fix.date).getTime();
+    if (Math.abs(ourTs - fifaTs) > 60_000) {
+      payload.kickoffUtc = fix.date;
+      payload.predictionLockUtc = calcPredictionLock(fix.date);
+    }
+
+    // Sede/ciudad: el seed traía sedes ficticias que no matchean los fixtures
+    // reales ya sincronizados (FRA-IRQ figuraba en Vancouver cuando fue en
+    // Filadelfia). Las corregimos contra FIFA. Solo si FIFA aporta el dato y
+    // difiere — nunca pisamos con null (las columnas son NOT NULL). FIFA usa
+    // nombres genéricos ("Philadelphia Stadium") por reglas de patrocinio,
+    // pero la ciudad queda correcta.
+    if (fix.venue && fix.venue !== m.venue) payload.venue = fix.venue;
+    if (fix.city && fix.city !== m.city) payload.city = fix.city;
+
+    if (Object.keys(payload).length === 0) {
       result.unchanged++;
       continue;
     }
+
     try {
-      await db
-        .update(matches)
-        .set({ kickoffUtc: fifaDate, predictionLockUtc: calcPredictionLock(fifaDate) })
-        .where(eq(matches.id, m.id));
+      await db.update(matches).set(payload).where(eq(matches.id, m.id));
       result.updated++;
-      console.log(`[fixture-time-sync] match ${m.id} kickoff updated: ${m.kickoffUtc} → ${fifaDate}`);
+      const parts: string[] = [];
+      if (payload.kickoffUtc) parts.push(`kickoff ${m.kickoffUtc} → ${fix.date}`);
+      if (payload.venue) parts.push(`venue "${m.venue}" → "${fix.venue}"`);
+      if (payload.city) parts.push(`city "${m.city}" → "${fix.city}"`);
+      console.log(`[fixture-time-sync] match ${m.id}: ${parts.join('; ')}`);
     } catch (err) {
       result.errors.push(`update match ${m.id}: ${String(err)}`);
     }
