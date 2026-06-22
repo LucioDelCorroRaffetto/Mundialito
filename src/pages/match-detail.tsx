@@ -691,6 +691,17 @@ export function MatchDetailPage() {
           // caíamos al ScoreInput cuando homeScore era null, lo que dejaba
           // editar el pronóstico en partidos ya en vivo o terminados.
           <div className="flex flex-col items-center gap-2">
+            {match.status === 'suspended' && (
+              <div className="flex flex-col items-center gap-0.5 mb-1">
+                <span className="flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded-full bg-amber-500" />
+                  <span className="text-xs-s font-bold text-amber-500 uppercase tracking-wider">Suspendido</span>
+                </span>
+                <span className="text-[10px] font-semibold text-muted uppercase tracking-wider">
+                  Partido interrumpido
+                </span>
+              </div>
+            )}
             {match.status === 'live' && (() => {
               const paused =
                 match.liveStatus === 'half_time' ||
@@ -1215,7 +1226,7 @@ const MatchEvents = memo(function MatchEvents({
   events?: MatchEvent[];
   timeline?: MatchTimelineEvent[];
   homeTeamCode: string;
-  status: 'scheduled' | 'live' | 'finished';
+  status: 'scheduled' | 'live' | 'finished' | 'suspended';
 }) {
   if (status === 'scheduled') return null;
 

@@ -17,7 +17,19 @@ export const matches = sqliteTable('matches', {
   city: text('city').notNull(),
   group: text('group'),
   round: text('round').notNull().default('group'), // 'group' | 'r32' | 'r16' | 'qf' | 'sf' | 'third' | 'final'
-  status: text('status').notNull().default('scheduled'), // 'scheduled' | 'live' | 'finished'
+  /**
+   * 'scheduled' | 'live' | 'finished' | 'suspended'
+   *
+   * 'suspended' = partido interrumpido (clima/seguridad) o aplazado/cancelado.
+   * Es un HOLD pegajoso: una vez en 'suspended' los feeds NO lo vuelven a
+   * 'live'/'scheduled' tick a tick (durante una demora por tormenta ESPN suele
+   * seguir reportando IN_PLAY) — solo sale de 'suspended' por un 'finished'
+   * terminal (pitazo final) o un override manual del admin. reconcile ignora
+   * las filas que no están 'live'/'scheduled', así que esto también bloquea el
+   * auto-cierre falso de 3,5 h. Caso real (jun-2026): FRA-IRQ suspendido por
+   * rayos al 45'+4' quedaba clavado en "EN VIVO" porque no había pitazo final.
+   */
+  status: text('status').notNull().default('scheduled'),
   /**
    * Sub-estado mientras `status === 'live'`. Refleja la fase de juego que
    * publica el feed de scores (football-data.org `PAUSED` ≡ entretiempo;

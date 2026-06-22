@@ -12,7 +12,7 @@ import { checkAchievements, finalizeFantasyLegends } from '../../../services/ach
 export const updateMatchSchema = z.object({
   homeScore: z.number().int().min(0).max(30).optional(),
   awayScore: z.number().int().min(0).max(30).optional(),
-  status: z.enum(['scheduled', 'live', 'finished']).optional(),
+  status: z.enum(['scheduled', 'live', 'finished', 'suspended']).optional(),
 });
 
 export async function updateMatchHandler(req: Request, res: Response) {

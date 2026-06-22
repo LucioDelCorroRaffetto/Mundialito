@@ -43,7 +43,7 @@ function formatKickoff(utc: string) {
 interface UpdateMatchPayload {
   homeScore?: number;
   awayScore?: number;
-  status?: 'scheduled' | 'live' | 'finished';
+  status?: 'scheduled' | 'live' | 'finished' | 'suspended';
 }
 
 // ─── Player stats form ───────────────────────────────────────────────────────
@@ -284,7 +284,7 @@ function MatchAdminRow({ match, teamMap }: { match: Match; teamMap: Map<number, 
 
   const [homeScore, setHomeScore] = useState(match.homeScore?.toString() ?? '');
   const [awayScore, setAwayScore] = useState(match.awayScore?.toString() ?? '');
-  const [status, setStatus] = useState<'scheduled' | 'live' | 'finished'>(match.status);
+  const [status, setStatus] = useState<'scheduled' | 'live' | 'finished' | 'suspended'>(match.status);
   const [saved, setSaved] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [statsOpen, setStatsOpen] = useState(false);
@@ -351,6 +351,7 @@ function MatchAdminRow({ match, teamMap }: { match: Match; teamMap: Map<number, 
             'text-xs font-bold px-2 py-0.5 rounded-full',
             match.status === 'finished' && 'bg-green-900/40 text-green-400',
             match.status === 'live' && 'bg-red-900/40 text-red-400',
+            match.status === 'suspended' && 'bg-amber-900/40 text-amber-400',
             match.status === 'scheduled' && 'bg-elevated text-muted'
           )}
         >
@@ -397,12 +398,13 @@ function MatchAdminRow({ match, teamMap }: { match: Match; teamMap: Map<number, 
           <label className="text-sm font-semibold text-text">Estado</label>
           <select
             value={status}
-            onChange={(e) => setStatus(e.target.value as 'scheduled' | 'live' | 'finished')}
+            onChange={(e) => setStatus(e.target.value as 'scheduled' | 'live' | 'finished' | 'suspended')}
             className="h-12 px-4 rounded-md bg-elevated border border-border text-text text-base focus:outline-none focus:border-accent transition-colors"
           >
             <option value="scheduled">scheduled</option>
             <option value="live">live</option>
             <option value="finished">finished</option>
+            <option value="suspended">suspended</option>
           </select>
         </div>
 
@@ -581,7 +583,7 @@ export function AdminPage() {
   const { data: teamMap } = useTeamMap();
   const allMatches = matchesResponse?.data ?? [];
 
-  const [filterStatus, setFilterStatus] = useState<'all' | 'scheduled' | 'live' | 'finished'>('all');
+  const [filterStatus, setFilterStatus] = useState<'all' | 'scheduled' | 'live' | 'finished' | 'suspended'>('all');
   const [search, setSearch] = useState('');
 
   const filtered = allMatches.filter((m) => {
@@ -623,7 +625,7 @@ export function AdminPage() {
           className="h-10 px-4 rounded-md bg-elevated border border-border text-text text-sm placeholder:text-muted focus:outline-none focus:border-accent transition-colors"
         />
         <div className="flex gap-1">
-          {(['all', 'scheduled', 'live', 'finished'] as const).map((s) => (
+          {(['all', 'scheduled', 'live', 'finished', 'suspended'] as const).map((s) => (
             <button
               key={s}
               onClick={() => setFilterStatus(s)}

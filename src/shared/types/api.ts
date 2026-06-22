@@ -35,7 +35,7 @@ export interface Match {
   city: string;
   group: string | null;
   round: string;
-  status: 'scheduled' | 'live' | 'finished';
+  status: 'scheduled' | 'live' | 'finished' | 'suspended';
   /**
    * Sub-estado mientras está en vivo: 'in_play' | 'half_time' |
    * 'extra_time_break' | 'penalty_shootout' | 'full_time' | null.

@@ -23,7 +23,7 @@ type FdStatus =
   | 'POSTPONED'
   | 'CANCELLED';
 
-type OurStatus = 'scheduled' | 'live' | 'finished';
+type OurStatus = 'scheduled' | 'live' | 'finished' | 'suspended';
 type OurLiveStatus =
   | 'in_play'
   | 'half_time'
@@ -74,10 +74,12 @@ export interface SyncScoresResult {
 function mapStatus(fdStatus: FdStatus): OurStatus {
   if (fdStatus === 'IN_PLAY' || fdStatus === 'PAUSED') return 'live';
   if (fdStatus === 'FINISHED') return 'finished';
-  // SCHEDULED / TIMED / SUSPENDED / POSTPONED / CANCELLED all become
-  // 'scheduled' in our model. We don't have postponed/cancelled states
-  // server-side; the auto-sync just keeps the row at scheduled and the
-  // admin can adjust manually if a match doesn't kick off.
+  // Partido interrumpido (clima/seguridad), aplazado o cancelado → 'suspended'.
+  // Lo mapeamos a un estado propio (antes caían a 'scheduled', lo que dejaba
+  // a reconcile re-arrancándolo a 'live' cada tick) para que el front muestre
+  // "Suspendido" y reconcile lo ignore.
+  if (fdStatus === 'SUSPENDED' || fdStatus === 'POSTPONED' || fdStatus === 'CANCELLED') return 'suspended';
+  // SCHEDULED / TIMED → scheduled.
   return 'scheduled';
 }
 
@@ -280,7 +282,14 @@ export async function syncScores(options: SyncScoresOptions = {}): Promise<SyncS
       // correcciones de score siguen aplicando. (El caso finished→scheduled,
       // que sí limpia scores por POSTPONED, se maneja más abajo aparte.)
       const downgradeBlocked = ourMatch.status === 'finished' && newStatus === 'live';
-      const effStatus = downgradeBlocked ? 'finished' : newStatus;
+      // Hold pegajoso del estado 'suspended': una vez suspendido, el feed NO
+      // lo saca de 'suspended' tick a tick (durante una demora por tormenta
+      // ESPN/football-data pueden seguir reportando IN_PLAY/PAUSED). Solo lo
+      // libera un 'finished' terminal (pitazo final, que sí re-scorea) o el
+      // override manual del admin. Como reconcile ignora las filas que no son
+      // 'live'/'scheduled', esto además bloquea el auto-cierre falso de 3,5 h.
+      const suspendedHold = ourMatch.status === 'suspended' && newStatus !== 'finished';
+      const effStatus = suspendedHold ? 'suspended' : downgradeBlocked ? 'finished' : newStatus;
 
       // Check if anything changed. When the score is admin-locked, the feed
       // must NOT move it (football-data once published ESP-KSA 5-0 for a 4-0
@@ -293,11 +302,13 @@ export async function syncScores(options: SyncScoresOptions = {}): Promise<SyncS
       // full_time (a stray IN_PLAY tick after FT), we keep the existing
       // liveStatus instead of overwriting it.
       const effectiveLiveStatus =
-        downgradeBlocked
-          ? (ourMatch.liveStatus ?? 'full_time')
-          : ourMatch.status === 'finished' && newStatus === 'finished' && newLiveStatus !== 'full_time'
-            ? ourMatch.liveStatus
-            : newLiveStatus;
+        suspendedHold
+          ? null // 'suspended' no tiene sub-estado de juego
+          : downgradeBlocked
+            ? (ourMatch.liveStatus ?? 'full_time')
+            : ourMatch.status === 'finished' && newStatus === 'finished' && newLiveStatus !== 'full_time'
+              ? ourMatch.liveStatus
+              : newLiveStatus;
       const liveStatusChanged = ourMatch.liveStatus !== effectiveLiveStatus;
 
       if (!statusChanged && !scoreChanged && !liveStatusChanged) continue;

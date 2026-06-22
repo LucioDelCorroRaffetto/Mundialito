@@ -56,7 +56,7 @@ interface EspnResponse {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-type OurStatus = 'scheduled' | 'live' | 'finished';
+type OurStatus = 'scheduled' | 'live' | 'finished' | 'suspended';
 type OurLiveStatus =
   | 'in_play'
   | 'half_time'
@@ -65,8 +65,19 @@ type OurLiveStatus =
   | 'full_time'
   | null;
 
-function mapState(state: 'pre' | 'in' | 'post', completed: boolean): OurStatus {
+function mapState(
+  state: 'pre' | 'in' | 'post',
+  completed: boolean,
+  typeName?: string,
+): OurStatus {
   if (completed || state === 'post') return 'finished';
+  // ESPN expone la interrupción por el nombre del status, no por `state`
+  // (durante una demora por tormenta el estado puede seguir siendo "in").
+  // STATUS_SUSPENDED / STATUS_POSTPONED / STATUS_CANCELED / STATUS_ABANDONED /
+  // STATUS_DELAYED / STATUS_RAIN_DELAY → 'suspended'.
+  const n = (typeName ?? '').toUpperCase();
+  if (n.includes('SUSPEND') || n.includes('POSTPON') || n.includes('CANCEL') ||
+      n.includes('ABANDON') || n.includes('DELAY')) return 'suspended';
   if (state === 'in') return 'live';
   return 'scheduled';
 }
@@ -222,7 +233,7 @@ export async function syncScoresFromEspn(date: string): Promise<SyncScoresResult
       if (!ourMatch) continue;
 
       const { state, completed, name: typeName } = event.status.type;
-      const newStatus = mapState(state, completed);
+      const newStatus = mapState(state, completed, typeName);
       const newLiveStatus = mapEspnLiveStatus(typeName ?? '', state, completed);
 
       // Extract scores
@@ -275,12 +286,19 @@ export async function syncScoresFromEspn(date: string): Promise<SyncScoresResult
       // 'live' NO debe des-finalizarlo. Mantenemos finished/full_time; las
       // correcciones de score de abajo siguen aplicando.
       const downgradeBlocked = ourMatch.status === 'finished' && newStatus !== 'finished';
-      const effStatus = shootoutWinnerUnknown
-        ? 'live'
-        : downgradeBlocked ? 'finished' : newStatus;
-      const effLiveStatus = shootoutWinnerUnknown
-        ? (ourMatch.liveStatus ?? 'in_play')
-        : downgradeBlocked ? (ourMatch.liveStatus ?? 'full_time') : newLiveStatus;
+      // Hold pegajoso de 'suspended' (ver sync-scores): una vez suspendido el
+      // feed no lo rebota a 'live'; solo lo libera un 'finished' o el admin.
+      const suspendedHold = ourMatch.status === 'suspended' && newStatus !== 'finished';
+      const effStatus = suspendedHold
+        ? 'suspended'
+        : shootoutWinnerUnknown
+          ? 'live'
+          : downgradeBlocked ? 'finished' : newStatus;
+      const effLiveStatus = suspendedHold
+        ? null
+        : shootoutWinnerUnknown
+          ? (ourMatch.liveStatus ?? 'in_play')
+          : downgradeBlocked ? (ourMatch.liveStatus ?? 'full_time') : newLiveStatus;
 
       // Admin-locked score → the feed must not move it (see sync-scores).
       const statusChanged = ourMatch.status !== effStatus;

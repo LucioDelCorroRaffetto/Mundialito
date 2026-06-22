@@ -392,6 +392,7 @@ export function MatchesPage() {
     const isLive = match.status === 'live';
     const isFinished = match.status === 'finished';
     const isScheduled = match.status === 'scheduled';
+    const isSuspended = match.status === 'suspended';
     const isPaused = isLive && (
       match.liveStatus === 'half_time' ||
       match.liveStatus === 'extra_time_break' ||
@@ -469,6 +470,13 @@ export function MatchesPage() {
                     </span>
                   </span>
                 )
+              ) : isSuspended ? (
+                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-amber-500/15 border border-amber-500/40">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                  <span className="text-[10px] font-bold text-amber-700 dark:text-amber-300 uppercase tracking-wider">
+                    Suspendido
+                  </span>
+                </span>
               ) : isFinished ? (
                 <span className="inline-flex items-center px-1.5 py-0.5 rounded-full bg-elevated border border-border text-[10px] font-bold text-muted uppercase tracking-wider">
                   Final
@@ -488,7 +496,7 @@ export function MatchesPage() {
                   {teamDisplayLabel(homeTeam.code, match.matchNumber, 'home')}
                 </span>
               </span>
-              {(isLive || isFinished) && match.homeScore !== null ? (
+              {(isLive || isFinished || isSuspended) && match.homeScore !== null ? (
                 <span
                   className={cn(
                     'font-display font-bold tabular-nums px-2',
