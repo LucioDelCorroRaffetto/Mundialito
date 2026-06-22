@@ -506,6 +506,11 @@ export function MatchesPage() {
                 {prediction.points !== null && ` · +${prediction.points} pts`}
               </p>
             )}
+            {isFinished && !hasPrediction && (
+              <p className="text-xs-s text-muted italic mt-0.5">
+                No pronosticaste
+              </p>
+            )}
           </div>
           {!isFinished && <ChevronRight size={16} className="text-muted flex-shrink-0" />}
         </Link>
