@@ -287,6 +287,67 @@ FIFA.com no necesita key.
 > Orden cronológico inverso (lo nuevo arriba). Cada entrada: **qué cambió y por qué**.
 > Agregá una entrada cada vez que cambies un comportamiento por una razón.
 
+### 2026-06-21 — Segunda auditoría multi-agente + batch de fixes seguros y tests P0
+
+Segunda pasada de auditoría (agentes de research, frontend, backend, testing) en
+modo "auditar y proponer", seguida de la implementación del bloque **seguro de
+aplicar durante el torneo** (nada toca el path de scoring en vivo, salvo la
+extracción comportamiento-equivalente de `sync-espn`, que sí debe deployarse
+entre partidos). Rama: `chore/audit-safe-fixes-and-p0-tests`.
+
+**✅ Lo bueno (aplicado y verificado — front+API tsc 0 errores, build OK, 54 tests verdes):**
+- **Push subs muertas (410/404) ahora se borran** en `lib/push-sender.ts` (API, Drizzle)
+  y `packages/worker/src/lib/push-sender.ts` (worker, SQL crudo). Antes ambos
+  **se tragaban** el 410 → el `catch` de `notify-admin` que intentaba limpiar
+  nunca disparaba y las subs muertas se acumulaban (peor en `send-deadline-reminders`,
+  que fanout a todos los users).
+- **`register` TOCTOU**: el INSERT ahora mapea la violación de UNIQUE a `ConflictError`
+  (409) en vez de filtrar un 500 genérico ante dos signups concurrentes con el mismo
+  email/username.
+- **FE — lock de predicción que no se re-evaluaba con el tiempo**: `match-detail.tsx`
+  y `tournament-predictions.tsx` ahora fuerzan UN re-render al cruzar el lock
+  (kickoff−5min / `OPENING_LOCK_UTC`) con un `setTimeout`, así el UI se bloquea solo
+  en vez de quedar editable hasta un render externo. El backend ya rechazaba con 409;
+  esto es solo UX (no había pérdida de datos).
+- **FE menores**: banderas `loading="eager"`→`"lazy"` (en `/matches` eran ~400 requests
+  a flagcdn en el primer paint); fallback del `ErrorBoundary` `text-white/60`→`text-muted`/
+  `text-text` (era ilegible en tema claro).
+- **Tests P0 (cubren los 3 incidentes de junio que no tenían test): nuevo módulo puro
+  `lib/score-sync.ts`** extraído de `sync-espn.ts` (mismo patrón que `fifa-parse`),
+  con `resolveCompetitors` (Gotcha #13, score por identidad), `resolveShootoutScore`
+  (penalty bump + hold de shootout-winner-unknown) y `shouldRescorePredictions`
+  (guard `score_locked`, Gotcha #15). `sync-espn.ts` ahora importa estas funciones
+  (comportamiento idéntico, verificado por tsc). 19 tests nuevos en `lib/score-sync.test.ts`.
+  El drift-guard `src/shared/lib/levels.test.ts` (espejo `levels.ts` front↔API, Gotcha #10)
+  quedó del batch anterior.
+- **Dead code borrado**: `src/shared/hooks/use-ws.ts` (`useLeagueSocket` sin usar, con bug
+  latente en cleanup); `broadcastToLeague` y la sobrecarga de 4 args de `broadcastMatchUpdate`
+  en `ws/server.ts`; lectura del header `x-user-hour` en `upsert-prediction` (`night_owl`
+  ya removido — se preservó el campo `userHour` del tipo del evento como hook futuro).
+
+**⚠️ Lo malo / pendiente (NO resuelto — requiere decisión o esperar fin de torneo):**
+- 🟡 **Goleadores NO se puntúan**: `prediction_scorers` se guarda y lockea, pero **no
+  hay ninguna ruta de scoring que otorgue los "+2 por goleador"** del README/reglas
+  (grep `scorer` en `scoring.ts`/`standings.ts` = 0). **Decisión del dueño (2026-06-21):
+  NO implementarlo durante este Mundial** — implementarlo a mitad de torneo cambiaría
+  el leaderboard retroactivamente. Queda como posible feature post-torneo; mientras
+  tanto los picks de goleadores no suman puntos (no es un bug, es decisión consciente).
+  El README menciona "+2 goleadores" como regla → corregir el README post-torneo si se
+  decide no implementarlo nunca.
+- 🟡 **Operativo `SYNC_SECRET` + deploy**: ✅ `SYNC_SECRET` **confirmado** — Render y el
+  header `x-sync-secret` de cron-job.org coinciden, el `/sync` no da 503 y el sync en
+  vivo funciona. Queda por confirmar en prod (no verificable desde el repo): que Render
+  tomó el último `main` con el guard `score_locked`, que la migración
+  `add-score-locked-column` corrió en la Turso de prod, y que match 39 quedó 4-0 con
+  `score_locked=1`.
+- 🟡 **Worker no typechequea aislado**: `cd packages/worker && tsc --noEmit` falla por
+  módulos no resueltos (`@libsql/client`, `node-cron`, `web-push`) — **pre-existente**,
+  no introducido por este batch. Revisar la config del worker.
+- **Post-torneo** (riesgo/sin valor durante el Mundial): rotación de refresh token,
+  auth + heartbeat en WebSocket, tokens a httpOnly cookie, config de ESLint, refactor
+  de `match-detail.tsx` (~1420 líneas), `update-match` admin transaccional, derivar
+  `OPENING_LOCK_UTC` del API en vez de hardcodear.
+
 ### 2026-06-21 — Override de score (`scoreLocked`) + fix ESP-KSA 5-0→4-0
 
 - **Síntoma**: el partido 39 (España-Arabia, grupo H) mostraba **5-0** pero terminó

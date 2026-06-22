@@ -68,7 +68,11 @@ export function TeamFlag({ code, emoji, size = 24, className }: TeamFlagProps) {
          */
         className="w-full h-full object-cover shadow-[inset_0_0_0_1px_rgba(0,0,0,0.08)]"
         onError={() => setErrored(true)}
-        loading="eager"
+        // lazy: en /matches se renderizan hasta ~200 partidos × 2 banderas;
+        // con eager eran ~400 requests a flagcdn.com compitiendo con los chunks
+        // de la app en el primer paint móvil. El contenedor ya tiene tamaño
+        // fijo, así que el lazy no causa layout shift.
+        loading="lazy"
       />
     </span>
   );

@@ -37,7 +37,19 @@ export async function registerHandler(req: Request, res: Response) {
   }
 
   const passwordHash = await hashPassword(password);
-  const [user] = await db.insert(users).values({ email, username, passwordHash }).returning();
+  let user;
+  try {
+    [user] = await db.insert(users).values({ email, username, passwordHash }).returning();
+  } catch (err) {
+    // The pre-check above handles the common case, but two concurrent signups
+    // with the same email/username both pass it and race to INSERT. The DB's
+    // UNIQUE constraint is the real guard — map its violation to a clean 409
+    // instead of leaking a generic 500.
+    if (/UNIQUE constraint failed/i.test((err as Error)?.message ?? '')) {
+      throw new ConflictError('Email or username already in use');
+    }
+    throw err;
+  }
 
   // Give the user a personal league straight away so they can predict
   // before joining anything. Fire-and-forget: a failure here shouldn't

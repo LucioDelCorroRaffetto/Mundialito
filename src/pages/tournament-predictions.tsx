@@ -444,6 +444,19 @@ export function TournamentPredictionsPage() {
   });
   const [openSection, setOpenSection] = useState<string | null>(null);
   const [initialised, setInitialised] = useState(false);
+
+  // `isTournamentLocked` (más abajo) se computa una vez por render contra
+  // OPENING_LOCK_UTC. Si el usuario está en la pantalla cuando se cruza el
+  // umbral, forzamos un único re-render para que el UI se bloquee solo en vez
+  // de seguir editable hasta que algo externo dispare un render. No-op si el
+  // lock ya pasó. El server valida igual; esto es UX.
+  const [, forceLockTick] = useState(0);
+  useEffect(() => {
+    const msToLock = OPENING_LOCK_UTC.getTime() - Date.now();
+    if (msToLock <= 0) return;
+    const timer = setTimeout(() => forceLockTick((n) => n + 1), msToLock + 250);
+    return () => clearTimeout(timer);
+  }, []);
   // Ligas destino del próximo Guardar. Default: solo la liga seleccionada,
   // para que cambiar un pick no contamine otras ligas sin querer.
   const [targetLeagueIds, setTargetLeagueIds] = useState<Set<number>>(new Set());

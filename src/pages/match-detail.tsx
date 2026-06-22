@@ -434,6 +434,21 @@ export function MatchDetailPage() {
   const upsertMutation = useUpsertPrediction();
   const { vibrate } = useHaptic();
 
+  // El lock (`isPredictionLocked`, más abajo) se calcula comparando
+  // predictionLockUtc contra Date.now() en cada render. Si el usuario abre el
+  // partido faltando pocos minutos para el lock y se queda en la pantalla, sin
+  // esto el lock NO se activaría solo (en estado `scheduled` no hay polling).
+  // Forzamos UN único re-render justo cuando se cruza el lock para que el UI se
+  // bloquee solo. El backend ya rechaza con 409 igual; esto es solo UX.
+  const [, forceLockTick] = useState(0);
+  useEffect(() => {
+    if (!match || match.status !== 'scheduled') return;
+    const msToLock = new Date(match.predictionLockUtc).getTime() - Date.now();
+    if (msToLock <= 0) return;
+    const timer = setTimeout(() => forceLockTick((n) => n + 1), msToLock + 250);
+    return () => clearTimeout(timer);
+  }, [match]);
+
   // Initialize scores when prediction loads. Prefer the league-scoped one when
   // a league is selected; fall back to any prediction so we still show the
   // user's last value when they haven't picked a league yet.

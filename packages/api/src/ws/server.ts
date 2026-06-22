@@ -47,32 +47,6 @@ export function createWsServer(httpServer: Server) {
   return wss;
 }
 
-// Broadcast a JSON message to all clients in a league room
-export function broadcastToLeague(leagueId: number, payload: object) {
-  const room = rooms.get(leagueId);
-  if (!room) return;
-  const msg = JSON.stringify(payload);
-  for (const client of room) {
-    if (client.readyState === WebSocket.OPEN) {
-      client.send(msg);
-    }
-  }
-}
-
-// Broadcast match score update to all leagues (called from worker/finalize-match)
-export function broadcastMatchUpdate(matchId: number, homeScore: number, awayScore: number, status: string) {
-  const payload = { type: 'match:update', matchId, homeScore, awayScore, status };
-  // Broadcast to ALL rooms since match update affects all leagues
-  for (const [, room] of rooms) {
-    const msg = JSON.stringify(payload);
-    for (const client of room) {
-      if (client.readyState === WebSocket.OPEN) {
-        client.send(msg);
-      }
-    }
-  }
-}
-
 // Broadcast a full match object to all connected clients.
 // Sends { type: 'match_updated', data: match } — used from admin update-match handler.
 export function broadcastMatchUpdated(match: object) {

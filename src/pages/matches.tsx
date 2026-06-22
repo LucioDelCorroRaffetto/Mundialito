@@ -93,8 +93,8 @@ export function MatchesPage() {
   }, []);
 
   // Poll every 60s so live scores and the scheduled→live→finished status
-  // transitions show up without a manual refresh. The WS hook (useLeagueSocket)
-  // exists but isn't wired into this page, so polling is the reliable path.
+  // transitions show up without a manual refresh. Polling is the reliable path
+  // (the realtime WS hook was never wired into the app and has been removed).
   // refetchIntervalInBackground is off (in the hook) to spare Render's free tier.
   const { data: matchesResponse, isLoading, error } = useMatches(
     { limit: 200 },
