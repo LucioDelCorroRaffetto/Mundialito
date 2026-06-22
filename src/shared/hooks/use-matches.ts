@@ -45,12 +45,15 @@ export function useMatch(id: number | undefined) {
       return data;
     },
     enabled: id !== undefined && Number.isInteger(id),
-    // While a match is live, poll every 45s so the detail view reflects the
-    // running score. Stops polling once the match is finished/scheduled to
-    // avoid pointless traffic. `query.state.data` is the last fetched match.
+    // While a match is live, poll every 15s so the detail view reflects the
+    // running score y la cronología con poco lag. El backend refresca el vivo
+    // (ESPN score + FIFA timeline) cada 20s; muestreando a 15s el delay total
+    // backend+frontend queda en ~35s en vez de los ~90s que daban los 45s+45s.
+    // Stops polling once the match is finished/scheduled to avoid pointless
+    // traffic. `query.state.data` is the last fetched match.
     refetchInterval: (query) => {
       const m = query.state.data as Match | undefined;
-      return m?.status === 'live' ? 45_000 : false;
+      return m?.status === 'live' ? 15_000 : false;
     },
     refetchIntervalInBackground: false,
   });

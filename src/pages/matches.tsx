@@ -92,13 +92,13 @@ export function MatchesPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Poll every 60s so live scores and the scheduled→live→finished status
+  // Poll every 30s so live scores and the scheduled→live→finished status
   // transitions show up without a manual refresh. Polling is the reliable path
   // (the realtime WS hook was never wired into the app and has been removed).
   // refetchIntervalInBackground is off (in the hook) to spare Render's free tier.
-  const { data: matchesResponse, isLoading, error } = useMatches(
+  const { data: matchesResponse, isLoading, error, refetch, isFetching } = useMatches(
     { limit: 200 },
-    { refetchInterval: 60_000 },
+    { refetchInterval: 30_000 },
   );
   const { data: teamMap } = useTeamMap();
   const { data: teamsData } = useTeams();
@@ -119,10 +119,20 @@ export function MatchesPage() {
   }
   if (error) {
     return (
-      <div className="p-6 m-4 rounded-lg bg-red-500/10 border border-red-500/30 flex flex-col items-center gap-2 text-center animate-fade-in">
+      <div className="p-6 m-4 rounded-lg bg-red-500/10 border border-red-500/30 flex flex-col items-center gap-3 text-center animate-fade-in">
         <span className="text-2xl">⚠️</span>
-        <p className="text-sm font-semibold text-red-600 dark:text-red-300">No pudimos cargar los partidos</p>
-        <p className="text-xs text-muted max-w-xs">{String((error as Error).message)}</p>
+        <div>
+          <p className="text-sm font-semibold text-red-600 dark:text-red-300">No pudimos cargar los partidos</p>
+          <p className="text-xs text-muted max-w-xs mt-1">Revisá tu conexión e intentá de nuevo.</p>
+        </div>
+        <button
+          type="button"
+          onClick={() => refetch()}
+          disabled={isFetching}
+          className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-accent text-accent-on text-sm-s font-semibold disabled:opacity-60"
+        >
+          {isFetching ? 'Reintentando...' : 'Reintentar'}
+        </button>
       </div>
     );
   }
