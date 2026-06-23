@@ -18,6 +18,32 @@ const FIFA_BASE = 'https://api.fifa.com/api/v3/calendar/matches';
 const FIFA_COMPETITION = '17';
 const FIFA_SEASON = '285023';
 
+/**
+ * FIFA publica nombres de estadio genéricos por reglas de patrocinio
+ * ("Philadelphia Stadium", "Atlanta Stadium", …). Los mapeamos al nombre
+ * real/branded de cada sede del Mundial 2026, keyado por la ciudad en-GB que
+ * devuelve el feed (las 16 ciudades son únicas). Si FIFA reporta una ciudad
+ * que no está en el mapa, caemos al nombre genérico del feed.
+ */
+const REAL_VENUES: Record<string, { venue: string; city: string }> = {
+  'Atlanta':                { venue: 'Mercedes-Benz Stadium',   city: 'Atlanta' },
+  'Vancouver':              { venue: 'BC Place',                city: 'Vancouver' },
+  'Boston':                 { venue: 'Gillette Stadium',        city: 'Boston' },
+  'Dallas':                 { venue: 'AT&T Stadium',            city: 'Dallas' },
+  'Guadalajara':            { venue: 'Estadio Akron',           city: 'Guadalajara' },
+  'Houston':                { venue: 'NRG Stadium',             city: 'Houston' },
+  'Kansas City':            { venue: 'Arrowhead Stadium',       city: 'Kansas City' },
+  'Los Angeles':            { venue: 'SoFi Stadium',            city: 'Los Angeles' },
+  'Mexico City':            { venue: 'Estadio Azteca',          city: 'Ciudad de México' },
+  'Miami':                  { venue: 'Hard Rock Stadium',       city: 'Miami' },
+  'Monterrey':              { venue: 'Estadio BBVA',            city: 'Monterrey' },
+  'New Jersey':             { venue: 'MetLife Stadium',         city: 'New York/NJ' },
+  'Philadelphia':           { venue: 'Lincoln Financial Field', city: 'Philadelphia' },
+  'San Francisco Bay Area': { venue: "Levi's Stadium",          city: 'San Francisco' },
+  'Seattle':                { venue: 'Lumen Field',             city: 'Seattle' },
+  'Toronto':                { venue: 'BMO Field',               city: 'Toronto' },
+};
+
 export interface FixtureSyncResult {
   updated: number;
   unchanged: number;
@@ -128,12 +154,14 @@ export async function syncFixtureTimes(
 
     // Sede/ciudad: el seed traía sedes ficticias que no matchean los fixtures
     // reales ya sincronizados (FRA-IRQ figuraba en Vancouver cuando fue en
-    // Filadelfia). Las corregimos contra FIFA. Solo si FIFA aporta el dato y
-    // difiere — nunca pisamos con null (las columnas son NOT NULL). FIFA usa
-    // nombres genéricos ("Philadelphia Stadium") por reglas de patrocinio,
-    // pero la ciudad queda correcta.
-    if (fix.venue && fix.venue !== m.venue) payload.venue = fix.venue;
-    if (fix.city && fix.city !== m.city) payload.city = fix.city;
+    // Filadelfia). Las corregimos contra FIFA, traduciendo el nombre genérico
+    // del feed al real/branded vía REAL_VENUES (keyado por ciudad). Solo si
+    // tenemos el dato y difiere — nunca pisamos con null (columnas NOT NULL).
+    const real = fix.city ? REAL_VENUES[fix.city] : undefined;
+    const targetVenue = real?.venue ?? fix.venue;
+    const targetCity = real?.city ?? fix.city;
+    if (targetVenue && targetVenue !== m.venue) payload.venue = targetVenue;
+    if (targetCity && targetCity !== m.city) payload.city = targetCity;
 
     if (Object.keys(payload).length === 0) {
       result.unchanged++;
@@ -145,8 +173,8 @@ export async function syncFixtureTimes(
       result.updated++;
       const parts: string[] = [];
       if (payload.kickoffUtc) parts.push(`kickoff ${m.kickoffUtc} → ${fix.date}`);
-      if (payload.venue) parts.push(`venue "${m.venue}" → "${fix.venue}"`);
-      if (payload.city) parts.push(`city "${m.city}" → "${fix.city}"`);
+      if (payload.venue) parts.push(`venue "${m.venue}" → "${payload.venue}"`);
+      if (payload.city) parts.push(`city "${m.city}" → "${payload.city}"`);
       console.log(`[fixture-time-sync] match ${m.id}: ${parts.join('; ')}`);
     } catch (err) {
       result.errors.push(`update match ${m.id}: ${String(err)}`);

@@ -144,7 +144,7 @@ const LeaderboardRow = memo(function LeaderboardRow({
 });
 
 export function LeaderboardPage() {
-  const { data, isLoading, isError, refetch, isFetching } = useGlobalLeaderboard(50);
+  const { data, isLoading, isError, refetch, isFetching } = useGlobalLeaderboard(1000);
   const currentUser = useAuthStore((s) => s.user);
   const { reduced } = useMotionPrefs();
 
