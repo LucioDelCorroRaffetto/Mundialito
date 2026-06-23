@@ -11,19 +11,38 @@
 //      working for everyone else.
 //   3. Shared league but user is the only member → delete the league.
 //
-// Everything else cascades from the users.id delete:
-//   predictions, fantasy_teams, fantasy_lineups, tournament_predictions,
-//   user_achievements, user_login_days, league_position_history,
-//   league_members, push_subscriptions.
+// Everything else used to rely on ON DELETE CASCADE from users.id, but we
+// can NOT depend on that here: `PRAGMA foreign_keys = ON` is a no-op once a
+// transaction has begun (SQLite rule), and our libSQL client only sets the
+// pragma *inside* the interactive transaction — so FK enforcement is OFF
+// during this delete and the cascades never fire. That left orphaned rows
+// (predictions, league_members, fantasy, etc.) so deleted users kept showing
+// up in standings/profiles. We therefore delete every child row explicitly,
+// in FK-safe order (grandchildren first), regardless of pragma state.
 //
 // Confirmation: body must include the user's current username (case-
 // insensitive). This is the "type your username" pattern Github uses —
 // cheap to add, hard to trigger by accident.
 import { Request, Response } from 'express';
 import { z } from 'zod';
-import { eq, ne, and, asc } from 'drizzle-orm';
+import { eq, ne, and, asc, inArray } from 'drizzle-orm';
 import { db } from '../../../db/index.js';
-import { users, leagues, leagueMembers } from '../../../db/schema/index.js';
+import {
+  users,
+  leagues,
+  leagueMembers,
+  predictions,
+  predictionScorers,
+  fantasyTeams,
+  fantasySquadPlayers,
+  fantasyLineups,
+  fantasyRoundScores,
+  tournamentPredictions,
+  userAchievements,
+  userLoginDays,
+  leaguePositionHistory,
+  pushSubscriptions,
+} from '../../../db/schema/index.js';
 
 export const deleteAccountSchema = z.object({
   confirmUsername: z.string().min(1, 'Username confirmation required'),
@@ -71,6 +90,31 @@ export async function deleteAccountHandler(req: Request, res: Response) {
         await tx.delete(leagues).where(eq(leagues.id, league.id));
       }
     }
+
+    // Grandchildren first (rows that reference the user's predictions /
+    // fantasy teams), then the user's own rows, then the user itself.
+    const userPredictions = tx
+      .select({ id: predictions.id })
+      .from(predictions)
+      .where(eq(predictions.userId, userId));
+    await tx.delete(predictionScorers).where(inArray(predictionScorers.predictionId, userPredictions));
+    await tx.delete(predictions).where(eq(predictions.userId, userId));
+
+    const userFantasyTeams = tx
+      .select({ id: fantasyTeams.id })
+      .from(fantasyTeams)
+      .where(eq(fantasyTeams.userId, userId));
+    await tx.delete(fantasySquadPlayers).where(inArray(fantasySquadPlayers.fantasyTeamId, userFantasyTeams));
+    await tx.delete(fantasyTeams).where(eq(fantasyTeams.userId, userId));
+
+    await tx.delete(fantasyLineups).where(eq(fantasyLineups.userId, userId));
+    await tx.delete(fantasyRoundScores).where(eq(fantasyRoundScores.userId, userId));
+    await tx.delete(tournamentPredictions).where(eq(tournamentPredictions.userId, userId));
+    await tx.delete(userAchievements).where(eq(userAchievements.userId, userId));
+    await tx.delete(userLoginDays).where(eq(userLoginDays.userId, userId));
+    await tx.delete(leaguePositionHistory).where(eq(leaguePositionHistory.userId, userId));
+    await tx.delete(leagueMembers).where(eq(leagueMembers.userId, userId));
+    await tx.delete(pushSubscriptions).where(eq(pushSubscriptions.userId, userId));
 
     await tx.delete(users).where(eq(users.id, userId));
   });
