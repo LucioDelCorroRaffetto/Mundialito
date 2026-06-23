@@ -4,6 +4,7 @@ import { TeamFlag } from '@/shared/components/ui/team-flag';
 import { cn } from '@/shared/lib/cn';
 import { BRACKET_ROUNDS, THIRD_PLACE_MATCH, R32_LABELS } from '@/shared/data/bracket';
 import { computeAllGroupClinches, resolveSlotTeam, type GroupClinch } from '@/shared/lib/group-clinch';
+import { resolveThirdPlaceSlots } from '@/shared/lib/third-place';
 import type { Match, Team } from '@/shared/types/api';
 
 interface Props {
@@ -278,6 +279,12 @@ export function BracketView({ matches, teamMap, teams }: Props) {
     [teams, matches],
   );
 
+  // Slots "Mejor 3ro" de la R32 → equipo, una vez completa la fase de grupos.
+  const thirdSlots = useMemo<Map<number, Team>>(
+    () => (teams && teams.length ? resolveThirdPlaceSlots(teams, matches) : new Map()),
+    [teams, matches],
+  );
+
   const positions = useMemo(() => computePositions(), []);
 
   const rounds = [
@@ -342,7 +349,11 @@ export function BracketView({ matches, teamMap, teams }: Props) {
                           roundIndex={ri}
                           teamMap={teamMap}
                           projectedHome={ri === 0 ? resolveSlotTeam(R32_LABELS[mn]?.home ?? '', clinches) : null}
-                          projectedAway={ri === 0 ? resolveSlotTeam(R32_LABELS[mn]?.away ?? '', clinches) : null}
+                          projectedAway={
+                            ri === 0
+                              ? resolveSlotTeam(R32_LABELS[mn]?.away ?? '', clinches) ?? thirdSlots.get(mn) ?? null
+                              : null
+                          }
                         />
                       </div>
                     );
@@ -395,7 +406,7 @@ export function BracketView({ matches, teamMap, teams }: Props) {
         </span>
         <span className="flex items-center gap-1.5 text-[9px] text-muted">
           <span className="text-green-500 dark:text-green-400 font-black">✓</span>
-          1°/2° confirmado matemáticamente
+          Cruce confirmado (1°/2° clinch · 3ros al cerrar grupos)
         </span>
       </div>
     </div>
