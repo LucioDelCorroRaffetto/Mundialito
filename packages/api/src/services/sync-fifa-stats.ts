@@ -26,6 +26,7 @@
  *   3     Red card  (assumed from natural numbering — verify on first
  *                   tournament occurrence)
  *   5     Substitution (IdPlayer in, IdSubPlayer out)
+ *   6     Penalty Awarded (IdPlayer = pateador, IdTeam = equipo beneficiado)
  *  39     Goal direct from free-kick
  *  41     Goal from penalty (also used for penalty CONVERTED in shootout — see Period)
  *  60     Penalty saved by goalkeeper (shootout only)
@@ -192,6 +193,9 @@ const OWN_GOAL_TYPES      = new Set([34]);
 const ASSIST_TYPES        = new Set([1]);
 const YELLOW_TYPES        = new Set([2]);
 const RED_TYPES           = new Set([3]);
+// Penal cobrado por el árbitro (en juego o tanda). No suma fantasy — solo
+// timeline, para mostrar el momento previo al remate.
+const PENALTY_AWARDED_TYPES = new Set([6]);
 // Tipos nuevos — exclusivos de la tanda de penales (Period 11 en FIFA):
 const PENALTY_SAVE_TYPES  = new Set([60]);  // Penal atajado (arquero)
 const PENALTY_MISS_TYPES  = new Set([65]);  // Penal errado (fuera/poste)
@@ -558,7 +562,7 @@ async function doSync(matchId: number): Promise<SyncStatsResult> {
   interface TimelineEvent {
     playerId: number;
     teamId: number;
-    type: 'goal' | 'own_goal' | 'assist' | 'yellow' | 'red' | 'sub_in' | 'sub_out' | 'penalty_miss' | 'penalty_save' | 'penalty_goal';
+    type: 'goal' | 'own_goal' | 'assist' | 'yellow' | 'red' | 'sub_in' | 'sub_out' | 'penalty_awarded' | 'penalty_miss' | 'penalty_save' | 'penalty_goal';
     minute: number | null;
     period: number | null;
   }
@@ -622,6 +626,10 @@ async function doSync(matchId: number): Promise<SyncStatsResult> {
     // Penal errado (fuera, al poste) — se acredita al jugador que pateó.
     // No modifica ningún bucket de stats fantasy; solo alimenta el timeline.
     else if (PENALTY_MISS_TYPES.has(ev.Type)) { eventType = 'penalty_miss'; }
+    // Penal cobrado por el árbitro — se acredita al pateador (IdPlayer).
+    // No modifica ningún bucket fantasy; alimenta el timeline para mostrar
+    // la secuencia "penal cobrado → gol/errado/atajado".
+    else if (PENALTY_AWARDED_TYPES.has(ev.Type)) { eventType = 'penalty_awarded'; }
 
     // FIFA usa números impares para fases de juego (3=1T, 5=2T, 7=ET1,
     // 9=ET2, 11=penales) y números pares para los "intermedios"

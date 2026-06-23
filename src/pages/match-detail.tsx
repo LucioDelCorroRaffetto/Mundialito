@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, memo } from 'react';
 import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Clock, MapPin, CheckCircle2, Share2, Users, Plus, Minus, Lock, ArrowRightLeft, Handshake } from 'lucide-react';
+import { ArrowLeft, Clock, MapPin, CheckCircle2, Share2, Users, Plus, Minus, Lock, ArrowRightLeft, Handshake, Target } from 'lucide-react';
 import { toast } from 'sonner';
 import { ROUND_LABELS } from '@/shared/data/mock';
 import { getMaxPossiblePoints } from '@/shared/lib/scoring';
@@ -1182,6 +1182,12 @@ const EVENT_LABEL: Record<MatchTimelineEvent['type'], EventDisplay> = {
   sub_out:  {
     label: 'Sale',
     render: ({ size = 12 }) => <ArrowRightLeft size={size} className="text-rose-500 rotate-90 scale-y-[-1]" aria-label="Sale" />,
+  },
+  // 'penalty_awarded': el árbitro cobró el penal (en juego o tanda). Diana
+  // ámbar = el punto del penal, momento previo al remate.
+  penalty_awarded: {
+    label: 'Penal cobrado',
+    render: ({ size = 14 }) => <Target size={size} className="text-amber-500" aria-label="Penal cobrado" />,
   },
   // Tanda de penales — los tres tipos son exclusivos de period=5 (shootout).
   // 'penalty_goal': penal convertido. Usamos ⚽ con badge "P" para diferenciarlo

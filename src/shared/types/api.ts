@@ -72,7 +72,7 @@ export interface MatchTimelineEvent {
    * 'penalty_goal' / 'penalty_miss' / 'penalty_save' son exclusivos de la
    * tanda (period=5). NO cuentan como gol en el juego ni en el fantasy.
    */
-  type: 'goal' | 'own_goal' | 'assist' | 'yellow' | 'red' | 'sub_in' | 'sub_out' | 'penalty_miss' | 'penalty_save' | 'penalty_goal';
+  type: 'goal' | 'own_goal' | 'assist' | 'yellow' | 'red' | 'sub_in' | 'sub_out' | 'penalty_awarded' | 'penalty_miss' | 'penalty_save' | 'penalty_goal';
   minute: number | null;
   /** 1=1T, 2=2T, 3=ET1, 4=ET2, 5=penales (normalizado por el sync). */
   period: number | null;
