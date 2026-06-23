@@ -14,7 +14,7 @@ const TIER_PRIORITY: Record<string, number> = {
 };
 
 export async function globalLeaderboardHandler(req: Request, res: Response) {
-  const limit = Math.min(Number(req.query.limit) || 50, 1000);
+  const limit = Math.min(Number(req.query.limit) || 50, 100);
   const offset = Number(req.query.offset) || 0;
 
   // Exclude admin/bot accounts from the leaderboard
