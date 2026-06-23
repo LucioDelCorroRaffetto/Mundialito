@@ -19,6 +19,8 @@ import { useHaptic } from '@/shared/hooks/use-haptic';
 import { useMatch } from '@/shared/hooks/use-matches';
 import { play } from '@/shared/lib/sounds';
 import { useTeamMap } from '@/shared/hooks/use-teams';
+import { useBracketProjection } from '@/shared/hooks/use-bracket-projection';
+import { resolveBracketSlot } from '@/shared/lib/bracket-projection';
 import { useMyLeagues } from '@/shared/hooks/use-leagues';
 import { getTeamColors, hexToRgba } from '@/shared/data/team-colors';
 
@@ -371,6 +373,9 @@ export function MatchDetailPage() {
   const { data: match, isLoading: matchLoading } = useMatch(matchId);
   const { data: teamMap, isLoading: teamsLoading } = useTeamMap();
   const { data: myLeagues } = useMyLeagues();
+  // Proyección del cuadro: para mostrar el equipo (ej. el 1° de grupo ya
+  // clasificado) en un cruce de R32 cuyo rival/equipo todavía no está oficial.
+  const bracketProjection = useBracketProjection();
 
   // leagueId is only used for viewing league predictions — not for saving.
   // Guard against `?leagueId=abc` which would produce NaN and poison every
@@ -508,12 +513,22 @@ export function MatchDetailPage() {
   const homeTeam = teamMap?.get(match.homeTeamId);
   const awayTeam = teamMap?.get(match.awayTeamId);
 
-  const homeTeamDisplay = homeTeam ?? { id: match.homeTeamId, name: String(match.homeTeamId), code: '?', flag: '🏳️', group: null, confederation: null };
-  const awayTeamDisplay = awayTeam ?? { id: match.awayTeamId, name: String(match.awayTeamId), code: '?', flag: '🏳️', group: null, confederation: null };
+  // ¿El equipo OFICIAL (el de la DB) todavía no está definido? Esto gobierna el
+  // bloqueo del pronóstico: aunque proyectemos un equipo, el cruce no es oficial
+  // hasta que termine la fase de grupos, así que el pronóstico sigue cerrado.
+  const homeOfficialTbd = !homeTeam || homeTeam.code === 'TBD' || homeTeam.code === '?';
+  const awayOfficialTbd = !awayTeam || awayTeam.code === 'TBD' || awayTeam.code === '?';
 
-  // Knock-out matches with undetermined opponents can't be predicted yet
-  const teamsAreTbd = homeTeamDisplay.code === 'TBD' || homeTeamDisplay.code === '?'
-    || awayTeamDisplay.code === 'TBD' || awayTeamDisplay.code === '?';
+  // Proyección del cruce para los slots TBD (1°/2° de grupo o mejor tercero).
+  const homeProjection = homeOfficialTbd ? resolveBracketSlot(match.matchNumber, 'home', bracketProjection) : null;
+  const awayProjection = awayOfficialTbd ? resolveBracketSlot(match.matchNumber, 'away', bracketProjection) : null;
+
+  const homeTeamDisplay = homeProjection?.team ?? homeTeam ?? { id: match.homeTeamId, name: String(match.homeTeamId), code: '?', flag: '🏳️', group: null, confederation: null };
+  const awayTeamDisplay = awayProjection?.team ?? awayTeam ?? { id: match.awayTeamId, name: String(match.awayTeamId), code: '?', flag: '🏳️', group: null, confederation: null };
+
+  // Knock-out matches with undetermined opponents can't be predicted yet — se
+  // mide sobre el equipo OFICIAL, no sobre el proyectado.
+  const teamsAreTbd = homeOfficialTbd || awayOfficialTbd;
 
   // Hide personal/auto-created leagues from the chip selector — the user
   // doesn't think of them as "leagues" and the chip would just confuse the
@@ -864,6 +879,19 @@ export function MatchDetailPage() {
             <p className="text-xs-s text-muted mt-0.5">
               Los equipos de este partido se definen en la fase de grupos. Podrás pronosticar cuando se conozcan los clasificados.
             </p>
+            {(homeProjection || awayProjection) && (
+              <p className="text-xs-s text-muted mt-1.5">
+                <span className="font-semibold text-text">Proyección:</span>{' '}
+                {homeProjection
+                  ? `${homeProjection.team.name}${homeProjection.confirmed ? '' : ' (orden por definir)'}`
+                  : 'rival por definir'}
+                {' vs '}
+                {awayProjection
+                  ? `${awayProjection.team.name}${awayProjection.confirmed ? '' : ' (orden por definir)'}`
+                  : 'rival por definir'}
+                {'. '}Aún no es oficial.
+              </p>
+            )}
           </div>
         </div>
       )}

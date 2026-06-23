@@ -3,8 +3,8 @@ import { Link } from 'react-router-dom';
 import { TeamFlag } from '@/shared/components/ui/team-flag';
 import { cn } from '@/shared/lib/cn';
 import { BRACKET_ROUNDS, THIRD_PLACE_MATCH, R32_LABELS } from '@/shared/data/bracket';
-import { computeAllGroupClinches, resolveSlotTeam, type GroupClinch, type SlotResolution } from '@/shared/lib/group-clinch';
-import { resolveThirdPlaceSlots } from '@/shared/lib/third-place';
+import { type SlotResolution } from '@/shared/lib/group-clinch';
+import { computeBracketProjection, resolveBracketSlot } from '@/shared/lib/bracket-projection';
 import type { Match, Team } from '@/shared/types/api';
 
 interface Props {
@@ -281,16 +281,10 @@ export function BracketView({ matches, teamMap, teams }: Props) {
     [matches],
   );
 
-  // 1°/2° de grupo ya confirmados matemáticamente → para precargar los slots
-  // R32 ("1° Grp X" / "2° Grp X") antes de que el grupo cierre.
-  const clinches = useMemo<Map<string, GroupClinch>>(
-    () => (teams && teams.length ? computeAllGroupClinches(teams, matches) : new Map()),
-    [teams, matches],
-  );
-
-  // Slots "Mejor 3ro" de la R32 → equipo, una vez completa la fase de grupos.
-  const thirdSlots = useMemo<Map<number, Team>>(
-    () => (teams && teams.length ? resolveThirdPlaceSlots(teams, matches) : new Map()),
+  // Proyección de la R32: 1°/2° de grupo (confirmados o clasificados
+  // provisionales) + mejores terceros al cerrar la fase de grupos.
+  const projection = useMemo(
+    () => computeBracketProjection(teams ?? [], matches),
     [teams, matches],
   );
 
@@ -357,13 +351,8 @@ export function BracketView({ matches, teamMap, teams }: Props) {
                           matchNumber={mn}
                           roundIndex={ri}
                           teamMap={teamMap}
-                          projectedHome={ri === 0 ? resolveSlotTeam(R32_LABELS[mn]?.home ?? '', clinches) : null}
-                          projectedAway={
-                            ri === 0
-                              ? resolveSlotTeam(R32_LABELS[mn]?.away ?? '', clinches) ??
-                                (thirdSlots.get(mn) ? { team: thirdSlots.get(mn)!, confirmed: true } : null)
-                              : null
-                          }
+                          projectedHome={ri === 0 ? resolveBracketSlot(mn, 'home', projection) : null}
+                          projectedAway={ri === 0 ? resolveBracketSlot(mn, 'away', projection) : null}
                         />
                       </div>
                     );

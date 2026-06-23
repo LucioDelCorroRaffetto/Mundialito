@@ -112,6 +112,27 @@ describe('computeGroupClinch — confirmación matemática de 1°/2°', () => {
   });
 });
 
+describe('desempate FIFA 2026 — duelo directo por encima de la dif. de gol general', () => {
+  it('a y b empatan en puntos (ambos jugaron todo); a ganó el duelo directo pero b tiene mejor DG → a es 1°', () => {
+    const { teams, a, b, c, d } = makeGroup('H');
+    const matches = [
+      played(a, b, 1, 0, 'H'),  // a gana el duelo directo
+      played(a, c, 1, 0, 'H'),
+      played(a, d, 0, 5, 'H'),  // a pierde feo → DG general de a se hunde (-3)
+      played(b, c, 5, 0, 'H'),
+      played(b, d, 3, 0, 'H'),  // b: 6 pts, DG +7 (mucho mejor que a)
+      played(c, d, 1, 0, 'H'),  // c y d quedan en 3, fuera
+    ];
+    // a: 6 pts, DG -3 · b: 6 pts, DG +7. Con la regla VIEJA (DG primero) b sería
+    // 1°. Con la regla 2026 (duelo directo primero) manda que a le ganó a b → a 1°.
+    const clinch = computeGroupClinch(teams, matches, 'H');
+    expect(clinch.first?.id).toBe(a.id);
+    expect(clinch.second?.id).toBe(b.id);
+    expect(clinch.slot1?.confirmed).toBe(true);
+    expect(clinch.slot2?.confirmed).toBe(true);
+  });
+});
+
 describe('resolveSlotTeam', () => {
   it('mapea labels de slot a los equipos confirmados', () => {
     const { teams, a, b } = makeGroup('F');

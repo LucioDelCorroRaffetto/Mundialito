@@ -32,6 +32,7 @@
  * dif. de gol, así que el desempate se considera abierto = no confirmado).
  */
 import type { Match, Team } from '@/shared/types/api';
+import { computeStandings } from '@/shared/lib/standings';
 
 export interface GroupClinch {
   /** Equipo con el 1° puesto matemáticamente asegurado, o null. */
@@ -81,24 +82,32 @@ function pointsFor(home: number, away: number): readonly [number, number] {
 /**
  * Comparación de desempate entre dos equipos que YA jugaron todos sus partidos
  * y están igualados en puntos. Devuelve < 0 si `a` queda por encima de `b`,
- * > 0 si `b` por encima, 0 si ni siquiera el duelo directo los separa
+ * > 0 si `b` por encima, 0 si ni siquiera estos criterios los separan
  * (empate irresoluble → se considera ambiguo aguas arriba).
+ *
+ * ORDEN OFICIAL FIFA 2026 (cambió respecto de Mundiales anteriores): el
+ * enfrentamiento directo va PRIMERO, luego la diferencia de gol general.
+ *   1) duelo directo: pts → DG → GF entre los empatados
+ *   2) DG general → GF general
+ *   3) fair play → ranking FIFA (no modelados → empate irresoluble)
+ * Aprox. pairwise (FIFA usa minigrupo para 3+ empatados; acá comparamos de a
+ * dos, que es suficiente para el conteo conservador del clinch).
  */
 function compareDecided(a: Stats, b: Stats, h2h: Map<string, [number, number]>): number {
-  if (a.gd !== b.gd) return b.gd - a.gd;
-  if (a.gf !== b.gf) return b.gf - a.gf;
-  // Duelo directo (aprox. pairwise — FIFA usa minigrupo, pero la dif. de gol
-  // total ya resolvió la enorme mayoría de los casos antes de llegar acá).
+  // 1) Duelo directo primero. En fase de grupos se juega un solo partido entre
+  //    cada par, así que el ganador (más goles en el duelo) queda por encima.
   const key = a.teamId < b.teamId ? `${a.teamId}-${b.teamId}` : `${b.teamId}-${a.teamId}`;
   const rec = h2h.get(key);
   if (rec) {
-    // rec guarda [golesDelMenorId, golesDelMayorId] sumados en sus duelos.
     const [loGoals, hiGoals] = rec;
     const aGoals = a.teamId < b.teamId ? loGoals : hiGoals;
     const bGoals = a.teamId < b.teamId ? hiGoals : loGoals;
-    if (aGoals !== bGoals) return bGoals - aGoals; // más goles en el duelo = mejor
+    if (aGoals !== bGoals) return bGoals - aGoals; // ganó/empató el duelo directo
   }
-  return 0; // fair play / sorteo: no lo modelamos → irresoluble
+  // 2) Diferencia de gol general → goles a favor generales.
+  if (a.gd !== b.gd) return b.gd - a.gd;
+  if (a.gf !== b.gf) return b.gf - a.gf;
+  return 0; // fair play / ranking FIFA: no modelados → irresoluble
 }
 
 export function computeGroupClinch(teams: Team[], allMatches: Match[], group: string): GroupClinch {
@@ -201,14 +210,14 @@ export function computeGroupClinch(teams: Team[], allMatches: Match[], group: st
   }
 
   // Asignar los slots 1°/2°: primero las posiciones exactas (confirmadas), y el
-  // resto de los clasificados de forma provisional según la tabla actual.
-  const order = (a: Team, b: Team) => {
-    const sa = base.get(a.id)!; const sb = base.get(b.id)!;
-    if (sb.pts !== sa.pts) return sb.pts - sa.pts;
-    if (sb.gd !== sa.gd) return sb.gd - sa.gd;
-    if (sb.gf !== sa.gf) return sb.gf - sa.gf;
-    return a.name.localeCompare(b.name);
-  };
+  // resto de los clasificados de forma provisional según la tabla ACTUAL. Para
+  // que el orden provisional coincida con lo que muestra la pestaña Grupos y
+  // respete el desempate 2026 (duelo directo primero), reutilizamos computeStandings.
+  const standingRank = new Map(
+    computeStandings(groupTeams, finished, group).map((r, i) => [r.team.id, i]),
+  );
+  const order = (a: Team, b: Team) =>
+    (standingRank.get(a.id) ?? 99) - (standingRank.get(b.id) ?? 99);
   const placedIds = new Set<number>();
   let slot1: SlotResolution | null = null;
   let slot2: SlotResolution | null = null;
