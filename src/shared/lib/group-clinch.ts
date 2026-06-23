@@ -38,6 +38,22 @@ export interface GroupClinch {
   first: Team | null;
   /** Equipo con el 2° puesto (exacto) matemáticamente asegurado, o null. */
   second: Team | null;
+  /**
+   * Resolución para el slot "1° Grp X" del bracket. Puede ser:
+   *  • confirmed=true  → posición 1° asegurada matemáticamente (✓ verde).
+   *  • confirmed=false → el equipo YA está clasificado (top-2 asegurado) pero su
+   *    orden 1°/2° todavía no está definido; lo ubicamos provisionalmente por la
+   *    tabla actual (ámbar "orden por definir").
+   */
+  slot1: SlotResolution | null;
+  /** Ídem para el slot "2° Grp X". */
+  slot2: SlotResolution | null;
+}
+
+export interface SlotResolution {
+  team: Team;
+  /** true = posición exacta confirmada; false = clasificado, orden provisional. */
+  confirmed: boolean;
 }
 
 interface Stats {
@@ -87,7 +103,7 @@ function compareDecided(a: Stats, b: Stats, h2h: Map<string, [number, number]>):
 
 export function computeGroupClinch(teams: Team[], allMatches: Match[], group: string): GroupClinch {
   const groupTeams = teams.filter((t) => t.group === group);
-  if (groupTeams.length !== 4) return { first: null, second: null };
+  if (groupTeams.length !== 4) return { first: null, second: null, slot1: null, slot2: null };
 
   const groupMatches = allMatches.filter((m) => m.group === group);
   const finished = groupMatches.filter(
@@ -175,13 +191,37 @@ export function computeGroupClinch(teams: Team[], allMatches: Match[], group: st
 
   let first: Team | null = null;
   let second: Team | null = null;
+  const qualified: Team[] = []; // top-2 asegurado (could<=1), orden exacto aparte
   for (const t of groupTeams) {
     const could = maxCouldAbove.get(t.id)!;
     const must = minMustAbove.get(t.id)!;
     if (could === 0) first = t;                       // nadie nunca por encima → 1°
     else if (could <= 1 && must >= 1) second = t;     // siempre exactamente 1 arriba → 2°
+    if (could <= 1) qualified.push(t);                // a lo sumo 1 arriba → clasificado
   }
-  return { first, second };
+
+  // Asignar los slots 1°/2°: primero las posiciones exactas (confirmadas), y el
+  // resto de los clasificados de forma provisional según la tabla actual.
+  const order = (a: Team, b: Team) => {
+    const sa = base.get(a.id)!; const sb = base.get(b.id)!;
+    if (sb.pts !== sa.pts) return sb.pts - sa.pts;
+    if (sb.gd !== sa.gd) return sb.gd - sa.gd;
+    if (sb.gf !== sa.gf) return sb.gf - sa.gf;
+    return a.name.localeCompare(b.name);
+  };
+  const placedIds = new Set<number>();
+  let slot1: SlotResolution | null = null;
+  let slot2: SlotResolution | null = null;
+  if (first) { slot1 = { team: first, confirmed: true }; placedIds.add(first.id); }
+  if (second) { slot2 = { team: second, confirmed: true }; placedIds.add(second.id); }
+
+  // Clasificados sin posición exacta → llenar los slots libres por orden de tabla.
+  const provisional = qualified.filter((t) => !placedIds.has(t.id)).sort(order);
+  let p = 0;
+  if (!slot1 && p < provisional.length) slot1 = { team: provisional[p++], confirmed: false };
+  if (!slot2 && p < provisional.length) slot2 = { team: provisional[p++], confirmed: false };
+
+  return { first, second, slot1, slot2 };
 }
 
 /** Resuelve un grupo → clinch para los 12 grupos de una. */
@@ -205,10 +245,10 @@ export function computeAllGroupClinches(
 export function resolveSlotTeam(
   label: string,
   clinches: Map<string, GroupClinch>,
-): Team | null {
+): SlotResolution | null {
   const m = /^([12])°\s*Grp\s*([A-L])$/.exec(label.trim());
   if (!m) return null;
   const clinch = clinches.get(m[2]);
   if (!clinch) return null;
-  return m[1] === '1' ? clinch.first : clinch.second;
+  return m[1] === '1' ? clinch.slot1 : clinch.slot2;
 }

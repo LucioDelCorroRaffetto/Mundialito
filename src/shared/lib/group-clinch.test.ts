@@ -121,9 +121,39 @@ describe('resolveSlotTeam', () => {
       played(a, teams[3], 1, 0, 'F'), played(b, teams[2], 1, 0, 'F'),
     ];
     const clinches = computeAllGroupClinches(teams, matches);
-    expect(resolveSlotTeam('1° Grp F', clinches)?.id).toBe(a.id);
-    expect(resolveSlotTeam('2° Grp F', clinches)?.id).toBe(b.id);
+    const s1 = resolveSlotTeam('1° Grp F', clinches);
+    const s2 = resolveSlotTeam('2° Grp F', clinches);
+    expect(s1?.team.id).toBe(a.id);
+    expect(s1?.confirmed).toBe(true);
+    expect(s2?.team.id).toBe(b.id);
+    expect(s2?.confirmed).toBe(true);
     expect(resolveSlotTeam('Mejor 3ro', clinches)).toBeNull();
     expect(resolveSlotTeam('1° Grp Z', clinches)).toBeNull();
+  });
+});
+
+describe('clasificados con orden provisional', () => {
+  it('dos equipos clasifican (top-2) pero el orden 1°/2° sigue abierto → slots provisionales', () => {
+    // Grupo G en la última fecha: a y b ya tienen 6 pts (ganaron sus 2), c y d
+    // con 0 (máximo 3) → a y b están clasificados, pero su 3er partido (a-b,
+    // todavía pendiente) define el orden. Ninguna posición exacta confirmada.
+    const { teams, a, b, c, d } = makeGroup('G');
+    const matches = [
+      played(a, c, 2, 0, 'G'), played(b, d, 2, 0, 'G'),   // J1
+      played(a, d, 2, 0, 'G'), played(b, c, 2, 0, 'G'),   // J2 → a,b 6pts; c,d 0
+      scheduled(a, b, 'G'), scheduled(c, d, 'G'),         // J3 pendiente
+    ];
+    const clinch = computeGroupClinch(teams, matches, 'G');
+    // Sin posición exacta confirmada (a-b aún por jugarse).
+    expect(clinch.first).toBeNull();
+    expect(clinch.second).toBeNull();
+    // Pero ambos slots quedan ocupados de forma provisional por a y b.
+    expect(clinch.slot1?.confirmed).toBe(false);
+    expect(clinch.slot2?.confirmed).toBe(false);
+    const ids = [clinch.slot1?.team.id, clinch.slot2?.team.id].sort();
+    expect(ids).toEqual([a.id, b.id].sort());
+    // c y d NO aparecen (no están clasificados).
+    expect(ids).not.toContain(c.id);
+    expect(ids).not.toContain(d.id);
   });
 });

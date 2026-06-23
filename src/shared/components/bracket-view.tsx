@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { TeamFlag } from '@/shared/components/ui/team-flag';
 import { cn } from '@/shared/lib/cn';
 import { BRACKET_ROUNDS, THIRD_PLACE_MATCH, R32_LABELS } from '@/shared/data/bracket';
-import { computeAllGroupClinches, resolveSlotTeam, type GroupClinch } from '@/shared/lib/group-clinch';
+import { computeAllGroupClinches, resolveSlotTeam, type GroupClinch, type SlotResolution } from '@/shared/lib/group-clinch';
 import { resolveThirdPlaceSlots } from '@/shared/lib/third-place';
 import type { Match, Team } from '@/shared/types/api';
 
@@ -145,9 +145,9 @@ interface MatchCardProps {
   matchNumber: number;
   roundIndex: number;
   teamMap: Map<number, Team> | undefined;
-  /** Equipo proyectado (1°/2° de grupo ya confirmado) si el slot sigue TBD. */
-  projectedHome?: Team | null;
-  projectedAway?: Team | null;
+  /** Resolución proyectada del slot (equipo + si la posición está confirmada). */
+  projectedHome?: SlotResolution | null;
+  projectedAway?: SlotResolution | null;
 }
 
 function MatchCard({ match, matchNumber, roundIndex, teamMap, projectedHome, projectedAway }: MatchCardProps) {
@@ -157,8 +157,8 @@ function MatchCard({ match, matchNumber, roundIndex, teamMap, projectedHome, pro
   const homeTbd = isTbd(homeTeam);
   const awayTbd = isTbd(awayTeam);
 
-  // Si el slot todavía no tiene equipo real pero ya está matemáticamente
-  // confirmado (1°/2° de grupo), lo mostramos como "proyectado".
+  // Si el slot todavía no tiene equipo real pero el grupo ya proyecta uno
+  // (1°/2° confirmado, o clasificado con orden provisional), lo mostramos.
   const homeProjected = homeTbd ? (projectedHome ?? null) : null;
   const awayProjected = awayTbd ? (projectedAway ?? null) : null;
 
@@ -182,7 +182,7 @@ function MatchCard({ match, matchNumber, roundIndex, teamMap, projectedHome, pro
     won: boolean,
     score: number | null | undefined,
     isTop: boolean,
-    projected: Team | null,
+    projected: SlotResolution | null,
   ) => (
     <div
       className={cn(
@@ -193,20 +193,29 @@ function MatchCard({ match, matchNumber, roundIndex, teamMap, projectedHome, pro
       style={{ height: CARD_H / 2 }}
     >
       {tbd && projected ? (
-        // Slot todavía sin equipo en la DB, pero 1°/2° de grupo ya confirmado
-        // matemáticamente: lo mostramos en gris con ✓ para distinguirlo de un
-        // cruce ya oficial.
+        // Slot sin equipo en la DB pero proyectado por el grupo. Verde ✓ =
+        // posición 1°/2° confirmada matemáticamente; ámbar ≈ = ya clasificado
+        // pero con el orden 1°/2° todavía por definir (ubicación provisional).
         <>
-          <TeamFlag code={projected.code} emoji={projected.flag} size={16} />
+          <TeamFlag code={projected.team.code} emoji={projected.team.flag} size={16} />
           <span className="flex-1 text-[9px] font-bold truncate leading-tight tracking-wide text-muted">
-            {projected.code}
+            {projected.team.code}
           </span>
-          <span
-            className="text-[8px] text-green-500 dark:text-green-400 flex-shrink-0 font-black"
-            title="Posición confirmada matemáticamente"
-          >
-            ✓
-          </span>
+          {projected.confirmed ? (
+            <span
+              className="text-[8px] text-green-500 dark:text-green-400 flex-shrink-0 font-black"
+              title="Posición confirmada matemáticamente"
+            >
+              ✓
+            </span>
+          ) : (
+            <span
+              className="text-[8px] text-amber-500 dark:text-amber-400 flex-shrink-0 font-black"
+              title="Clasificado · orden 1°/2° por definir (ubicación provisional)"
+            >
+              ≈
+            </span>
+          )}
         </>
       ) : tbd ? (
         <span className="text-[7px] leading-tight text-muted/50 flex-1 truncate italic">{label}</span>
@@ -351,7 +360,8 @@ export function BracketView({ matches, teamMap, teams }: Props) {
                           projectedHome={ri === 0 ? resolveSlotTeam(R32_LABELS[mn]?.home ?? '', clinches) : null}
                           projectedAway={
                             ri === 0
-                              ? resolveSlotTeam(R32_LABELS[mn]?.away ?? '', clinches) ?? thirdSlots.get(mn) ?? null
+                              ? resolveSlotTeam(R32_LABELS[mn]?.away ?? '', clinches) ??
+                                (thirdSlots.get(mn) ? { team: thirdSlots.get(mn)!, confirmed: true } : null)
                               : null
                           }
                         />
@@ -406,7 +416,11 @@ export function BracketView({ matches, teamMap, teams }: Props) {
         </span>
         <span className="flex items-center gap-1.5 text-[9px] text-muted">
           <span className="text-green-500 dark:text-green-400 font-black">✓</span>
-          Cruce confirmado (1°/2° clinch · 3ros al cerrar grupos)
+          Posición confirmada (1°/2° o 3ro)
+        </span>
+        <span className="flex items-center gap-1.5 text-[9px] text-muted">
+          <span className="text-amber-500 dark:text-amber-400 font-black">≈</span>
+          Clasificado · orden por definir
         </span>
       </div>
     </div>
