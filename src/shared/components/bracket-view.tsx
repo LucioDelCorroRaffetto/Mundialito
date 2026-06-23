@@ -3,11 +3,14 @@ import { Link } from 'react-router-dom';
 import { TeamFlag } from '@/shared/components/ui/team-flag';
 import { cn } from '@/shared/lib/cn';
 import { BRACKET_ROUNDS, THIRD_PLACE_MATCH, R32_LABELS } from '@/shared/data/bracket';
+import { computeAllGroupClinches, resolveSlotTeam, type GroupClinch } from '@/shared/lib/group-clinch';
 import type { Match, Team } from '@/shared/types/api';
 
 interface Props {
   matches: Match[];
   teamMap: Map<number, Team> | undefined;
+  /** Equipos del torneo — para confirmar 1°/2° de grupo en los slots R32. */
+  teams?: Team[];
 }
 
 const TBD_TEAM: Team = {
@@ -141,14 +144,22 @@ interface MatchCardProps {
   matchNumber: number;
   roundIndex: number;
   teamMap: Map<number, Team> | undefined;
+  /** Equipo proyectado (1°/2° de grupo ya confirmado) si el slot sigue TBD. */
+  projectedHome?: Team | null;
+  projectedAway?: Team | null;
 }
 
-function MatchCard({ match, matchNumber, roundIndex, teamMap }: MatchCardProps) {
+function MatchCard({ match, matchNumber, roundIndex, teamMap, projectedHome, projectedAway }: MatchCardProps) {
   const homeTeam = match ? getTeam(teamMap, match.homeTeamId) : TBD_TEAM;
   const awayTeam = match ? getTeam(teamMap, match.awayTeamId) : TBD_TEAM;
 
   const homeTbd = isTbd(homeTeam);
   const awayTbd = isTbd(awayTeam);
+
+  // Si el slot todavía no tiene equipo real pero ya está matemáticamente
+  // confirmado (1°/2° de grupo), lo mostramos como "proyectado".
+  const homeProjected = homeTbd ? (projectedHome ?? null) : null;
+  const awayProjected = awayTbd ? (projectedAway ?? null) : null;
 
   const isLive     = match?.status === 'live';
   const isFinished = match?.status === 'finished';
@@ -170,6 +181,7 @@ function MatchCard({ match, matchNumber, roundIndex, teamMap }: MatchCardProps) 
     won: boolean,
     score: number | null | undefined,
     isTop: boolean,
+    projected: Team | null,
   ) => (
     <div
       className={cn(
@@ -179,7 +191,23 @@ function MatchCard({ match, matchNumber, roundIndex, teamMap }: MatchCardProps) 
       )}
       style={{ height: CARD_H / 2 }}
     >
-      {tbd ? (
+      {tbd && projected ? (
+        // Slot todavía sin equipo en la DB, pero 1°/2° de grupo ya confirmado
+        // matemáticamente: lo mostramos en gris con ✓ para distinguirlo de un
+        // cruce ya oficial.
+        <>
+          <TeamFlag code={projected.code} emoji={projected.flag} size={16} />
+          <span className="flex-1 text-[9px] font-bold truncate leading-tight tracking-wide text-muted">
+            {projected.code}
+          </span>
+          <span
+            className="text-[8px] text-green-500 dark:text-green-400 flex-shrink-0 font-black"
+            title="Posición confirmada matemáticamente"
+          >
+            ✓
+          </span>
+        </>
+      ) : tbd ? (
         <span className="text-[7px] leading-tight text-muted/50 flex-1 truncate italic">{label}</span>
       ) : (
         <>
@@ -223,8 +251,8 @@ function MatchCard({ match, matchNumber, roundIndex, teamMap }: MatchCardProps) 
         className="absolute inset-0 pointer-events-none"
         style={{ background: `linear-gradient(135deg, ${accentColor}14 0%, transparent 60%)` }}
       />
-      {row(homeTbd, homeLabel, homeTeam, homeWon, match?.homeScore, true)}
-      {row(awayTbd, awayLabel, awayTeam, awayWon, match?.awayScore, false)}
+      {row(homeTbd, homeLabel, homeTeam, homeWon, match?.homeScore, true, homeProjected)}
+      {row(awayTbd, awayLabel, awayTeam, awayWon, match?.awayScore, false, awayProjected)}
     </div>
   );
 
@@ -237,10 +265,17 @@ function MatchCard({ match, matchNumber, roundIndex, teamMap }: MatchCardProps) 
 }
 
 // ─── BracketView ──────────────────────────────────────────────────────────────
-export function BracketView({ matches, teamMap }: Props) {
+export function BracketView({ matches, teamMap, teams }: Props) {
   const matchByNum = useMemo(
     () => new Map(matches.map((m) => [m.matchNumber, m])),
     [matches],
+  );
+
+  // 1°/2° de grupo ya confirmados matemáticamente → para precargar los slots
+  // R32 ("1° Grp X" / "2° Grp X") antes de que el grupo cierre.
+  const clinches = useMemo<Map<string, GroupClinch>>(
+    () => (teams && teams.length ? computeAllGroupClinches(teams, matches) : new Map()),
+    [teams, matches],
   );
 
   const positions = useMemo(() => computePositions(), []);
@@ -306,6 +341,8 @@ export function BracketView({ matches, teamMap }: Props) {
                           matchNumber={mn}
                           roundIndex={ri}
                           teamMap={teamMap}
+                          projectedHome={ri === 0 ? resolveSlotTeam(R32_LABELS[mn]?.home ?? '', clinches) : null}
+                          projectedAway={ri === 0 ? resolveSlotTeam(R32_LABELS[mn]?.away ?? '', clinches) : null}
                         />
                       </div>
                     );
@@ -355,6 +392,10 @@ export function BracketView({ matches, teamMap }: Props) {
         <span className="flex items-center gap-1.5 text-[9px] text-muted">
           <span className="w-2.5 h-2.5 rounded-sm bg-red-500/40 border border-red-500/60 flex-shrink-0" />
           En vivo
+        </span>
+        <span className="flex items-center gap-1.5 text-[9px] text-muted">
+          <span className="text-green-500 dark:text-green-400 font-black">✓</span>
+          1°/2° confirmado matemáticamente
         </span>
       </div>
     </div>

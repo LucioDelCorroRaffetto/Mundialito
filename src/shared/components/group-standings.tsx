@@ -3,10 +3,10 @@ import { cn } from '@/shared/lib/cn';
 import { TeamFlag } from '@/shared/components/ui/team-flag';
 import type { Match, Team } from '@/shared/types/api';
 
-const GROUPS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L'] as const;
-type Group = typeof GROUPS[number];
+export const GROUPS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L'] as const;
+export type Group = typeof GROUPS[number];
 
-interface TeamRow {
+export interface TeamRow {
   team: Team;
   played: number;
   won: number;
@@ -18,7 +18,71 @@ interface TeamRow {
   pts: number;
 }
 
-function computeStandings(teams: Team[], matches: Match[], group: Group): TeamRow[] {
+/**
+ * Ordena un grupo de equipos empatados en puntos según el criterio oficial
+ * FIFA 2026: enfrentamientos directos (pts → DG → GF entre los empatados),
+ * reaplicados recursivamente si separan solo a algunos. Si el head-to-head no
+ * separa a nadie, se cae a los criterios globales (DG total → GF total).
+ *
+ * Conducta (tarjetas) y ranking FIFA — los dos últimos criterios oficiales —
+ * no están en el modelo de datos, así que el desempate final determinístico es
+ * el nombre del equipo.
+ */
+function breakTie(tied: TeamRow[], groupMatches: Match[]): TeamRow[] {
+  if (tied.length <= 1) return tied;
+
+  const ids = new Set(tied.map((r) => r.team.id));
+
+  // Mini-tabla solo con los partidos jugados entre los empatados.
+  const h2h = new Map(tied.map((r) => [r.team.id, { pts: 0, gd: 0, gf: 0 }]));
+  for (const m of groupMatches) {
+    if (m.homeScore == null || m.awayScore == null) continue;
+    if (!ids.has(m.homeTeamId) || !ids.has(m.awayTeamId)) continue;
+    const home = h2h.get(m.homeTeamId)!;
+    const away = h2h.get(m.awayTeamId)!;
+    home.gf += m.homeScore; home.gd += m.homeScore - m.awayScore;
+    away.gf += m.awayScore; away.gd += m.awayScore - m.homeScore;
+    if (m.homeScore > m.awayScore) home.pts += 3;
+    else if (m.homeScore < m.awayScore) away.pts += 3;
+    else { home.pts += 1; away.pts += 1; }
+  }
+
+  const sorted = [...tied].sort((a, b) => {
+    const ha = h2h.get(a.team.id)!;
+    const hb = h2h.get(b.team.id)!;
+    if (hb.pts !== ha.pts) return hb.pts - ha.pts;
+    if (hb.gd !== ha.gd) return hb.gd - ha.gd;
+    if (hb.gf !== ha.gf) return hb.gf - ha.gf;
+    // Criterios globales (fuera del head-to-head)
+    if (b.gd !== a.gd) return b.gd - a.gd;
+    if (b.gf !== a.gf) return b.gf - a.gf;
+    return a.team.name.localeCompare(b.team.name);
+  });
+
+  // Re-aplicar head-to-head a los sub-grupos que sigan empatados en el mini-table.
+  const result: TeamRow[] = [];
+  let i = 0;
+  while (i < sorted.length) {
+    let j = i + 1;
+    const hi = h2h.get(sorted[i].team.id)!;
+    while (j < sorted.length) {
+      const hj = h2h.get(sorted[j].team.id)!;
+      if (hj.pts !== hi.pts || hj.gd !== hi.gd || hj.gf !== hi.gf) break;
+      j++;
+    }
+    const sub = sorted.slice(i, j);
+    // Solo recursar si el head-to-head separó algo (evita loop infinito).
+    if (sub.length > 1 && sub.length < tied.length) {
+      result.push(...breakTie(sub, groupMatches));
+    } else {
+      result.push(...sub);
+    }
+    i = j;
+  }
+  return result;
+}
+
+export function computeStandings(teams: Team[], matches: Match[], group: Group): TeamRow[] {
   const groupTeams = teams.filter((t) => t.group === group);
   const groupMatches = matches.filter((m) => m.group === group && m.status === 'finished');
 
@@ -54,12 +118,18 @@ function computeStandings(teams: Team[], matches: Match[], group: Group): TeamRo
     away.gd = away.gf - away.ga;
   }
 
-  return Array.from(rows.values()).sort((a, b) => {
-    if (b.pts !== a.pts) return b.pts - a.pts;
-    if (b.gd !== a.gd) return b.gd - a.gd;
-    if (b.gf !== a.gf) return b.gf - a.gf;
-    return a.team.name.localeCompare(b.team.name);
-  });
+  // Orden por puntos, desempatando cada bloque de igual puntaje con el
+  // criterio oficial (head-to-head → DG/GF global → nombre).
+  const byPoints = Array.from(rows.values()).sort((a, b) => b.pts - a.pts);
+  const result: TeamRow[] = [];
+  let i = 0;
+  while (i < byPoints.length) {
+    let j = i + 1;
+    while (j < byPoints.length && byPoints[j].pts === byPoints[i].pts) j++;
+    result.push(...breakTie(byPoints.slice(i, j), groupMatches));
+    i = j;
+  }
+  return result;
 }
 
 interface Props {

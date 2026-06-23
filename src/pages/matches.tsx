@@ -10,6 +10,7 @@ import { ROUND_LABELS } from '@/shared/data/mock';
 import type { Match, Team } from '@/shared/types/api';
 import { TeamFlag } from '@/shared/components/ui/team-flag';
 import { GroupStandings } from '@/shared/components/group-standings';
+import { ThirdPlaceTable } from '@/shared/components/third-place-table';
 import { BracketView } from '@/shared/components/bracket-view';
 import { R32_LABELS } from '@/shared/data/bracket';
 import { cn } from '@/shared/lib/cn';
@@ -75,7 +76,7 @@ type StatusTab = (typeof STATUS_TABS)[number];
 
 const WC_GROUPS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L'] as const;
 
-const MAIN_TABS = ['Partidos', 'Grupos', 'Cuadro'] as const;
+const MAIN_TABS = ['Partidos', 'Grupos', 'Terceros', 'Cuadro'] as const;
 type MainTab = (typeof MAIN_TABS)[number];
 
 export function MatchesPage() {
@@ -226,9 +227,13 @@ export function MatchesPage() {
         <div className="px-4 pb-8">
           <GroupStandings teams={teams} matches={groupMatches} />
         </div>
+      ) : mainTab === 'Terceros' ? (
+        <div className="px-4 pb-8">
+          <ThirdPlaceTable teams={teams} matches={groupMatches} />
+        </div>
       ) : mainTab === 'Cuadro' ? (
         <div className="px-3 pb-8">
-          <BracketView matches={matches} teamMap={teamMap} />
+          <BracketView matches={matches} teamMap={teamMap} teams={teams} />
         </div>
       ) : (
         <>
