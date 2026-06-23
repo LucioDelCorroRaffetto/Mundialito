@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef, memo } from 'react';
 import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Clock, MapPin, CheckCircle2, Share2, Users, Plus, Minus, Lock, ArrowRightLeft, Handshake, Target } from 'lucide-react';
+import { ArrowLeft, Clock, MapPin, CheckCircle2, Share2, Users, Plus, Minus, Lock, ArrowRightLeft } from 'lucide-react';
+import { IconBallFootball, IconBallFootballOff, IconShoe, IconHandStop, IconHandFinger, IconCheck } from '@tabler/icons-react';
 import { toast } from 'sonner';
 import { ROUND_LABELS } from '@/shared/data/mock';
 import { getMaxPossiblePoints } from '@/shared/lib/scoring';
@@ -1123,13 +1124,14 @@ function CoolingBreakDrops() {
 }
 
 /**
- * Etiquetas + íconos para cada tipo de evento. Los emojis nativos (🟨🟥🅰️🔼🔽)
- * se veían inconsistentes entre OS (Apple vs Windows vs Android) y los de
- * sustitución/asistencia quedaban especialmente toscos. Reemplazamos por:
+ * Etiquetas + íconos para cada tipo de evento. Los emojis nativos se veían
+ * inconsistentes entre OS (Apple vs Windows vs Android) y toscos. Ahora todo
+ * es vectorial:
  *  - cards SVG con color exacto para amarilla/roja (estilo árbitro real)
- *  - íconos lucide para sub_in/sub_out y assist (vectoriales = nítidos)
- *  - mantenemos ⚽ para goal/own_goal porque el emoji de pelota sí queda bien
- *    cross-platform y es universalmente reconocible.
+ *  - íconos lucide para sub_in/sub_out (flechas ↑↓)
+ *  - íconos Tabler (@tabler/icons-react) para el resto: pelota (gol / penal),
+ *    botín (asistencia), dedo señalando (penal cobrado), pelota tachada (errado)
+ *    y mano (atajado). Misma familia "outline" que las flechas → coherencia.
  */
 type EventDisplay = {
   label: string;
@@ -1152,20 +1154,15 @@ const RefereeCard = ({ color, className }: { color: 'yellow' | 'red'; className?
 const EVENT_LABEL: Record<MatchTimelineEvent['type'], EventDisplay> = {
   goal:     {
     label: 'Gol',
-    render: ({ size = 14 }) => <span style={{ fontSize: size }} aria-label="Gol">⚽</span>,
+    render: ({ size = 16 }) => <IconBallFootball size={size} className="text-emerald-500" aria-label="Gol" />,
   },
   own_goal: {
     label: 'Gol en contra',
-    render: ({ size = 14 }) => (
-      <span className="relative inline-flex items-center justify-center" aria-label="Gol en contra">
-        <span style={{ fontSize: size }}>⚽</span>
-        <span className="absolute -bottom-0.5 -right-0.5 text-[7px] leading-none font-black text-red-500">✕</span>
-      </span>
-    ),
+    render: ({ size = 16 }) => <IconBallFootball size={size} className="text-red-500" aria-label="Gol en contra" />,
   },
   assist:   {
     label: 'Asistencia',
-    render: ({ size = 14 }) => <Handshake size={size} className="text-blue-500" aria-label="Asistencia" />,
+    render: ({ size = 16 }) => <IconShoe size={size} className="text-blue-500" aria-label="Asistencia" />,
   },
   yellow:   {
     label: 'Amarilla',
@@ -1183,43 +1180,33 @@ const EVENT_LABEL: Record<MatchTimelineEvent['type'], EventDisplay> = {
     label: 'Sale',
     render: ({ size = 12 }) => <ArrowRightLeft size={size} className="text-rose-500 rotate-90 scale-y-[-1]" aria-label="Sale" />,
   },
-  // 'penalty_awarded': el árbitro cobró el penal (en juego o tanda). Diana
-  // ámbar = el punto del penal, momento previo al remate.
+  // 'penalty_awarded': el árbitro cobró el penal (en juego o tanda). Dedo que
+  // señala el punto, momento previo al remate.
   penalty_awarded: {
     label: 'Penal cobrado',
-    render: ({ size = 14 }) => <Target size={size} className="text-amber-500" aria-label="Penal cobrado" />,
+    render: ({ size = 16 }) => <IconHandFinger size={size} className="text-amber-500" aria-label="Penal cobrado" />,
   },
   // Tanda de penales — los tres tipos son exclusivos de period=5 (shootout).
-  // 'penalty_goal': penal convertido. Usamos ⚽ con badge "P" para diferenciarlo
-  // visualmente de un gol en juego sin confundir al usuario.
+  // 'penalty_goal': penal convertido. Pelota con un check verde para diferenciarlo
+  // del gol en juego sin confundir al usuario.
   penalty_goal: {
     label: 'Penal convertido',
-    render: ({ size = 14 }) => (
+    render: ({ size = 16 }) => (
       <span className="relative inline-flex items-center justify-center" aria-label="Penal convertido">
-        <span style={{ fontSize: size }}>⚽</span>
-        <span className="absolute -bottom-0.5 -right-0.5 text-[6px] leading-none font-black text-emerald-400">✓</span>
+        <IconBallFootball size={size} className="text-emerald-500" />
+        <IconCheck size={Math.round(size * 0.55)} stroke={3} className="absolute -bottom-1 -right-1 text-emerald-400" />
       </span>
     ),
   },
-  // 'penalty_miss': pateó y erró (afuera o al poste). X roja sobre silueta de pelota.
+  // 'penalty_miss': pateó y erró (afuera o al poste). Pelota tachada.
   penalty_miss: {
     label: 'Penal errado',
-    render: ({ size = 14 }) => (
-      <span className="relative inline-flex items-center justify-center" aria-label="Penal errado">
-        <span style={{ fontSize: size }} className="opacity-40">⚽</span>
-        <span className="absolute inset-0 flex items-center justify-center text-[8px] leading-none font-black text-red-500">✕</span>
-      </span>
-    ),
+    render: ({ size = 16 }) => <IconBallFootballOff size={size} className="text-red-500" aria-label="Penal errado" />,
   },
-  // 'penalty_save': atajado por el arquero. Guante (mano) para representar la atajada.
+  // 'penalty_save': atajado por el arquero. Mano abierta = la atajada.
   penalty_save: {
     label: 'Penal atajado',
-    render: ({ size = 14 }) => (
-      <span className="relative inline-flex items-center justify-center" aria-label="Penal atajado">
-        <span style={{ fontSize: size }} className="opacity-40">⚽</span>
-        <span className="absolute inset-0 flex items-center justify-center text-[8px] leading-none font-black text-sky-500">🧤</span>
-      </span>
-    ),
+    render: ({ size = 16 }) => <IconHandStop size={size} className="text-sky-500" aria-label="Penal atajado" />,
   },
 };
 
