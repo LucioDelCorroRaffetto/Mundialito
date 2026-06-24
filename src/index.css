@@ -27,7 +27,12 @@
   --accent-soft: rgba(255, 200, 87, 0.08);
   --accent-border: rgba(255, 200, 87, 0.3);
   --font-scale: 1;
-  color-scheme: dark light;
+  /* Valor por defecto (antes de que corra el JS). La app arranca en oscuro.
+     OJO: NO usar la lista `dark light` — con una lista el navegador elige
+     según la preferencia del SO, así que en Windows en modo claro pintaba el
+     popup del <select> en blanco aunque la app se viera oscura. Atamos el
+     esquema al data-mode real que setea el theme-provider (regla abajo). */
+  color-scheme: dark;
 
   /* ── Identidad Mundial 2026 (tri-anfitrión) ────────────────────────────
      Verde México · Azul USA · Rojo Canadá. Brillantes para fondo oscuro;
@@ -40,6 +45,17 @@
   --wc26-usa-deep: #0a3161;
   --wc26-can-deep: #b31942;
   --wc26-gradient: linear-gradient(120deg, var(--wc26-mex) 0%, var(--wc26-usa) 50%, var(--wc26-can) 100%);
+}
+
+/* Esquema de los controles NATIVOS (popup del <select>, scrollbars, inputs de
+   fecha) atado al tema real de la app, no a la preferencia del SO. Sin esto el
+   desplegable del select se pinta blanco en modo claro del SO aunque la app
+   esté en oscuro (y al revés). */
+[data-mode="dark"] {
+  color-scheme: dark;
+}
+[data-mode="light"] {
+  color-scheme: light;
 }
 
 /* En modo claro, los tri-color brillantes no contrastan sobre blanco —
