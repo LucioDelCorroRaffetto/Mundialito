@@ -1347,6 +1347,13 @@ function PerRoundLineupTab({ squadPlayers }: { squadPlayers: Player[] }) {
   // Local draft: playerIds with flags.
   const [draft, setDraft] = useState<LineupPlayerInput[]>([]);
   const [dirty, setDirty] = useState(false);
+  // Marca de qué (fecha + plantel) ya inicializó el draft. Sin esto, cada
+  // refetch de lineupData (focus de ventana, polling, invalidaciones)
+  // reconstruía el draft y BORRABA los cambios locales del usuario —
+  // además de ocultar el botón Guardar (dirty volvía a false). Con esta
+  // marca, el draft se arma una sola vez por fecha/plantel y los refetches
+  // no pisan la edición en curso.
+  const lineupInitKeyRef = useRef<string | null>(null);
 
   // Stable key for the squad so the draft-init effect only re-fires when the
   // squad ACTUALLY changes (15 different player ids), not on every parent
@@ -1369,6 +1376,15 @@ function PerRoundLineupTab({ squadPlayers }: { squadPlayers: Player[] }) {
   // 9-10 stale rows and leave the user unable to even pick the new players.
   useEffect(() => {
     if (!activeSlug || squadPlayers.length === 0) return;
+    // Esperar a que la fecha activa termine de cargar: si inicializáramos
+    // con lineupData aún en loading marcaríamos la fecha como "ya cargada"
+    // con un draft vacío y nunca traeríamos el lineup real.
+    if (lineupLoading) return;
+    const initKey = `${activeSlug}|${squadKey}`;
+    // Solo (re)inicializamos cuando cambia la fecha o el plantel — NO en
+    // cada refetch de la misma fecha (eso borraba los cambios locales).
+    if (lineupInitKeyRef.current === initKey) return;
+    lineupInitKeyRef.current = initKey;
     const lineupByPlayer = new Map(
       (lineupData?.data ?? []).map((r) => [r.playerId, r]),
     );
@@ -1386,7 +1402,7 @@ function PerRoundLineupTab({ squadPlayers }: { squadPlayers: Player[] }) {
     setDirty(false);
     // squadKey (stable) deliberately replaces squadPlayers (unstable ref).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [lineupData, activeSlug, squadKey]);
+  }, [lineupData, activeSlug, squadKey, lineupLoading]);
 
   // Desglose de puntos por jugador de la fecha cerrada — viene en lineupData.
   // Lo indexamos por playerId para alimentar cada LineupRow (el `draft` solo
@@ -1653,9 +1669,16 @@ function PerRoundLineupTab({ squadPlayers }: { squadPlayers: Player[] }) {
               save a no-op. */}
           {(() => {
             if (!isOpen) return null;
+            // Exactamente 1 arquero titular: sin esto se podía guardar un 11
+            // sin arquero (o con dos), que no es una formación válida.
+            const gkStarters = draft.filter(
+              (p) => p.isStarter && squadById.get(p.playerId)?.position === 'GK',
+            ).length;
             let blocker: string | null = null;
             if (starterCount < 11) blocker = `Faltan ${11 - starterCount} titular${11 - starterCount === 1 ? '' : 'es'}`;
             else if (starterCount > 11) blocker = `Sobran ${starterCount - 11} titular${starterCount - 11 === 1 ? '' : 'es'}`;
+            else if (gkStarters === 0) blocker = 'Falta el arquero titular';
+            else if (gkStarters > 1) blocker = 'Solo 1 arquero titular';
             else if (!captainPicked) blocker = 'Elegí un capitán (C)';
             else if (!vicePicked) blocker = 'Elegí un vicecapitán (V)';
 

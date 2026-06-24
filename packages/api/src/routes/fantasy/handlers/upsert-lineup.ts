@@ -1,8 +1,8 @@
 import { Request, Response } from 'express';
 import { z } from 'zod';
 import { db } from '../../../db/index.js';
-import { fantasyLineups, fantasySquadPlayers, fantasyTeams } from '../../../db/schema/index.js';
-import { eq, and } from 'drizzle-orm';
+import { fantasyLineups, fantasySquadPlayers, fantasyTeams, players as playersTable } from '../../../db/schema/index.js';
+import { eq, and, inArray } from 'drizzle-orm';
 import { AppError } from '../../../lib/errors.js';
 import { isRoundOpen, ROUND_BY_SLUG } from '../../../lib/fantasy-rounds.js';
 
@@ -84,6 +84,25 @@ export async function upsertLineupHandler(req: Request, res: Response) {
         400,
       );
     }
+  }
+
+  // Exactamente 1 arquero entre los 11 titulares. Sin este chequeo se podía
+  // guardar un 11 sin arquero (o con dos) — formación inválida. El frontend
+  // ya lo bloquea, pero el server es la fuente de verdad.
+  const starterPlayerIds = starters.map((p) => p.playerId);
+  const starterRows = await db
+    .select({ id: playersTable.id, position: playersTable.position })
+    .from(playersTable)
+    .where(inArray(playersTable.id, starterPlayerIds));
+  const gkStarters = starterRows.filter((p) => p.position === 'GK').length;
+  if (gkStarters !== 1) {
+    throw new AppError(
+      'VALIDATION',
+      gkStarters === 0
+        ? 'Tenés que poner exactamente 1 arquero titular'
+        : 'Solo puede haber 1 arquero titular',
+      400,
+    );
   }
 
   // Full replace for this round: delete existing rows then insert new ones.
