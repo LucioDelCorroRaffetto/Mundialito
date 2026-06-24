@@ -840,8 +840,14 @@ export function FantasyPage() {
 
       {tab === 'team' && (
         <>
-          {/* If squad not complete yet, show picker first so user knows what to do */}
-          {squadPlayers.length < 15 ? (
+          {/* Onboarding (sin equipo guardado) vs edición de un equipo ya
+              armado. Usamos el plantel GUARDADO, no el conteo LOCAL: si nos
+              basáramos en el local, al sacar un jugador para hacer un swap
+              (quedando en 14) la pantalla saltaba al picker de onboarding y,
+              al volver a 15, remontaba el picker colapsado — escondiendo el
+              botón "Guardar plantel". Con el plantel guardado como umbral, el
+              picker no se desmonta durante un swap y el botón queda visible. */}
+          {savedSquadPlayers.length < 15 ? (
             <SquadPicker
               teams={teams}
               playersByTeam={playersByTeam}
