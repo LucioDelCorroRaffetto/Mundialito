@@ -73,19 +73,45 @@ describe('computeGroupClinch — confirmación matemática de 1°/2°', () => {
     expect(clinch.second).toBeNull();
   });
 
-  it('NO confirma 1° si un rival todavía puede igualar y superar', () => {
+  it('NO confirma 1° si su duelo directo con un rival que puede igualarlo sigue pendiente', () => {
     const { teams, a, b, c, d } = makeGroup('D');
-    // Tras J1+J2: a=6, b=3. Falta J3 (a-d, b-c). Si a pierde y b gana → ambos 6,
-    // y el desempate depende de marcadores aún por jugar → no confirmable.
+    // a y b llegan a 6 pts, pero su ENFRENTAMIENTO DIRECTO está pendiente. Bajo la
+    // regla FIFA 2026 (duelo directo primero) ese partido define el 1°, así que
+    // ninguno está confirmado todavía. (Distinto de cuando el duelo ya se jugó y
+    // fue decisivo: ahí sí se confirma aun con otros partidos por jugar.)
     const matches = [
-      played(a, b, 1, 0, 'D'), played(c, d, 1, 0, 'D'),   // J1: a3 c3
-      played(a, c, 1, 0, 'D'), played(b, d, 1, 0, 'D'),   // J2: a6 b3 c3 d0... ajustar
-      scheduled(a, d, 'D'), scheduled(b, c, 'D'),
+      played(a, c, 1, 0, 'D'),   // a +3
+      played(a, d, 1, 0, 'D'),   // a +3 → a 6, le resta el duelo con b
+      played(b, c, 1, 0, 'D'),   // b +3
+      played(b, d, 1, 0, 'D'),   // b +3 → b 6, le resta el duelo con a
+      scheduled(a, b, 'D'),      // duelo directo a-b PENDIENTE (define el 1°)
+      played(c, d, 0, 0, 'D'),   // c, d fuera (1 pt máx alcanzable: 4)
     ];
     const clinch = computeGroupClinch(teams, matches, 'D');
-    // a tiene 6 y b/c tienen 3; con J3, b o c podrían llegar a 6 e igualar a a
-    // con dif de gol abierta → a NO está confirmado 1°.
+    // b puede ganarle a a y superarlo → a NO confirmado; simétrico para b.
     expect(clinch.first).toBeNull();
+    // Igual ambos están clasificados (top-2 asegurado) con orden provisional.
+    expect(clinch.slot1?.confirmed).toBe(false);
+    expect(clinch.slot2?.confirmed).toBe(false);
+  });
+
+  it('confirma 1° con partidos pendientes si ya ganó el duelo directo a su único rival alcanzable', () => {
+    const { teams, a, b, c, d } = makeGroup('I');
+    // a=6 tras ganar sus 2 primeros; su único rival que puede llegar a 6 es b, y a
+    // YA le ganó el duelo directo. Bajo FIFA 2026 (duelo directo primero) eso fija
+    // el orden pase lo que pase en lo que resta → a confirmado 1° aunque le quede
+    // un partido. (Reproduce el caso real GER/MEX/USA/ARG de la fase de grupos.)
+    const matches = [
+      played(a, b, 2, 1, 'I'),   // a le gana el duelo directo a b
+      played(a, c, 1, 0, 'I'),   // a 6, le resta a-d
+      played(b, d, 1, 0, 'I'),   // b 3 (máx 6, pero perdió el duelo con a)
+      scheduled(a, d, 'I'),      // a podría perder este y seguir 1°
+      scheduled(b, c, 'I'),
+      played(c, d, 0, 0, 'I'),
+    ];
+    const clinch = computeGroupClinch(teams, matches, 'I');
+    expect(clinch.first?.id).toBe(a.id);
+    expect(clinch.slot1?.confirmed).toBe(true);
   });
 
   it('confirma 1° por diferencia de gol cuando los implicados ya jugaron todo', () => {

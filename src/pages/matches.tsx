@@ -13,6 +13,8 @@ import { GroupStandings } from '@/shared/components/group-standings';
 import { ThirdPlaceTable } from '@/shared/components/third-place-table';
 import { BracketView } from '@/shared/components/bracket-view';
 import { R32_LABELS } from '@/shared/data/bracket';
+import { computeBracketProjection, resolveBracketSlot } from '@/shared/lib/bracket-projection';
+import type { SlotResolution } from '@/shared/lib/group-clinch';
 import { cn } from '@/shared/lib/cn';
 import { SkeletonList } from '@/shared/components/skeleton';
 
@@ -59,17 +61,61 @@ const PLACEHOLDER_TEAM: Team = {
   confederation: null,
 };
 
-/** Short display label for a team.
- *  For TBD teams in knockout matches, shows the bracket slot label (e.g. "1° Grp A"). */
-function teamDisplayLabel(
-  code: string,
+/** Un equipo "real" es uno ya definido en la DB — no el placeholder TBD que
+ *  ocupa los cruces de eliminación todavía sin resolver, ni el '???' que se
+ *  muestra mientras el endpoint /teams no trajo (o no incluye) al TBD. */
+function isRealTeam(team: Team): boolean {
+  return team.id > 0 && team.code !== 'TBD' && team.code !== '???';
+}
+
+/** Label del slot del cuadro para un lado de un partido de eliminación todavía
+ *  sin definir (ej. "1° Grp A", "Mejor 3ro"), o "Por definir" como último
+ *  recurso. NO devuelve el placeholder crudo ('???'/'TBD'). */
+function slotLabelFor(matchNumber: number, side: 'home' | 'away'): string {
+  return R32_LABELS[matchNumber]?.[side] ?? 'Por definir';
+}
+
+/** Marcador junto a un equipo proyectado: ✓ verde = posición confirmada
+ *  matemáticamente; ≈ ámbar = clasificado pero con el orden 1°/2° por definir. */
+function ClinchMark({ confirmed }: { confirmed: boolean }) {
+  return confirmed ? (
+    <span className="text-[10px] text-green-500 dark:text-green-400 font-black flex-shrink-0" title="Posición confirmada matemáticamente">✓</span>
+  ) : (
+    <span className="text-[10px] text-amber-500 dark:text-amber-400 font-black flex-shrink-0" title="Clasificado · orden 1°/2° por definir (ubicación provisional)">≈</span>
+  );
+}
+
+/** Renderiza un lado (home/away) de un partido en la lista. Tres casos:
+ *  1) equipo real en la DB → bandera + código.
+ *  2) cruce de eliminación sin definir pero proyectado por el cuadro → bandera +
+ *     código (atenuado) + ✓/≈.
+ *  3) sin proyección → label del slot ("1° Grp A" / "Mejor 3ro" / "Por definir").
+ *  En home la bandera va a la izquierda; en away, a la derecha (espejada). */
+function renderTeamSide(
+  team: Team,
+  projected: SlotResolution | null,
   matchNumber: number,
   side: 'home' | 'away',
-): string {
-  if (code !== 'TBD') return code;
-  const label = R32_LABELS[matchNumber];
-  if (label) return label[side];
-  return 'Por definir';
+) {
+  const real = isRealTeam(team);
+  const display = real ? team : projected?.team ?? null;
+  const flag = display ? <TeamFlag code={display.code} emoji={display.flag} size={20} /> : null;
+  const mark = !real && projected ? <ClinchMark confirmed={projected.confirmed} /> : null;
+  const label = display ? display.code : slotLabelFor(matchNumber, side);
+  const text = (
+    <span className={cn('truncate', !real && 'text-muted', !real && !projected && 'text-xs-s')}>
+      {label}
+    </span>
+  );
+  return (
+    <span className="flex items-center gap-1.5 text-sm-s font-semibold text-text min-w-0">
+      {side === 'home' ? (
+        <>{flag}{text}{mark}</>
+      ) : (
+        <>{mark}{text}{flag}</>
+      )}
+    </span>
+  );
 }
 
 function getTeam(teamMap: Map<number, Team> | undefined, id: number): Team {
@@ -123,6 +169,15 @@ export function MatchesPage() {
   const predictedIds = useMemo(
     () => new Set((myPredictionsData?.data ?? []).map((p) => p.matchId)),
     [myPredictionsData],
+  );
+
+  // Proyección del cuadro (1°/2° de grupo confirmados o clasificados
+  // provisionales + mejores terceros) para mostrar en los cruces de R32 los
+  // equipos ya definidos, igual que en la pestaña "Cuadro", mientras la DB
+  // todavía los tiene como TBD. Reusa teams/matches ya pedidos (no agrega red).
+  const bracketProjection = useMemo(
+    () => computeBracketProjection(teams, matches),
+    [teams, matches],
   );
 
   // Filtro inicial (una sola vez, cuando ya hay datos): respeta el deep-link
@@ -427,6 +482,10 @@ export function MatchesPage() {
     const prediction = uniqueScores.size === 1 ? matchPredictions[0] : undefined;
     const homeTeam = getTeam(teamMap, match.homeTeamId);
     const awayTeam = getTeam(teamMap, match.awayTeamId);
+    // Para cruces de eliminación aún sin definir, proyectar el equipo desde el
+    // cuadro (1°/2° de grupo o mejor 3ro) en vez de mostrar solo el label.
+    const projHome = isRealTeam(homeTeam) ? null : resolveBracketSlot(match.matchNumber, 'home', bracketProjection);
+    const projAway = isRealTeam(awayTeam) ? null : resolveBracketSlot(match.matchNumber, 'away', bracketProjection);
     const isLive = match.status === 'live';
     const isFinished = match.status === 'finished';
     const isScheduled = match.status === 'scheduled';
@@ -526,14 +585,7 @@ export function MatchesPage() {
               )}
             </div>
             <div className="flex items-center gap-2 mt-1">
-              <span className="flex items-center gap-1.5 text-sm-s font-semibold text-text">
-                {homeTeam.code !== 'TBD' && (
-                  <TeamFlag code={homeTeam.code} emoji={homeTeam.flag} size={20} />
-                )}
-                <span className={homeTeam.code === 'TBD' ? 'text-muted text-xs-s' : ''}>
-                  {teamDisplayLabel(homeTeam.code, match.matchNumber, 'home')}
-                </span>
-              </span>
+              {renderTeamSide(homeTeam, projHome, match.matchNumber, 'home')}
               {(isLive || isFinished || isSuspended) && match.homeScore !== null ? (
                 <span
                   className={cn(
@@ -548,14 +600,7 @@ export function MatchesPage() {
               ) : (
                 <span className="text-xs-s font-bold text-muted">vs</span>
               )}
-              <span className="flex items-center gap-1.5 text-sm-s font-semibold text-text">
-                <span className={awayTeam.code === 'TBD' ? 'text-muted text-xs-s' : ''}>
-                  {teamDisplayLabel(awayTeam.code, match.matchNumber, 'away')}
-                </span>
-                {awayTeam.code !== 'TBD' && (
-                  <TeamFlag code={awayTeam.code} emoji={awayTeam.flag} size={20} />
-                )}
-              </span>
+              {renderTeamSide(awayTeam, projAway, match.matchNumber, 'away')}
             </div>
             {prediction && (
               <p

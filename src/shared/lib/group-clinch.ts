@@ -24,12 +24,20 @@
  *                      escenarios hay siempre exactamente un equipo por encima
  *                      (nunca puede ser 1°).
  *
- * Desempates FIFA (Mundial 2026), en orden: puntos → diferencia de gol total →
- * goles a favor total → puntos en el duelo directo → dif. de gol en el duelo →
- * goles en el duelo → fair play → sorteo. Los desempates por gol solo se
- * aplican como "decididos" cuando los dos equipos en juego ya jugaron todos sus
- * partidos (si a alguno le queda un partido, el marcador todavía puede mover la
- * dif. de gol, así que el desempate se considera abierto = no confirmado).
+ * Desempates FIFA (Mundial 2026 — CAMBIÓ respecto de Mundiales previos): el
+ * ENFRENTAMIENTO DIRECTO va PRIMERO, y recién después los criterios globales.
+ * Orden: puntos → (entre los empatados) pts en el duelo directo → dif. de gol
+ * del duelo → goles del duelo → dif. de gol total → goles a favor total → fair
+ * play → ranking FIFA.
+ *
+ * Consecuencia para el clinch: un duelo directo YA JUGADO y no empatado decide
+ * el orden de ese par en cualquier escenario donde queden igualados en puntos,
+ * sin importar los partidos que les resten contra OTROS rivales (la dif. de gol
+ * global es criterio POSTERIOR al duelo). Por eso un equipo puede confirmar su
+ * 1°/2° aun con partidos pendientes, si ya le ganó el duelo a su único rival que
+ * podría alcanzarlo en puntos. Los desempates por dif. de gol GLOBAL, en cambio,
+ * solo se consideran "decididos" cuando los dos equipos ya jugaron sus 3
+ * partidos (si a alguno le resta uno, el marcador todavía puede moverla).
  */
 import type { Match, Team } from '@/shared/types/api';
 import { computeStandings } from '@/shared/lib/standings';
@@ -80,33 +88,37 @@ function pointsFor(home: number, away: number): readonly [number, number] {
 }
 
 /**
- * Comparación de desempate entre dos equipos que YA jugaron todos sus partidos
- * y están igualados en puntos. Devuelve < 0 si `a` queda por encima de `b`,
- * > 0 si `b` por encima, 0 si ni siquiera estos criterios los separan
- * (empate irresoluble → se considera ambiguo aguas arriba).
+ * Resultado del ENFRENTAMIENTO DIRECTO ya jugado entre `a` y `b`, primer
+ * desempate FIFA 2026. Devuelve < 0 si `a` quedó por encima de `b` por el duelo,
+ * > 0 si `b` por encima, 0 si el duelo no se jugó o terminó empatado (no separa).
  *
- * ORDEN OFICIAL FIFA 2026 (cambió respecto de Mundiales anteriores): el
- * enfrentamiento directo va PRIMERO, luego la diferencia de gol general.
- *   1) duelo directo: pts → DG → GF entre los empatados
- *   2) DG general → GF general
- *   3) fair play → ranking FIFA (no modelados → empate irresoluble)
- * Aprox. pairwise (FIFA usa minigrupo para 3+ empatados; acá comparamos de a
- * dos, que es suficiente para el conteo conservador del clinch).
+ * Es ESTABLE aunque a alguno le resten partidos: bajo la regla 2026 el duelo es
+ * criterio anterior a la dif. de gol global, así que un duelo jugado y no
+ * empatado fija el orden del par en cualquier escenario donde estén igualados en
+ * puntos, sin importar los partidos contra otros rivales. En fase de grupos se
+ * juega un único partido por par, así que comparar los goles del duelo alcanza.
  */
-function compareDecided(a: Stats, b: Stats, h2h: Map<string, [number, number]>): number {
-  // 1) Duelo directo primero. En fase de grupos se juega un solo partido entre
-  //    cada par, así que el ganador (más goles en el duelo) queda por encima.
+function headToHeadResult(a: Stats, b: Stats, h2h: Map<string, [number, number]>): number {
   const key = a.teamId < b.teamId ? `${a.teamId}-${b.teamId}` : `${b.teamId}-${a.teamId}`;
   const rec = h2h.get(key);
-  if (rec) {
-    const [loGoals, hiGoals] = rec;
-    const aGoals = a.teamId < b.teamId ? loGoals : hiGoals;
-    const bGoals = a.teamId < b.teamId ? hiGoals : loGoals;
-    if (aGoals !== bGoals) return bGoals - aGoals; // ganó/empató el duelo directo
-  }
-  // 2) Diferencia de gol general → goles a favor generales.
-  if (a.gd !== b.gd) return b.gd - a.gd;
-  if (a.gf !== b.gf) return b.gf - a.gf;
+  if (!rec) return 0; // no se jugaron entre sí (todavía)
+  const [loGoals, hiGoals] = rec;
+  const aGoals = a.teamId < b.teamId ? loGoals : hiGoals;
+  const bGoals = a.teamId < b.teamId ? hiGoals : loGoals;
+  if (aGoals === bGoals) return 0; // duelo empatado → no separa por este criterio
+  return bGoals - aGoals; // <0 → a arriba; >0 → b arriba
+}
+
+/**
+ * Desempate GLOBAL entre dos equipos igualados en puntos cuyo duelo directo NO
+ * los separó (empatado o no jugado). Solo válido cuando AMBOS ya jugaron sus 3
+ * partidos (si a alguno le resta uno, el marcador puede mover la dif. de gol).
+ * Devuelve < 0 si `a` por encima, > 0 si `b`, 0 si ni esto los separa (fair play
+ * / ranking FIFA no modelados → empate irresoluble, ambiguo aguas arriba).
+ */
+function compareGlobal(a: Stats, b: Stats): number {
+  if (a.gd !== b.gd) return b.gd - a.gd; // dif. de gol general
+  if (a.gf !== b.gf) return b.gf - a.gf; // goles a favor generales
   return 0; // fair play / ranking FIFA: no modelados → irresoluble
 }
 
@@ -182,15 +194,21 @@ export function computeGroupClinch(teams: Team[], allMatches: Match[], group: st
         const oPts = proj.get(o.id)!;
         if (oPts > tPts) { could++; must++; continue; }
         if (oPts < tPts) continue;
-        // Igualados en puntos en este escenario.
+        // Igualados en puntos en este escenario. Desempate FIFA 2026: duelo
+        // directo PRIMERO (estable aunque resten partidos), luego DG global.
         const oStats = base.get(o.id)!;
-        if (tStats.done && oStats.done) {
-          const cmp = compareDecided(tStats, oStats, h2h);
-          if (cmp > 0) { could++; must++; }     // o queda decididamente arriba
-          // cmp < 0 → t arriba; cmp === 0 → empate irresoluble:
-          else if (cmp === 0) could++;          // podría ir arriba, pero no seguro
+        const h2hCmp = headToHeadResult(tStats, oStats, h2h);
+        if (h2hCmp > 0) {
+          could++; must++;                       // o ganó el duelo → seguro arriba
+        } else if (h2hCmp < 0) {
+          // t ganó el duelo directo → t arriba en todo escenario con este empate.
+        } else if (tStats.done && oStats.done) {
+          // Sin duelo decisivo y ambos terminaron: cae a DG/GF global.
+          const cmp = compareGlobal(tStats, oStats);
+          if (cmp > 0) { could++; must++; }      // o queda decididamente arriba
+          else if (cmp === 0) could++;           // empate irresoluble → podría ir arriba
         } else {
-          could++; // marcador abierto: el desempate puede caer para cualquiera
+          could++; // duelo no decisivo y resta algún partido: DG global puede mover
         }
       }
       maxCouldAbove.set(t.id, Math.max(maxCouldAbove.get(t.id)!, could));

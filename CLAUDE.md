@@ -287,6 +287,51 @@ FIFA.com no necesita key.
 > Orden cronológico inverso (lo nuevo arriba). Cada entrada: **qué cambió y por qué**.
 > Agregá una entrada cada vez que cambies un comportamiento por una razón.
 
+### 2026-06-24 — Clinch nunca confirmaba 1° + R32 en la lista mostraba "???"
+
+Dos bugs reportados desde la UI (el cuadro y la lista de Partidos). **Solo
+lógica/presentacional, no toca scoring ni shape de la API.** `tsc` front = 0,
+`npm run test` 25/25, `npm run build` OK.
+
+- **🐛 El motor de clinch (`group-clinch.ts`) NUNCA confirmaba el 1° de nadie**
+  (`first=null` en TODOS los grupos), aun con equipos matemáticamente
+  asegurados. Verificado contra la DB de prod: GER/MEX/USA/ARG salían ámbar `≈`
+  (provisional) igual que NOR/FRA/COL, cuando los 4 primeros ya tenían el 1°
+  asegurado.
+  - **Causa raíz**: en el bucle de escenarios, al empatar dos equipos en puntos
+    el desempate solo se resolvía si **ambos** ya habían jugado sus 3 partidos
+    (`tStats.done && oStats.done`); si a alguno le restaba un partido, caía al
+    `else` conservador (`could++`) y no confirmaba. Pero bajo la regla **FIFA
+    2026 (enfrentamiento directo PRIMERO**, antes de la dif. de gol global —
+    confirmado con fuente oficial fifa.com), un duelo directo YA JUGADO y no
+    empatado fija el orden del par pase lo que pase en lo que resta. GER ya le
+    había ganado a CIV (su único rival que podía llegar a 6) → estaba confirmado,
+    pero el `done` guard lo ignoraba. (El comentario de cabecera del archivo
+    encima describía el orden VIEJO —dif. de gol global primero—, contradiciendo
+    a `compareDecided` y a `computeStandings`; era stale y se corrigió.)
+  - **Fix**: nuevo `headToHeadResult()` que resuelve por el duelo directo jugado
+    aunque resten partidos; el desempate por dif. de gol GLOBAL (`compareGlobal`,
+    antes `compareDecided`) se sigue exigiendo "ambos done". Resultado verificado
+    contra prod: GER/MEX/USA/ARG → 1° confirmado `✓`; NOR/FRA/COL → siguen `≈`
+    (su duelo directo por el 1° está pendiente, correcto). Test viejo de grupo D
+    ("NO confirma 1°...") codificaba el comportamiento incorrecto (regla vieja) →
+    reescrito a un caso genuinamente no confirmable (duelo directo pendiente) +
+    test nuevo del caso GER (confirma con partidos pendientes si ya ganó el duelo).
+- **🐛 La lista de Partidos mostraba los cruces de R32 como "??? vs ???"** en vez
+  de los equipos ya proyectados (la pestaña Cuadro sí los mostraba).
+  - **Causa**: el endpoint `/teams` NO incluye al equipo placeholder TBD (id 49)
+    que ocupa los R32. El cuadro cae a su `TBD_TEAM` hardcodeado (→ muestra
+    proyección), pero la lista caía a `PLACEHOLDER_TEAM` (code `'???'`) y
+    `teamDisplayLabel` solo trataba el code `'TBD'`, devolviendo `'???'` crudo.
+  - **Fix** (`matches.tsx`): se wireó la misma proyección del cuadro
+    (`computeBracketProjection` + `resolveBracketSlot`, reusa teams/matches ya
+    cacheados, no agrega red). Nuevo `renderTeamSide` muestra: equipo real →
+    bandera+código; cruce proyectado → bandera+código+`✓`/`≈`; sin proyección →
+    label del slot ("1° Grp A"/"Mejor 3ro"/"Por definir", nunca `'???'`). Helper
+    `isRealTeam` distingue TBD/'???' de un equipo definido.
+- **Pendiente**: deployar (no se commiteó/deployó acá). El fix de clinch hace que
+  el cuadro y la lista se auto-actualicen a medida que se definan los grupos.
+
 ### 2026-06-24 — Matches: filtro inicial inteligente + tabs "Hoy" / "Por jugar"
 
 - **Síntoma reportado por usuarios**: en `/matches` (tab "Partidos") había que
