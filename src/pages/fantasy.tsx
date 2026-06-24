@@ -555,15 +555,14 @@ export function FantasyPage() {
   const { data: standingsData } = useFantasyStandings();
   const currentUser = useAuthStore((s) => s.user);
 
-  // El plantel se bloquea con el deadline de Fecha 1 (group_1) — no podés
-  // cambiar los 15 una vez arrancado el Mundial. Lo que SÍ podés cambiar
-  // es tu 11 inicial fecha por fecha desde la pestaña Titulares. Cuando
-  // el plantel queda locked, escondemos el botón "Guardar plantel" y
-  // dejamos un banner que apunta al lugar correcto.
+  // El plantel se puede re-elegir hasta el deadline de cada fecha. Queda
+  // bloqueado solo cuando todas las fechas cerraron (torneo terminado).
+  // Mientras haya al menos una fecha abierta, mostramos el botón
+  // "Guardar plantel" y permitimos modificar los 15.
   const squadLocked = (() => {
-    const group1 = roundsData?.data.find((r) => r.slug === 'group_1');
-    if (!group1?.deadline) return false;
-    return new Date(group1.deadline).getTime() <= Date.now();
+    const rounds = roundsData?.data;
+    if (!rounds || rounds.length === 0) return false;
+    return !rounds.some((r) => r.isOpen);
   })();
 
   const myLeagues = leaguesResponse?.data ?? [];
@@ -1060,7 +1059,7 @@ const FantasyGuide = memo(function FantasyGuide() {
           {[
             {
               q: '¿Puedo cambiar mi equipo después de armarlo?',
-              a: 'Sí, podés modificar tu plantel, titulares y capitán hasta que empiece el torneo (11 de junio). Una vez que arrancan los partidos, los cambios pueden quedar bloqueados.',
+              a: 'Sí. Podés re-armar tu plantel de 15 hasta el deadline de cada fecha, y cambiar tus titulares y capitán fecha por fecha. Las fechas que ya cerraron conservan la alineación con la que las jugaste. El plantel solo queda bloqueado cuando termina el torneo.',
             },
             {
               q: '¿Qué pasa si un jugador de mi equipo no juega ningún partido?',
@@ -1174,7 +1173,7 @@ function SquadPicker({
             <div className="mx-4 p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-start gap-2.5">
               <Lock size={14} className="text-amber-500 flex-shrink-0 mt-0.5" />
               <p className="text-xs-s text-amber-700 dark:text-amber-300 leading-snug">
-                El plantel está cerrado desde el inicio del torneo. Podés cambiar tu 11 inicial y capitán por fecha en la cancha de arriba.
+                El torneo terminó — el plantel ya no se puede modificar.
               </p>
             </div>
           )}

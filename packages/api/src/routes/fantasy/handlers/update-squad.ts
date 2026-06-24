@@ -4,8 +4,7 @@ import { eq, inArray, and, notInArray } from 'drizzle-orm';
 import { db } from '../../../db/index.js';
 import { fantasyTeams, fantasySquadPlayers, players, fantasyLineups } from '../../../db/schema/index.js';
 import { AppError } from '../../../lib/errors.js';
-import { isLocked } from '../../../lib/match-helpers.js';
-import { ROUND_BY_SLUG } from '../../../lib/fantasy-rounds.js';
+import { FANTASY_ROUNDS, getCurrentFantasyRound, isRoundOpen } from '../../../lib/fantasy-rounds.js';
 
 // Standard WC fantasy squad composition.
 const POSITION_QUOTAS: Record<'GK' | 'DEF' | 'MID' | 'FWD', number> = {
@@ -32,18 +31,17 @@ export async function updateSquadHandler(req: Request, res: Response) {
   const { playerIds } = req.body as z.infer<typeof updateSquadSchema>;
   let { starterIds, captainId } = req.body as z.infer<typeof updateSquadSchema>;
 
-  // Lock del plantel: usamos el deadline del round 'group_1' (Fecha 1)
-  // como umbral. Antes usábamos el predictionLockUtc del primer partido,
-  // pero ese cierra 5 min antes del kickoff y dejó usuarios con plantel
-  // incompleto durante toda la Fecha 1. Ahora pueden cerrar el plantel
-  // hasta que cierre la Fecha 1 — coherente con el deadline del lineup
-  // que ya conoce el usuario.
-  const group1 = ROUND_BY_SLUG.get('group_1');
-  const squadLockUtc = group1?.deadline;
-  if (squadLockUtc && isLocked(squadLockUtc)) {
+  // Lock del plantel: el plantel se puede re-elegir hasta el deadline de
+  // cada fecha. Mientras haya al menos una fecha abierta (es decir,
+  // getCurrentFantasyRound devuelve un round) el usuario puede modificar
+  // sus 15. Solo queda bloqueado cuando el torneo terminó (todas las
+  // fechas cerraron). Las fechas ya jugadas conservan su alineación
+  // congelada — ver el delete de lineups más abajo, restringido a rounds
+  // abiertos.
+  if (!getCurrentFantasyRound()) {
     throw new AppError(
       'SQUAD_LOCKED',
-      'El plantel ya no se puede modificar — el plazo de Fecha 1 cerró',
+      'El plantel ya no se puede modificar — el torneo terminó',
       409,
     );
   }
@@ -127,14 +125,26 @@ export async function updateSquadHandler(req: Request, res: Response) {
     // Drop any per-round lineup rows referencing players no longer in the
     // squad. Without this, the next /fantasy/lineup/:round save fails
     // validation because the lineup still points at a dropped player.
-    await tx
-      .delete(fantasyLineups)
-      .where(
-        and(
-          eq(fantasyLineups.userId, userId),
-          notInArray(fantasyLineups.playerId, playerIds),
-        ),
-      );
+    //
+    // IMPORTANT: restringido a fechas ABIERTAS. Las fechas ya cerradas
+    // tienen su alineación congelada (y sus puntos en fantasyRoundScores);
+    // si borráramos esas filas, perderíamos el breakdown histórico de un
+    // jugador que ya jugó. Ahora que el plantel es editable fecha a fecha,
+    // este filtro es obligatorio.
+    const openRoundSlugs = FANTASY_ROUNDS
+      .filter((r) => isRoundOpen(r.slug))
+      .map((r) => r.slug);
+    if (openRoundSlugs.length > 0) {
+      await tx
+        .delete(fantasyLineups)
+        .where(
+          and(
+            eq(fantasyLineups.userId, userId),
+            notInArray(fantasyLineups.playerId, playerIds),
+            inArray(fantasyLineups.round, openRoundSlugs),
+          ),
+        );
+    }
 
     await tx.insert(fantasySquadPlayers).values(
       playerIds.map((playerId) => ({
