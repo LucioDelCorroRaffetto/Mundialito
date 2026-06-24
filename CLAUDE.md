@@ -287,6 +287,41 @@ FIFA.com no necesita key.
 > Orden cronológico inverso (lo nuevo arriba). Cada entrada: **qué cambió y por qué**.
 > Agregá una entrada cada vez que cambies un comportamiento por una razón.
 
+### 2026-06-24 — Matches: filtro inicial inteligente + tabs "Hoy" / "Por jugar"
+
+- **Síntoma reportado por usuarios**: en `/matches` (tab "Partidos") había que
+  **scrollear mucho** para llegar a los partidos del día — la vista "Todos"
+  arranca en el primer día del torneo y, con los días que pasan, se acumulan
+  decenas de partidos terminados arriba.
+- **Fix (solo presentacional, `src/pages/matches.tsx`)**:
+  - **Filtro inicial inteligente**: al cargar los datos (una sola vez, vía guard
+    `initializedRef` + `setState` en render para evitar el flash de la lista
+    completa), la página aterriza en **"Hoy"** si hay partidos hoy, si no en
+    **"Por jugar"** (próximos), si no en "Todos" (torneo terminado). Respeta el
+    deep-link `?filter=live` del banner de la home y suma `?filter=today`. Así
+    los partidos del día se ven **sin scrollear** y los filtros quedan a la vista.
+  - **Filtro de estado como dropdown** (no como pestañas): a pedido del usuario,
+    para no saturar la barra con 7 opciones. `<select>` nativo estilado (mejor UX
+    mobile: usa el picker del SO), accesible (`label` sr-only), con count por
+    opción `Opción (N)`. Reemplaza la fila de pills horizontal. El badge "en vivo"
+    del header sigue señalando el estado live (se perdió el pulse rojo de la pill,
+    redundante con ese badge). Opciones: `Todos · Hoy · En vivo · Por jugar ·
+    Sin pronosticar · Pronosticados · Terminados`.
+  - Semántica: **"Pendientes"** vieja (`scheduled && !predicho`, confusa) se
+    partió en dos opciones claras → **"Por jugar"** = `status === 'scheduled'`
+    (todos los restantes) y **"Sin pronosticar"** = `scheduled && !predicho` (los
+    que te falta pronosticar). Nueva **"Hoy"** = kickoff en la fecha local del
+    dispositivo (incluye los ya jugados/en vivo de hoy).
+  - Helper `localDateKey(Date)` extraído (reusado por `groupByDate`, el filtro
+    "Hoy" y el default). Empty-state propio para "Hoy".
+- **No toca**: lógica de negocio, scoring, hooks de datos, shape de la API. El
+  polling de 30s NO re-pisa el filtro (guard de una sola aplicación). Verificado:
+  `tsc --noEmit` (front) = 0, `npm run build` OK.
+- **Descartado en el camino**: un auto-scroll a la fecha "hoy" dentro de "Todos"
+  — escondía los filtros recién al cargar (lo que el usuario quería descubrir) y
+  era frágil con el stagger de framer-motion y el scroll a nivel documento del
+  app-shell. El default inteligente resuelve lo mismo de forma más robusta.
+
 ### 2026-06-22 — Fix banderas Copa (Windows) + badge "No pronosticaste"
 
 Dos fixes puntuales reportados desde la UI, deployados por separado (commits

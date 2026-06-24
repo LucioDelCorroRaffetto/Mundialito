@@ -1,7 +1,7 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useMemo, useRef } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ChevronRight, Clock, CheckCircle2, Check, X } from 'lucide-react';
+import { ChevronRight, ChevronDown, Clock, CheckCircle2, Check, X } from 'lucide-react';
 import { staggerContainer, staggerItem, useMotionPrefs } from '@/shared/lib/motion';
 import { useMatches } from '@/shared/hooks/use-matches';
 import { useTeams, useTeamMap } from '@/shared/hooks/use-teams';
@@ -32,13 +32,18 @@ function formatTime(utc: string) {
   return d.toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit', hour12: false });
 }
 
+/** Clave YYYY-MM-DD en la zona horaria LOCAL del dispositivo (no UTC), para
+ *  que un partido de las 22 h MX no se contabilice bajo el día siguiente. */
+function localDateKey(d: Date) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 function groupByDate(matches: Match[]) {
   const groups: Record<string, Match[]> = {};
   for (const m of matches) {
     // Agrupar por la fecha LOCAL del dispositivo, no por la fecha UTC, para
     // que un partido de las 22 h MX no aparezca bajo el día siguiente.
-    const local = new Date(m.kickoffUtc);
-    const key = `${local.getFullYear()}-${String(local.getMonth() + 1).padStart(2, '0')}-${String(local.getDate()).padStart(2, '0')}`;
+    const key = localDateKey(new Date(m.kickoffUtc));
     if (!groups[key]) groups[key] = [];
     groups[key].push(m);
   }
@@ -71,8 +76,16 @@ function getTeam(teamMap: Map<number, Team> | undefined, id: number): Team {
   return teamMap?.get(id) ?? PLACEHOLDER_TEAM;
 }
 
-const STATUS_TABS = ['Todos', 'En vivo', 'Pendientes', 'Pronosticados', 'Terminados'] as const;
-type StatusTab = (typeof STATUS_TABS)[number];
+const STATUS_OPTIONS = [
+  'Todos',
+  'Hoy',
+  'En vivo',
+  'Por jugar',
+  'Sin pronosticar',
+  'Pronosticados',
+  'Terminados',
+] as const;
+type StatusOption = (typeof STATUS_OPTIONS)[number];
 
 const WC_GROUPS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L'] as const;
 
@@ -82,18 +95,16 @@ type MainTab = (typeof MAIN_TABS)[number];
 export function MatchesPage() {
   const [searchParams] = useSearchParams();
   const [mainTab, setMainTab] = useState<MainTab>('Partidos');
-  const [statusFilter, setStatusFilter] = useState<StatusTab>('Todos');
+  const [statusFilter, setStatusFilter] = useState<StatusOption>('Todos');
   const [groupFilter, setGroupFilter] = useState<string | null>(null);
   const { reduced } = useMotionPrefs();
 
-  // Allow deep-linking to the En vivo filter from the home banner.
-  useEffect(() => {
-    if (searchParams.get('filter') === 'live') {
-      setStatusFilter('En vivo');
-    }
-    // Only on mount — afterwards the tab is fully user-controlled.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  // Clave de "hoy" en hora local, fijada al montar (no cambia entre renders).
+  const todayKey = useMemo(() => localDateKey(new Date()), []);
+
+  // Se aplica el filtro inicial una sola vez (cuando llegan los datos), sin que
+  // el polling de 30s lo vuelva a pisar ni anule la elección del usuario.
+  const initializedRef = useRef(false);
 
   // Poll every 30s so live scores and the scheduled→live→finished status
   // transitions show up without a manual refresh. Polling is the reliable path
@@ -113,6 +124,24 @@ export function MatchesPage() {
     () => new Set((myPredictionsData?.data ?? []).map((p) => p.matchId)),
     [myPredictionsData],
   );
+
+  // Filtro inicial (una sola vez, cuando ya hay datos): respeta el deep-link
+  // ?filter del banner de la home y, si no, aterriza en el grupo más relevante
+  // para que los partidos de hoy / próximos se vean sin scrollear. Hacerlo en
+  // render (no en un effect) evita el "flash" de la lista completa antes de
+  // reposicionar. El setState está guardado → re-render inmediato, sin loop.
+  if (!initializedRef.current && matches.length > 0) {
+    initializedRef.current = true;
+    const f = searchParams.get('filter');
+    if (f === 'live') setStatusFilter('En vivo');
+    else if (f === 'today') setStatusFilter('Hoy');
+    else if (matches.some((m) => localDateKey(new Date(m.kickoffUtc)) === todayKey)) {
+      setStatusFilter('Hoy');
+    } else if (matches.some((m) => m.status === 'scheduled')) {
+      setStatusFilter('Por jugar');
+    }
+    // si no quedan partidos por jugar (torneo terminado) se queda en 'Todos'.
+  }
 
   if (isLoading) {
     return (
@@ -150,9 +179,11 @@ export function MatchesPage() {
     : matches;
 
   const filtered = filteredByGroup.filter((m) => {
+    if (statusFilter === 'Hoy') return localDateKey(new Date(m.kickoffUtc)) === todayKey;
     if (statusFilter === 'En vivo') return m.status === 'live';
     if (statusFilter === 'Pronosticados') return predictedIds.has(m.id);
-    if (statusFilter === 'Pendientes') return !predictedIds.has(m.id) && m.status === 'scheduled';
+    if (statusFilter === 'Por jugar') return m.status === 'scheduled';
+    if (statusFilter === 'Sin pronosticar') return m.status === 'scheduled' && !predictedIds.has(m.id);
     if (statusFilter === 'Terminados') return m.status === 'finished';
     return true;
   });
@@ -161,6 +192,21 @@ export function MatchesPage() {
   const dates = Object.keys(grouped).sort();
   const liveCount = matches.filter((m) => m.status === 'live').length;
   const finishedCount = matches.filter((m) => m.status === 'finished').length;
+  const todayCount = matches.filter((m) => localDateKey(new Date(m.kickoffUtc)) === todayKey).length;
+
+  // Conteo por opción del dropdown (sobre el total, ortogonal al filtro de grupo,
+  // igual que el badge "en vivo" del header). 'Todos' no muestra número.
+  const optionCount = (opt: StatusOption): number | null => {
+    switch (opt) {
+      case 'Hoy': return todayCount;
+      case 'En vivo': return liveCount;
+      case 'Por jugar': return matches.filter((m) => m.status === 'scheduled').length;
+      case 'Sin pronosticar': return matches.filter((m) => m.status === 'scheduled' && !predictedIds.has(m.id)).length;
+      case 'Pronosticados': return matches.filter((m) => predictedIds.has(m.id)).length;
+      case 'Terminados': return finishedCount;
+      default: return null;
+    }
+  };
 
   // Para la tab "En vivo" rompemos el agrupamiento por fecha y armamos
   // dos secciones explícitas: "En entretiempo" (halftime + descanso de
@@ -276,48 +322,33 @@ export function MatchesPage() {
             ))}
           </div>
 
-          {/* Status filter tabs — the 'En vivo' tab gets a red pulse when
-              matches are actually live so it stands out at a glance. */}
-          <div
-            className="flex items-center gap-1.5 px-4 py-1 pb-4 overflow-x-auto no-scrollbar"
-            role="group"
-            aria-label="Filtrar por estado"
-          >
-            {STATUS_TABS.map((tab) => {
-              const isActive = statusFilter === tab;
-              const liveTab = tab === 'En vivo' && liveCount > 0;
-              const count =
-                tab === 'En vivo'
-                  ? liveCount
-                  : tab === 'Terminados'
-                    ? finishedCount
-                    : null;
-              return (
-                <button
-                  key={tab}
-                  onClick={() => setStatusFilter(tab)}
-                  aria-pressed={isActive}
-                  className={cn(
-                    'flex-shrink-0 inline-flex items-center justify-center gap-1.5 px-3.5 min-h-[44px] rounded-full text-xs-s font-semibold whitespace-nowrap transition-colors border',
-                    isActive
-                      ? liveTab
-                        ? 'bg-red-500 text-white border-red-400 shadow-[0_0_12px_rgba(239,68,68,0.45)]'
-                        : 'bg-accent text-accent-on border-accent'
-                      : liveTab
-                        ? 'bg-red-500/10 border-red-500/40 text-red-700 dark:text-red-300 hover:bg-red-500/15'
-                        : 'bg-elevated border-border text-muted hover:text-text',
-                  )}
-                >
-                  {liveTab && (
-                    <span className="w-1.5 h-1.5 rounded-full bg-red-200 animate-pulse" />
-                  )}
-                  {tab}
-                  {count !== null && count > 0 && (
-                    <span className="text-[10px] opacity-80">({count})</span>
-                  )}
-                </button>
-              );
-            })}
+          {/* Status filter — dropdown en vez de pestañas para no saturar la barra
+              con 7 opciones. El badge "en vivo" del header ya señala el estado live. */}
+          <div className="px-4 py-1 pb-4">
+            <label htmlFor="status-filter" className="sr-only">
+              Filtrar partidos por estado
+            </label>
+            <div className="relative w-full max-w-xs">
+              <select
+                id="status-filter"
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value as StatusOption)}
+                className="appearance-none w-full pl-4 pr-10 min-h-[44px] rounded-lg bg-elevated border border-border text-sm-s font-semibold text-text cursor-pointer focus:outline-none focus:ring-2 focus:ring-accent/50"
+              >
+                {STATUS_OPTIONS.map((opt) => {
+                  const c = optionCount(opt);
+                  return (
+                    <option key={opt} value={opt}>
+                      {c !== null ? `${opt} (${c})` : opt}
+                    </option>
+                  );
+                })}
+              </select>
+              <ChevronDown
+                size={16}
+                className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-muted"
+              />
+            </div>
           </div>
 
           {/* Match list. Renderizamos secciones live-status para la tab
@@ -371,7 +402,9 @@ export function MatchesPage() {
                 <p className="text-sm-s text-muted mt-1">
                   {statusFilter === 'Pronosticados'
                     ? 'Todavía no pronosticaste ningún partido.'
-                    : 'No hay partidos en esta categoría.'}
+                    : statusFilter === 'Hoy'
+                      ? 'No hay partidos hoy. Mirá el calendario completo en «Todos».'
+                      : 'No hay partidos en esta categoría.'}
                 </p>
               </div>
             )}
