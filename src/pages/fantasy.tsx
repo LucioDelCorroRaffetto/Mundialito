@@ -753,6 +753,16 @@ export function FantasyPage() {
     .map((id) => playersById.get(id))
     .filter((p): p is Player => p != null);
 
+  // El lineup (los 11) se valida en el backend contra el plantel GUARDADO,
+  // no contra la selección local. Si armáramos el draft del lineup desde
+  // `selectedPlayerIds` (local), un jugador agregado al plantel pero todavía
+  // sin guardar aparecería como titular elegible y el guardado del 11
+  // fallaría con "el jugador X no está en tu plantilla de 15". Por eso el tab
+  // de lineup usa SIEMPRE el plantel guardado en el server (`fantasyData.squad`).
+  const savedSquadPlayers = (fantasyData?.squad ?? [])
+    .map((p) => playersById.get(p.id))
+    .filter((p): p is Player => p != null);
+
   return (
     <div className="flex flex-col gap-4 pb-36 md:pb-24 animate-fade-in">
       {/* Hero — identidad del equipo + stats clave en un solo bloque con
@@ -850,8 +860,10 @@ export function FantasyPage() {
             />
           ) : (
             <>
-              {/* Lineup picker (11 starters + captain per round) */}
-              <PerRoundLineupTab squadPlayers={squadPlayers} />
+              {/* Lineup picker (11 starters + captain per round). Usa el
+                  plantel GUARDADO, no la selección local, para no permitir
+                  titulares fuera del plantel persistido. */}
+              <PerRoundLineupTab squadPlayers={savedSquadPlayers} />
               {/* Squad management below — collapsed by default once squad is complete */}
               <SquadPicker
                 teams={teams}
@@ -1475,8 +1487,8 @@ function PerRoundLineupTab({ squadPlayers }: { squadPlayers: Player[] }) {
     return (
       <div className="mx-4 mt-4 p-4 rounded-xl bg-card border border-border text-center flex flex-col items-center gap-3">
         <span className="text-2xl">🧩</span>
-        <p className="text-sm-s font-semibold text-text">Primero armá tu plantel de 15</p>
-        <p className="text-xs-s text-muted">Elegí 15 jugadores en la pestaña Plantel antes de configurar el lineup por fecha.</p>
+        <p className="text-sm-s font-semibold text-text">Primero armá y guardá tu plantel de 15</p>
+        <p className="text-xs-s text-muted">Elegí 15 jugadores en "Mi plantel" y tocá <span className="font-semibold text-text">Guardar plantel</span>. Recién ahí podés configurar tu 11 por fecha.</p>
       </div>
     );
   }
