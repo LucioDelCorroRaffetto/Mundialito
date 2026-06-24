@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef } from 'react';
+import { useState, useMemo, useRef, useEffect } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { ChevronRight, ChevronDown, Clock, CheckCircle2, Check, X } from 'lucide-react';
@@ -137,6 +137,111 @@ const WC_GROUPS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L'] a
 
 const MAIN_TABS = ['Partidos', 'Grupos', 'Terceros', 'Cuadro'] as const;
 type MainTab = (typeof MAIN_TABS)[number];
+
+/** Dropdown custom (no usa el <select> nativo). En Windows, Chrome ignora
+ *  `color-scheme` para el popup del <select> y lo pinta blanco ilegible sobre
+ *  el tema oscuro. Un menú propio con los tokens del tema funciona en claro y
+ *  oscuro por igual. */
+function FilterDropdown({
+  value,
+  options,
+  onChange,
+  getCount,
+}: {
+  value: StatusOption;
+  options: readonly StatusOption[];
+  onChange: (v: StatusOption) => void;
+  getCount: (opt: StatusOption) => number | null;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false);
+    };
+    document.addEventListener('mousedown', onDoc);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDoc);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+
+  const curCount = getCount(value);
+
+  return (
+    <div ref={ref} className="relative w-full max-w-xs">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-label="Filtrar partidos por estado"
+        className="flex items-center justify-between gap-2 w-full pl-4 pr-3 min-h-[44px] rounded-lg bg-elevated border border-border text-sm-s font-semibold text-text focus:outline-none focus:ring-2 focus:ring-accent/50"
+      >
+        <span>
+          {value}
+          {curCount !== null && <span className="text-muted font-normal"> ({curCount})</span>}
+        </span>
+        <ChevronDown
+          size={16}
+          className={cn('flex-shrink-0 text-muted transition-transform', open && 'rotate-180')}
+        />
+      </button>
+
+      {open && (
+        <ul
+          role="listbox"
+          aria-label="Estado del partido"
+          className="absolute z-30 mt-1 w-full rounded-lg border border-border bg-card shadow-card overflow-hidden py-1"
+        >
+          {options.map((opt) => {
+            const c = getCount(opt);
+            const selected = opt === value;
+            const isLive = opt === 'En vivo' && c !== null && c > 0;
+            return (
+              <li key={opt} role="option" aria-selected={selected}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onChange(opt);
+                    setOpen(false);
+                  }}
+                  className={cn(
+                    'flex items-center justify-between gap-2 w-full px-4 min-h-[40px] text-sm-s text-left transition-colors',
+                    selected
+                      ? 'bg-accent/15 text-accent font-semibold'
+                      : 'text-text hover:bg-elevated',
+                  )}
+                >
+                  <span className="flex items-center gap-2">
+                    {isLive && <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />}
+                    {opt}
+                  </span>
+                  {c !== null && (
+                    <span
+                      className={cn(
+                        'text-xs-s tabular-nums',
+                        selected ? 'text-accent' : 'text-muted',
+                      )}
+                    >
+                      {c}
+                    </span>
+                  )}
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
+  );
+}
 
 export function MatchesPage() {
   const [searchParams] = useSearchParams();
@@ -377,33 +482,16 @@ export function MatchesPage() {
             ))}
           </div>
 
-          {/* Status filter — dropdown en vez de pestañas para no saturar la barra
-              con 7 opciones. El badge "en vivo" del header ya señala el estado live. */}
+          {/* Status filter — dropdown CUSTOM (no nativo) para no saturar la barra
+              con 7 opciones y poder tematizarlo en claro/oscuro. El <select>
+              nativo no es tematizable en Windows (popup blanco ilegible). */}
           <div className="px-4 py-1 pb-4">
-            <label htmlFor="status-filter" className="sr-only">
-              Filtrar partidos por estado
-            </label>
-            <div className="relative w-full max-w-xs">
-              <select
-                id="status-filter"
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value as StatusOption)}
-                className="appearance-none w-full pl-4 pr-10 min-h-[44px] rounded-lg bg-elevated border border-border text-sm-s font-semibold text-text cursor-pointer focus:outline-none focus:ring-2 focus:ring-accent/50"
-              >
-                {STATUS_OPTIONS.map((opt) => {
-                  const c = optionCount(opt);
-                  return (
-                    <option key={opt} value={opt}>
-                      {c !== null ? `${opt} (${c})` : opt}
-                    </option>
-                  );
-                })}
-              </select>
-              <ChevronDown
-                size={16}
-                className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-muted"
-              />
-            </div>
+            <FilterDropdown
+              value={statusFilter}
+              options={STATUS_OPTIONS}
+              onChange={setStatusFilter}
+              getCount={optionCount}
+            />
           </div>
 
           {/* Match list. Renderizamos secciones live-status para la tab
