@@ -338,15 +338,7 @@ export function MatchesPage() {
                 {STATUS_OPTIONS.map((opt) => {
                   const c = optionCount(opt);
                   return (
-                    <option
-                      key={opt}
-                      value={opt}
-                      // El popup nativo no hereda los tokens en Windows/Chrome
-                      // (quedaba texto claro sobre fondo blanco). Forzamos los
-                      // colores del tema en cada opción para que sea legible en
-                      // ambos modos.
-                      style={{ backgroundColor: 'var(--bg-elevated)', color: 'var(--text)' }}
-                    >
+                    <option key={opt} value={opt}>
                       {c !== null ? `${opt} (${c})` : opt}
                     </option>
                   );

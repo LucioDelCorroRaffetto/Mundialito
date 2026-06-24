@@ -39,6 +39,11 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     const resolved: ResolvedMode = mode === 'auto' ? systemMode : mode;
 
     root.setAttribute('data-mode', resolved);
+    // Alinea los controles NATIVOS (popup del <select>, scrollbars, inputs de
+    // fecha, etc.) con el tema. Sin esto, Chrome/Windows pinta el desplegable
+    // del select con fondo blanco del sistema y el texto del tema queda ilegible
+    // (no respeta background-color en <option>). `color-scheme` sí lo controla.
+    root.style.colorScheme = resolved;
 
     const vars = modeVars[resolved];
     for (const [k, v] of Object.entries(vars)) root.style.setProperty(k, v);
