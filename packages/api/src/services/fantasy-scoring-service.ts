@@ -1,4 +1,4 @@
-import { eq, sql, and, inArray } from 'drizzle-orm';
+import { eq, sql, inArray } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import {
   matches,
@@ -19,87 +19,86 @@ export interface RecomputeResult {
 
 // ─── Per-round points ─────────────────────────────────────────────────────────
 
+// Lightweight shapes for the in-memory recompute. They mirror the columns the
+// scoring engine actually needs, so the recompute can load `players`, finished
+// `matches` and `player_match_stats` ONCE and reuse them across every round
+// instead of re-querying per round (a ~7× read amplification on Turso).
+type FinishedMatchInfo = {
+  id: number;
+  round: string;
+  homeTeamId: number | null;
+  awayTeamId: number | null;
+  homeScore: number | null;
+  awayScore: number | null;
+  kickoffUtc: string;
+};
+type PlayerInfo = { id: number; teamId: number; position: string };
+type StatInfo = {
+  matchId: number;
+  playerId: number;
+  played: boolean;
+  goals: number;
+  assists: number;
+  yellowCards: number;
+  redCard: boolean;
+};
+
 /**
  * Returns fantasy points per player restricted to matches that belong to the
  * given fantasy round. This is the core per-round scoring function.
+ *
+ * Pure / in-memory: it receives the already-loaded finished matches, player
+ * lookup and stats grouped by match, so the caller pays the DB cost once for
+ * the whole recompute rather than once per round.
  */
-async function computeFantasyPointsByPlayerForRound(
+function computeFantasyPointsByPlayerForRound(
   round: FantasyRound,
-): Promise<Map<number, number>> {
-  // Fetch only finished matches that belong to this fantasy round.
-  const whereConditions = [];
+  finishedMatches: FinishedMatchInfo[],
+  playerById: Map<number, PlayerInfo>,
+  statsByMatchId: Map<number, StatInfo[]>,
+): Map<number, number> {
   const dbRounds = Array.isArray(round.dbRound) ? round.dbRound : [round.dbRound];
-  whereConditions.push(eq(matches.status, 'finished'));
-  whereConditions.push(inArray(matches.round, dbRounds));
-
-  const roundMatches = await db
-    .select({
-      id: matches.id,
-      homeTeamId: matches.homeTeamId,
-      awayTeamId: matches.awayTeamId,
-      homeScore: matches.homeScore,
-      awayScore: matches.awayScore,
-      kickoffUtc: matches.kickoffUtc,
-    })
-    .from(matches)
-    .where(and(...whereConditions));
+  let roundMatches = finishedMatches.filter((m) => dbRounds.includes(m.round));
 
   // For group rounds, further filter by date window.
-  let filteredMatches = roundMatches;
   if (round.dateStart && round.dateEnd) {
-    filteredMatches = roundMatches.filter((m) => {
+    roundMatches = roundMatches.filter((m) => {
       const day = m.kickoffUtc.slice(0, 10);
       return day >= round.dateStart! && day <= round.dateEnd!;
     });
   }
 
-  if (filteredMatches.length === 0) return new Map();
+  if (roundMatches.length === 0) return new Map();
 
-  const matchIds = filteredMatches.map((m) => m.id);
-  const allPlayers = await db
-    .select({ id: players.id, teamId: players.teamId, position: players.position })
-    .from(players);
-  const playerById = new Map(allPlayers.map((p) => [p.id, p]));
-
-  const stats = await db
-    .select({
-      matchId: playerMatchStats.matchId,
-      playerId: playerMatchStats.playerId,
-      played: playerMatchStats.played,
-      goals: playerMatchStats.goals,
-      assists: playerMatchStats.assists,
-      yellowCards: playerMatchStats.yellowCards,
-      redCard: playerMatchStats.redCard,
-    })
-    .from(playerMatchStats)
-    .where(inArray(playerMatchStats.matchId, matchIds));
-
-  const matchById = new Map(filteredMatches.map((m) => [m.id, m]));
   const points = new Map<number, number>();
 
-  for (const stat of stats) {
-    const match = matchById.get(stat.matchId);
-    const player = playerById.get(stat.playerId);
-    if (!match || !player) continue;
+  for (const match of roundMatches) {
+    const stats = statsByMatchId.get(match.id);
+    if (!stats) continue;
 
-    const homeScore = match.homeScore ?? 0;
-    const awayScore = match.awayScore ?? 0;
-    let opponentGoals: number | null = null;
-    if (player.teamId === match.homeTeamId) opponentGoals = awayScore;
-    else if (player.teamId === match.awayTeamId) opponentGoals = homeScore;
-    else continue;
+    for (const stat of stats) {
+      const player = playerById.get(stat.playerId);
+      if (!player) continue;
 
-    const cleanSheet = stat.played && opponentGoals === 0;
-    const pts = calculateFantasyPoints({
-      position: player.position as PlayerPosition,
-      played: stat.played,
-      goals: stat.goals,
-      assists: stat.assists,
-      cleanSheet,
-      yellowCards: stat.yellowCards,
-      redCard: stat.redCard,
-    });
-    points.set(stat.playerId, (points.get(stat.playerId) ?? 0) + pts);
+      const homeScore = match.homeScore ?? 0;
+      const awayScore = match.awayScore ?? 0;
+      let opponentGoals: number | null = null;
+      if (player.teamId === match.homeTeamId) opponentGoals = awayScore;
+      else if (player.teamId === match.awayTeamId) opponentGoals = homeScore;
+      else continue;
+
+      const cleanSheet = stat.played && opponentGoals === 0;
+      const pts = calculateFantasyPoints({
+        position: player.position as PlayerPosition,
+        played: stat.played,
+        goals: stat.goals,
+        assists: stat.assists,
+        cleanSheet,
+        yellowCards: stat.yellowCards,
+        redCard: stat.redCard,
+      });
+      points.set(stat.playerId, (points.get(stat.playerId) ?? 0) + pts);
+    }
   }
 
   return points;
@@ -231,12 +230,63 @@ async function recomputeAllFantasyPointsImpl(): Promise<RecomputeResult> {
     else lineupByUserRound.set(key, [row]);
   }
 
+  // Load the scoring inputs ONCE for the whole recompute. Previously each round
+  // re-queried `players` (full table) and `matches`, so a recompute scanned the
+  // squad ~7× (once per round) — a major Turso read amplification. Players,
+  // finished matches and their stats are shared across rounds, so we fetch them
+  // here and filter per round in memory.
+  const allPlayers = await db
+    .select({ id: players.id, teamId: players.teamId, position: players.position })
+    .from(players);
+  const playerById = new Map<number, PlayerInfo>(allPlayers.map((p) => [p.id, p]));
+
+  const finishedMatches: FinishedMatchInfo[] = await db
+    .select({
+      id: matches.id,
+      round: matches.round,
+      homeTeamId: matches.homeTeamId,
+      awayTeamId: matches.awayTeamId,
+      homeScore: matches.homeScore,
+      awayScore: matches.awayScore,
+      kickoffUtc: matches.kickoffUtc,
+    })
+    .from(matches)
+    .where(eq(matches.status, 'finished'));
+
+  const matchIds = finishedMatches.map((m) => m.id);
+  const allStats: StatInfo[] = matchIds.length
+    ? await db
+        .select({
+          matchId: playerMatchStats.matchId,
+          playerId: playerMatchStats.playerId,
+          played: playerMatchStats.played,
+          goals: playerMatchStats.goals,
+          assists: playerMatchStats.assists,
+          yellowCards: playerMatchStats.yellowCards,
+          redCard: playerMatchStats.redCard,
+        })
+        .from(playerMatchStats)
+        .where(inArray(playerMatchStats.matchId, matchIds))
+    : [];
+
+  const statsByMatchId = new Map<number, StatInfo[]>();
+  for (const stat of allStats) {
+    const list = statsByMatchId.get(stat.matchId);
+    if (list) list.push(stat);
+    else statsByMatchId.set(stat.matchId, [stat]);
+  }
+
   const userIds = [...new Set(allLineups.map((r) => r.userId))];
   let roundsScored = 0;
   const totalByUser = new Map<number, number>();
 
   for (const round of FANTASY_ROUNDS) {
-    const playerPoints = await computeFantasyPointsByPlayerForRound(round);
+    const playerPoints = computeFantasyPointsByPlayerForRound(
+      round,
+      finishedMatches,
+      playerById,
+      statsByMatchId,
+    );
     if (playerPoints.size === 0) continue; // no finished matches in this round yet
 
     for (const userId of userIds) {
