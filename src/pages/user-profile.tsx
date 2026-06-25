@@ -1,10 +1,11 @@
 import { useState, memo } from 'react';
 import { Navigate, useNavigate, useParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Star, Target, Crosshair, ClipboardList, Sparkles } from 'lucide-react';
+import { ArrowLeft, Star, Target, Crosshair, ClipboardList, Sparkles, ListChecks } from 'lucide-react';
 import { cn } from '@/shared/lib/cn';
 import { useAuthStore } from '@/shared/stores/auth-store';
-import { useUserProfile } from '@/shared/hooks/use-user-profile';
+import { useUserProfile, useUserPredictionHistory } from '@/shared/hooks/use-user-profile';
+import type { UserPredictionHistoryItem } from '@/shared/hooks/use-user-profile';
 import { UserLevelCard, UserLevelBadge } from '@/shared/components/user-level-badge';
 import { AchievementCardModal } from '@/shared/components/achievement-card-modal';
 import { computeLevel } from '@/shared/lib/levels';
@@ -84,6 +85,187 @@ function PresidentBadge() {
  */
 function userHue(userId: number): number {
   return (userId * 137) % 360;
+}
+
+/** Chip de equipo (bandera + código) usado en cada fila del historial. */
+function TeamChip({
+  flag,
+  code,
+  name,
+  align = 'start',
+}: {
+  flag: string | null;
+  code: string | null;
+  name: string | null;
+  align?: 'start' | 'end';
+}) {
+  return (
+    <div
+      className={cn(
+        'flex items-center gap-1.5 min-w-0',
+        align === 'end' && 'flex-row-reverse',
+      )}
+    >
+      <span className="text-base-s leading-none" aria-hidden>{flag ?? '🏳️'}</span>
+      <span className="text-sm-s font-semibold text-text truncate" title={name ?? undefined}>
+        {code ?? name ?? '—'}
+      </span>
+    </div>
+  );
+}
+
+// Estilos semánticos por resultado del pronóstico. Definidos como objeto para
+// que el color del marcador pronosticado y el badge de puntos sean coherentes.
+const OUTCOME_STYLES: Record<
+  UserPredictionHistoryItem['outcome'],
+  { label: string; chip: string; score: string }
+> = {
+  exact: {
+    label: 'Exacto',
+    chip: 'bg-emerald-500/15 text-emerald-600 border-emerald-500/40 dark:text-emerald-400',
+    score: 'text-emerald-600 dark:text-emerald-400',
+  },
+  correct: {
+    label: 'Acertado',
+    chip: 'bg-sky-500/15 text-sky-600 border-sky-500/40 dark:text-sky-400',
+    score: 'text-sky-600 dark:text-sky-400',
+  },
+  missed: {
+    label: 'Fallado',
+    chip: 'bg-rose-500/15 text-rose-600 border-rose-500/40 dark:text-rose-400',
+    score: 'text-muted',
+  },
+  pending: {
+    label: 'En juego',
+    chip: 'bg-amber-500/15 text-amber-700 border-amber-500/40 dark:text-amber-400',
+    score: 'text-text',
+  },
+};
+
+function PredictionHistoryRow({
+  item,
+  reduced,
+}: {
+  item: UserPredictionHistoryItem;
+  reduced: boolean;
+}) {
+  const style = OUTCOME_STYLES[item.outcome];
+  return (
+    <motion.div
+      variants={staggerItem(reduced)}
+      className="p-3 rounded-xl bg-card border border-border flex flex-col gap-2"
+    >
+      {/* Fila de equipos + marcadores */}
+      <div className="flex items-center gap-2">
+        <div className="flex-1 min-w-0">
+          <TeamChip
+            flag={item.homeTeam.flag}
+            code={item.homeTeam.code}
+            name={item.homeTeam.name}
+          />
+        </div>
+
+        <div className="flex flex-col items-center gap-0.5 px-2 flex-shrink-0">
+          {/* Marcador pronosticado (coloreado según resultado) */}
+          <span className={cn('text-base-s font-display font-black tabular-nums', style.score)}>
+            {item.prediction.homeScore} – {item.prediction.awayScore}
+          </span>
+          {/* Marcador real, si el partido ya tiene resultado */}
+          {/* Marcador real solo cuando ya hay resultado. Si está pendiente no
+              repetimos "en juego" acá: el chip de abajo ya lo dice. */}
+          {item.result && (
+            <span className="text-[10px] text-muted tabular-nums">
+              Real {item.result.homeScore}–{item.result.awayScore}
+            </span>
+          )}
+        </div>
+
+        <div className="flex-1 min-w-0">
+          <TeamChip
+            flag={item.awayTeam.flag}
+            code={item.awayTeam.code}
+            name={item.awayTeam.name}
+            align="end"
+          />
+        </div>
+      </div>
+
+      {/* Fila de resultado + puntos */}
+      <div className="flex items-center justify-between">
+        <span
+          className={cn(
+            'inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border uppercase tracking-wider',
+            style.chip,
+          )}
+        >
+          {style.label}
+        </span>
+        {item.points != null && (
+          <span className="text-xs-s font-semibold text-accent bg-accent/10 px-1.5 py-0.5 rounded">
+            +{item.points} pts
+          </span>
+        )}
+      </div>
+    </motion.div>
+  );
+}
+
+function PredictionHistorySection({
+  userId,
+  reduced,
+}: {
+  userId: number;
+  reduced: boolean;
+}) {
+  const { data, isLoading, isError } = useUserPredictionHistory(userId);
+
+  return (
+    <div className="px-4">
+      <h3 className="text-sm font-display font-bold text-muted uppercase tracking-wider mb-3 flex items-center gap-2">
+        <ListChecks size={14} className="text-accent" /> Pronósticos
+        {data && data.length > 0 && (
+          <span className="text-text font-black">· {data.length}</span>
+        )}
+      </h3>
+
+      {isLoading && (
+        <div className="flex flex-col gap-2">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="h-20 rounded-xl bg-elevated animate-pulse" />
+          ))}
+        </div>
+      )}
+
+      {isError && (
+        <p className="text-xs-s text-red-400 text-center py-4">
+          No se pudieron cargar los pronósticos.
+        </p>
+      )}
+
+      {data && data.length === 0 && (
+        <div className="p-6 rounded-xl bg-card border border-border border-dashed flex flex-col items-center gap-2">
+          <span className="text-3xl opacity-40" aria-hidden>🔮</span>
+          <p className="text-sm-s text-muted text-center">Todavía no jugó ningún partido</p>
+          <p className="text-xs-s text-muted/70 text-center">
+            Sus pronósticos se muestran cuando arranca cada partido
+          </p>
+        </div>
+      )}
+
+      {data && data.length > 0 && (
+        <motion.div
+          className="flex flex-col gap-2"
+          variants={staggerContainer(reduced)}
+          initial="initial"
+          animate="animate"
+        >
+          {data.map((item) => (
+            <PredictionHistoryRow key={item.predictionId} item={item} reduced={reduced} />
+          ))}
+        </motion.div>
+      )}
+    </div>
+  );
 }
 
 export function UserProfilePage() {
@@ -408,6 +590,12 @@ export function UserProfilePage() {
           </div>
         </div>
       )}
+
+      {/* ── Pronósticos ────────────────────────────────────────────────
+            Solo partidos ya arrancados (el gate vive en el backend). El
+            admin (cuenta FIFA) no pronostica, así que mostrará el estado
+            vacío — aceptable. */}
+      <PredictionHistorySection userId={profile.id} reduced={reduced} />
 
       {/* ── Achievements ───────────────────────────────────────────────── */}
       <div className="px-4">

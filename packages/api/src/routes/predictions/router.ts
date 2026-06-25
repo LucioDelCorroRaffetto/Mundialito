@@ -7,6 +7,7 @@ import { myPredictionHistoryHandler } from './handlers/my-prediction-history.js'
 import { myPredictionForMatchHandler } from './handlers/my-prediction-for-match.js';
 import { myPredictionByLeagueHandler } from './handlers/my-prediction-by-league.js';
 import { matchPredictionsHandler } from './handlers/match-predictions.js';
+import { userPredictionHistoryHandler } from './handlers/user-prediction-history.js';
 import { deletePredictionHandler } from './handlers/delete-prediction.js';
 import { markPredictionSharedHandler } from './handlers/mark-shared.js';
 
@@ -29,6 +30,11 @@ predictionsRouter.get('/match/:matchId/mine-by-league', (req, res, next) =>
 );
 predictionsRouter.get('/match/:matchId', (req, res, next) =>
   matchPredictionsHandler(req, res).catch(next)
+);
+// Historial público de pronósticos de OTRO usuario (perfil ajeno). El gate
+// de "solo partidos ya arrancados" vive en el handler (server-side).
+predictionsRouter.get('/user/:userId/history', (req, res, next) =>
+  userPredictionHistoryHandler(req, res).catch(next)
 );
 predictionsRouter.post('/shared', (req, res, next) => markPredictionSharedHandler(req, res).catch(next));
 predictionsRouter.delete('/:id', (req, res, next) => deletePredictionHandler(req, res).catch(next));

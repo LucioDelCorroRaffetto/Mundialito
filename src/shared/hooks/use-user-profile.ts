@@ -47,6 +47,39 @@ export function useUserProfile(userId: number | undefined) {
   });
 }
 
+export interface UserPredictionHistoryItem {
+  predictionId: number;
+  matchId: number;
+  round: string;
+  kickoffUtc: string;
+  matchStatus: string;
+  prediction: { homeScore: number; awayScore: number };
+  /** Marcador real; null si el partido arrancó pero todavía no terminó. */
+  result: { homeScore: number; awayScore: number } | null;
+  points: number | null;
+  outcome: 'pending' | 'exact' | 'correct' | 'missed';
+  homeTeam: { name: string | null; code: string | null; flag: string | null };
+  awayTeam: { name: string | null; code: string | null; flag: string | null };
+}
+
+/**
+ * Historial de pronósticos de OTRO usuario (perfil ajeno). El backend solo
+ * devuelve pronósticos de partidos que YA arrancaron — el gate de seguridad
+ * vive en el server, nunca acá. Ordenados del más reciente al más viejo.
+ */
+export function useUserPredictionHistory(userId: number | undefined) {
+  return useQuery({
+    queryKey: ['users', userId, 'prediction-history'],
+    queryFn: async () => {
+      const { data } = await apiClient.get<{ data: UserPredictionHistoryItem[] }>(
+        `/predictions/user/${userId}/history`,
+      );
+      return data.data;
+    },
+    enabled: !!userId,
+  });
+}
+
 export interface AdminProfilePointer {
   id: number;
   username: string;
