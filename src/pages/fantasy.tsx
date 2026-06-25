@@ -15,6 +15,7 @@ import { useFantasyRounds, useFantasyLineup, useUpsertLineup } from '@/shared/ho
 import type { LineupPlayerInput } from '@/shared/hooks/use-fantasy-lineups';
 import type { Player, FantasyPlayerBreakdown } from '@/shared/types/api';
 import { staggerContainer, staggerItem, useMotionPrefs } from '@/shared/lib/motion';
+import { toggleStarter as computeToggleStarter, setCaptain as computeSetCaptain, setVice as computeSetVice, lineupBlocker } from '@/shared/lib/lineup';
 
 const POSITION_COLORS: Record<string, string> = {
   GK: 'bg-yellow-500/20 text-yellow-500',
@@ -319,6 +320,7 @@ function LineupPitch({
               player={player ?? undefined}
               menuOpen={player ? openMenuId === player.id : false}
               canEdit={isOpen}
+              dropUp={slot.y > 50}
               onToggleMenu={(e) => {
                 if (!player) return;
                 e.stopPropagation();
@@ -353,6 +355,7 @@ function LineupPitch({
                       player={p}
                       menuOpen={openMenuId === p.id}
                       canEdit={isOpen}
+                      dropUp={pos === 'GK' || pos === 'DEF'}
                       onToggleMenu={(e) => { e.stopPropagation(); setOpenMenuId((cur) => (cur === p.id ? null : p.id)); }}
                       onPickCaptain={() => { onSetCaptain(p.id); setOpenMenuId(null); }}
                       onPickVice={() => { onSetVice(p.id); setOpenMenuId(null); }}
@@ -411,6 +414,7 @@ function LineupPitchSlot({
   player,
   menuOpen,
   canEdit,
+  dropUp = false,
   onToggleMenu,
   onPickCaptain,
   onPickVice,
@@ -420,6 +424,11 @@ function LineupPitchSlot({
   player?: LineupPitchPlayer;
   menuOpen: boolean;
   canEdit: boolean;
+  /** Abre el menú hacia ARRIBA. Necesario para los slots de la parte baja de
+   *  la cancha (arquero, defensores): si abriera hacia abajo, el `overflow-hidden`
+   *  del rectángulo de la cancha lo recortaba y quedaba inaccesible — ese era el
+   *  bug "no me deja hacer nada con el arquero". */
+  dropUp?: boolean;
   onToggleMenu: (e: React.MouseEvent) => void;
   onPickCaptain: () => void;
   onPickVice: () => void;
@@ -482,7 +491,10 @@ function LineupPitchSlot({
 
       {menuOpen && canEdit && (
         <div
-          className="absolute top-full left-1/2 -translate-x-1/2 mt-1 z-20 flex flex-col gap-1 p-1.5 rounded-lg bg-card border border-border shadow-xl min-w-[110px]"
+          className={cn(
+            'absolute left-1/2 -translate-x-1/2 z-30 flex flex-col gap-1 p-1.5 rounded-lg bg-card border border-border shadow-xl min-w-[110px]',
+            dropUp ? 'bottom-full mb-1' : 'top-full mt-1',
+          )}
           onClick={(e) => e.stopPropagation()}
         >
           <button
@@ -1426,50 +1438,32 @@ function PerRoundLineupTab({ squadPlayers }: { squadPlayers: Player[] }) {
     setLineupView(isOpen ? 'pitch' : 'list');
   }, [activeSlug, isOpen]);
 
+  // La lógica de mutación del 11 vive en `@/shared/lib/lineup` (pura y
+  // testeada). Acá solo la conectamos al estado y al toast. El swap automático
+  // del arquero al subir el GK suplente con 11 titulares ocupados sale de ahí.
+  const positionOf = (id: number) => squadById.get(id)?.position;
+
   function toggle(playerId: number) {
     if (!isOpen) return;
-    setDraft((prev) => {
-      const cur = prev.find((p) => p.playerId === playerId);
-      if (!cur) return prev;
-      const willBeStarter = !cur.isStarter;
-      const currentStarters = prev.filter((p) => p.isStarter).length;
-      // Hard cap at 11 starters so the backend never rejects on count.
-      if (willBeStarter && currentStarters >= 11) {
-        toast.error('Solo podés tener 11 titulares — sacá uno antes de agregar otro');
-        return prev;
-      }
-      // When de-starring a player, also strip captain/vice if they had it.
-      return prev.map((p) =>
-        p.playerId === playerId
-          ? {
-              ...p,
-              isStarter: willBeStarter,
-              isCaptain: willBeStarter ? p.isCaptain : false,
-              isViceCaptain: willBeStarter ? p.isViceCaptain : false,
-            }
-          : p,
-      );
-    });
+    const { draft: next, error } = computeToggleStarter(draft, playerId, positionOf);
+    if (error) {
+      toast.error(error);
+      return;
+    }
+    if (next === draft) return; // no-op (jugador inexistente)
+    setDraft(next);
     setDirty(true);
   }
 
   function setCaptain(playerId: number) {
     if (!isOpen) return;
-    setDraft((prev) => prev.map((p) => ({
-      ...p,
-      isCaptain: p.playerId === playerId,
-      isViceCaptain: p.isViceCaptain && p.playerId !== playerId,
-    })));
+    setDraft((prev) => computeSetCaptain(prev, playerId));
     setDirty(true);
   }
 
   function setVice(playerId: number) {
     if (!isOpen) return;
-    setDraft((prev) => prev.map((p) => ({
-      ...p,
-      isViceCaptain: p.playerId === playerId,
-      isCaptain: p.isCaptain && p.playerId !== playerId,
-    })));
+    setDraft((prev) => computeSetVice(prev, playerId));
     setDirty(true);
   }
 
@@ -1669,18 +1663,9 @@ function PerRoundLineupTab({ squadPlayers }: { squadPlayers: Player[] }) {
               save a no-op. */}
           {(() => {
             if (!isOpen) return null;
-            // Exactamente 1 arquero titular: sin esto se podía guardar un 11
-            // sin arquero (o con dos), que no es una formación válida.
-            const gkStarters = draft.filter(
-              (p) => p.isStarter && squadById.get(p.playerId)?.position === 'GK',
-            ).length;
-            let blocker: string | null = null;
-            if (starterCount < 11) blocker = `Faltan ${11 - starterCount} titular${11 - starterCount === 1 ? '' : 'es'}`;
-            else if (starterCount > 11) blocker = `Sobran ${starterCount - 11} titular${starterCount - 11 === 1 ? '' : 'es'}`;
-            else if (gkStarters === 0) blocker = 'Falta el arquero titular';
-            else if (gkStarters > 1) blocker = 'Solo 1 arquero titular';
-            else if (!captainPicked) blocker = 'Elegí un capitán (C)';
-            else if (!vicePicked) blocker = 'Elegí un vicecapitán (V)';
+            // Validación = misma fuente de verdad que el helper testeado
+            // (11 titulares, exactamente 1 arquero, capitán y vice elegidos).
+            const blocker = lineupBlocker(draft, positionOf);
 
             // Nothing pending → don't render anything at all. This is the
             // fix for 'el cartel aparece siempre aunque no haga cambios'.
