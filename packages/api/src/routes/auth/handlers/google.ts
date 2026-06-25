@@ -52,7 +52,7 @@ export async function googleAuthHandler(req: Request, res: Response) {
 
     // Ensure uniqueness
     let attempt = 0;
-    while (true) {
+    for (;;) {
       const [existing] = await db.select().from(users).where(eq(users.username, username)).limit(1);
       if (!existing) break;
       attempt++;

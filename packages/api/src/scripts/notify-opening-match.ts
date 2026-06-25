@@ -60,26 +60,6 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-/**
- * Formats a UTC ISO datetime string into a human-readable local time string.
- * Displays the time in the Argentina timezone (UTC-3) since that is the
- * primary audience, but falls back to UTC if the runtime does not support it.
- */
-function formatKickoff(isoUtc: string): string {
-  const date = new Date(isoUtc);
-  try {
-    return date.toLocaleTimeString('es-AR', {
-      timeZone: 'America/Argentina/Buenos_Aires',
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: false,
-    });
-  } catch {
-    // Fallback: plain UTC HH:MM
-    return date.toISOString().slice(11, 16) + ' UTC';
-  }
-}
-
 // ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------

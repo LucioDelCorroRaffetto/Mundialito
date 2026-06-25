@@ -19,14 +19,17 @@ export function UserPredictionsPage() {
 
   const userId = Number(userIdParam);
 
+  // Los hooks van SIEMPRE antes de cualquier return condicional: si el early
+  // return quedaba arriba, al ver el perfil propio React renderizaba menos
+  // hooks que en el caso ajeno y rompía el orden de hooks (rules-of-hooks).
+  const { data: profile } = useUserProfile(isNaN(userId) ? undefined : userId);
+  const { data, isLoading, isError } = useUserPredictionHistory(isNaN(userId) ? undefined : userId);
+  const items = data ?? [];
+
   // Si es uno mismo, mandar a la versión propia.
   if (!isNaN(userId) && currentUser && userId === currentUser.id) {
     return <Navigate to="/profile/predictions" replace />;
   }
-
-  const { data: profile } = useUserProfile(isNaN(userId) ? undefined : userId);
-  const { data, isLoading, isError } = useUserPredictionHistory(isNaN(userId) ? undefined : userId);
-  const items = data ?? [];
 
   return (
     <div className="flex flex-col gap-4 pb-8 animate-fade-in">

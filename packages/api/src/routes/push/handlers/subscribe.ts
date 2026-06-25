@@ -2,7 +2,6 @@ import { Request, Response } from 'express';
 import { z } from 'zod';
 import { db } from '../../../db/index.js';
 import { pushSubscriptions } from '../../../db/schema/index.js';
-import { eq } from 'drizzle-orm';
 
 export const subscribeSchema = z.object({
   endpoint: z.string().url(),

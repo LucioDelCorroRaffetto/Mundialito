@@ -90,7 +90,7 @@ export async function globalLeaderboardHandler(req: Request, res: Response) {
 
   // Fetch all achievements earned by the users on this page
   const userIds = rows.map((r) => r.userId);
-  let badgesByUser = new Map<number, { slug: string; name: string; icon: string; tier: string }>();
+  const badgesByUser = new Map<number, { slug: string; name: string; icon: string; tier: string }>();
 
   if (userIds.length > 0) {
     const earnedRows = await db

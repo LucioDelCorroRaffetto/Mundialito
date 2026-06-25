@@ -14,7 +14,7 @@ import 'dotenv/config';
 import { eq, sql } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import { players, teams } from '../db/schema/index.js';
-import { parsePositionRoles, extractPositionFromWikitext, SlotRole } from '../lib/position-parser.js';
+import { parsePositionRoles, extractPositionFromWikitext } from '../lib/position-parser.js';
 
 const HEADERS = {
   'User-Agent': 'MundialitoApp/1.0 (https://mundialito-pi.vercel.app; delcorroraffetto@gmail.com)',

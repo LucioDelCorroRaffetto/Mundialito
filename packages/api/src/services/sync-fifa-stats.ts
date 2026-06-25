@@ -39,7 +39,7 @@
  *   del jugador (la tanda no cuenta como gol en el fantasy real) y se emite
  *   como 'penalty_goal' en el timeline. Si Period < 11 (juego / ET) sí suma.
  */
-import { eq, and, inArray } from 'drizzle-orm';
+import { eq, inArray } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import { matches, players, playerMatchStats, teams, matchEvents } from '../db/schema/index.js';
 import { recomputeAllFantasyPoints } from './fantasy-scoring-service.js';
@@ -456,7 +456,7 @@ async function doSync(matchId: number): Promise<SyncStatsResult> {
       const woHyphen = s
         .toLowerCase()
         .normalize('NFD')
-        // eslint-disable-next-line no-misleading-character-class
+         
         .replace(/[̀-ͯ]/g, '')
         .replace(/['’`´ʹ]/g, '')
         .replace(/-/g, '')
@@ -808,7 +808,6 @@ async function doSync(matchId: number): Promise<SyncStatsResult> {
     // Recorremos events EN ORDEN para que el último gana.
     let latestMinute: string | null = null;
     let coolingBreakActive = false;
-    let halftime = false;
     for (const ev of events) {
       if (ev.MatchMinute) latestMinute = ev.MatchMinute;
       const desc = (ev.EventDescription?.[0]?.Description ?? '').toLowerCase();
@@ -820,12 +819,6 @@ async function doSync(matchId: number): Promise<SyncStatsResult> {
       ) {
         coolingBreakActive = false;
       }
-      // FIFA suele emitir "brings the first period to an end" al HT y
-      // "signals the start of the second period" al volver. Solo
-      // marcamos halftime si el último evento de período no tiene un
-      // "start of second" después.
-      if (desc.includes('brings the first period to an end')) halftime = true;
-      else if (desc.includes('start of the second period')) halftime = false;
     }
     if (latestMinute) updates.currentMinute = latestMinute;
     // Cooling break tiene prioridad porque half_time es más persistente

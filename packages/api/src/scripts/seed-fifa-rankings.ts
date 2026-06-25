@@ -85,7 +85,7 @@ async function main() {
       .update(teams)
       .set({ fifaRank: rank })
       .where(eq(teams.code, code));
-    // @ts-ignore — Turso returns rowsAffected
+    // Turso devuelve rowsAffected; el cast a any ya evita el error de tipo.
     if ((result as any).rowsAffected > 0) updated++;
     else console.warn(`  [skip] code not found in DB: ${code}`);
   }

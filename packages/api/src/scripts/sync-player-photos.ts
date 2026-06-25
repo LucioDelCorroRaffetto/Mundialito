@@ -293,7 +293,7 @@ async function pickPhotoFor(
       const tokens = name
         .toLowerCase()
         .normalize('NFD')
-        // eslint-disable-next-line no-misleading-character-class
+         
         .replace(/[̀-ͯ]/g, '')
         .split(/\s+/)
         .filter((t) => t.length >= 3);
@@ -304,7 +304,7 @@ async function pickPhotoFor(
           const lower = c.title
             .toLowerCase()
             .normalize('NFD')
-            // eslint-disable-next-line no-misleading-character-class
+             
             .replace(/[̀-ͯ]/g, '');
           // Hard requirement: the article title must contain the player's
           // SURNAME, not just any token. Names like "Ali" or "Mohamed" are

@@ -161,8 +161,10 @@ export function computeGroupClinch(teams: Team[], allMatches: Match[], group: st
 
   // Un equipo "done" (jugó sus 3) solo si no aparece en ningún partido pendiente.
   for (const m of pending) {
-    base.get(m.homeTeamId) && (base.get(m.homeTeamId)!.done = false);
-    base.get(m.awayTeamId) && (base.get(m.awayTeamId)!.done = false);
+    const home = base.get(m.homeTeamId);
+    if (home) home.done = false;
+    const away = base.get(m.awayTeamId);
+    if (away) away.done = false;
   }
 
   const k = pending.length;

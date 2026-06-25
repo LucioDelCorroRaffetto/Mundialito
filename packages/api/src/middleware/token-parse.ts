@@ -3,6 +3,7 @@ import { verifyAccess } from '../lib/jwt.js';
 import { recordLoginDay } from '../lib/login-day-tracker.js';
 
 declare global {
+  // eslint-disable-next-line @typescript-eslint/no-namespace -- augmentación de tipos de Express, requiere namespace
   namespace Express {
     interface Request {
       user?: { id: number; username: string };

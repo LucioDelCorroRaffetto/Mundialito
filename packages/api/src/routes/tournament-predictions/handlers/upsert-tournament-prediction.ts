@@ -1,8 +1,8 @@
 import { Request, Response } from 'express';
 import { z } from 'zod';
-import { eq, sql, and, asc, inArray } from 'drizzle-orm';
+import { eq, sql, and, inArray } from 'drizzle-orm';
 import { db } from '../../../db/index.js';
-import { tournamentPredictions, leagueMembers, matches, teams, players } from '../../../db/schema/index.js';
+import { tournamentPredictions, leagueMembers, teams, players } from '../../../db/schema/index.js';
 import { AppError } from '../../../lib/errors.js';
 
 const FIELDS = [

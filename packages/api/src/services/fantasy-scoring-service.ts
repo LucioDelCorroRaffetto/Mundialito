@@ -5,7 +5,6 @@ import {
   players,
   playerMatchStats,
   fantasyTeams,
-  fantasySquadPlayers,
   fantasyLineups,
   fantasyRoundScores,
 } from '../db/schema/index.js';
