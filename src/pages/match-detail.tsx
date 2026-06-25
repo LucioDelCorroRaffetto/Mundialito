@@ -479,7 +479,7 @@ export function MatchDetailPage() {
 
   const matchId = id ? Number(id) : undefined;
 
-  const { data: match, isLoading: matchLoading } = useMatch(matchId);
+  const { data: match, isLoading: matchLoading, refetch: refetchMatch } = useMatch(matchId);
   const { data: teamMap, isLoading: teamsLoading } = useTeamMap();
   const { data: myLeagues } = useMyLeagues();
   // Proyección del cuadro: para mostrar el equipo (ej. el 1° de grupo ya
@@ -561,9 +561,14 @@ export function MatchDetailPage() {
     if (!match || match.status !== 'scheduled') return;
     const msToLock = new Date(match.predictionLockUtc).getTime() - Date.now();
     if (msToLock <= 0) return;
-    const timer = setTimeout(() => forceLockTick((n) => n + 1), msToLock + 250);
+    const timer = setTimeout(() => {
+      forceLockTick((n) => n + 1);
+      // Immediately refetch so the status transition scheduled→live is
+      // picked up without waiting for the next react-query polling cycle.
+      refetchMatch();
+    }, msToLock + 250);
     return () => clearTimeout(timer);
-  }, [match]);
+  }, [match, refetchMatch]);
 
   // Initialize scores when prediction loads. Prefer the league-scoped one when
   // a league is selected; fall back to any prediction so we still show the
@@ -636,9 +641,12 @@ export function MatchDetailPage() {
   const homeTeamDisplay = homeProjection?.team ?? homeTeam ?? { id: match.homeTeamId, name: String(match.homeTeamId), code: '?', flag: '🏳️', group: null, confederation: null };
   const awayTeamDisplay = awayProjection?.team ?? awayTeam ?? { id: match.awayTeamId, name: String(match.awayTeamId), code: '?', flag: '🏳️', group: null, confederation: null };
 
-  // Knock-out matches with undetermined opponents can't be predicted yet — se
-  // mide sobre el equipo OFICIAL, no sobre el proyectado.
-  const teamsAreTbd = homeOfficialTbd || awayOfficialTbd;
+  // Knock-out matches with undetermined opponents can't be predicted yet.
+  // Exception: if the bracket projection has confirmed the team (group fully
+  // resolved), we allow predictions even if the DB record still shows TBD.
+  const teamsAreTbd =
+    (homeOfficialTbd && !homeProjection?.confirmed) ||
+    (awayOfficialTbd && !awayProjection?.confirmed);
 
   // Hide personal/auto-created leagues from the chip selector — the user
   // doesn't think of them as "leagues" and the chip would just confuse the

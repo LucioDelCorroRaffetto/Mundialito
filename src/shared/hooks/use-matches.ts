@@ -53,7 +53,15 @@ export function useMatch(id: number | undefined) {
     // traffic. `query.state.data` is the last fetched match.
     refetchInterval: (query) => {
       const m = query.state.data as Match | undefined;
-      return m?.status === 'live' ? 15_000 : false;
+      if (!m) return false;
+      if (m.status === 'live') return 15_000;
+      // Poll during the kickoff window: lock has passed but backend hasn't
+      // flipped to live yet (FIFA sync lag). Stop once match is finished.
+      if (
+        m.status === 'scheduled' &&
+        new Date(m.predictionLockUtc).getTime() <= Date.now()
+      ) return 20_000;
+      return false;
     },
     refetchIntervalInBackground: false,
   });

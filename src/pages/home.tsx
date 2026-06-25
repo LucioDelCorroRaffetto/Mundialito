@@ -134,9 +134,11 @@ function CountdownTiles({ targetUtc, onEnded }: { targetUtc: string; onEnded?: (
 
 function CountdownHero({
   nextMatch,
+  liveMatches,
   teamMap,
 }: {
   nextMatch: Match | null;
+  liveMatches: Match[];
   teamMap: Map<number, Team> | undefined;
 }) {
   const queryClient = useQueryClient();
@@ -190,6 +192,49 @@ function CountdownHero({
           </p>
           <CountdownTiles targetUtc={targetUtc} onEnded={onCountdownEnded} />
           <p className="mt-3 text-center text-xs text-muted">{openCaption}</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Multiple matches live at the same time (group-stage slots): show a
+  // compact grid so neither match gets buried in "Próximos partidos".
+  if (liveMatches.length > 1) {
+    return (
+      <div className="relative overflow-hidden rounded-2xl border border-red-500/40 bg-gradient-to-br from-red-500/15 via-card to-card p-5">
+        <div className="flex items-center gap-2 mb-4 justify-center">
+          <span className="w-2 h-2 rounded-full bg-red-400 animate-pulse" />
+          <p className="text-xs font-bold text-red-400 uppercase tracking-wider">
+            {liveMatches.length} partidos en vivo
+          </p>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          {liveMatches.map((m) => {
+            const home = teamMap?.get(m.homeTeamId);
+            const away = teamMap?.get(m.awayTeamId);
+            return (
+              <Link
+                key={m.id}
+                to={`/matches/${m.id}`}
+                className="flex flex-col items-center gap-2 p-3 rounded-xl bg-card/60 border border-border/50 hover:border-red-500/40 transition-colors"
+              >
+                <div className="flex items-center gap-2">
+                  <div className="flex flex-col items-center gap-1">
+                    {home && <TeamFlag code={home.code} emoji={home.flag} size={32} />}
+                    <span className="text-xs font-bold text-text">{home?.code ?? '—'}</span>
+                  </div>
+                  <span className="text-xs font-bold text-muted">vs</span>
+                  <div className="flex flex-col items-center gap-1">
+                    {away && <TeamFlag code={away.code} emoji={away.flag} size={32} />}
+                    <span className="text-xs font-bold text-text">{away?.code ?? '—'}</span>
+                  </div>
+                </div>
+                {m.city && (
+                  <span className="text-[10px] text-muted">{m.city}</span>
+                )}
+              </Link>
+            );
+          })}
         </div>
       </div>
     );
@@ -408,9 +453,10 @@ export function HomePage() {
 
   const apiMatches = matchesResponse?.data ?? [];
   const liveMatches = apiMatches.filter((m) => m.status === 'live');
-  // First match is used for the countdown; rest shown in the upcoming list
+  // First match is used for the countdown; live-only matches excluded from
+  // upcoming so they don't appear in "Próximos partidos" while already live.
   const nextMatch = apiMatches[0] ?? null;
-  const upcoming = apiMatches.slice(1, 6).map((m) => ({
+  const upcoming = apiMatches.filter((m) => m.status !== 'live').slice(0, 5).map((m) => ({
     id: m.id,
     kickoffUtc: m.kickoffUtc,
     city: m.city,
@@ -516,7 +562,7 @@ export function HomePage() {
           })()}
 
           {/* Countdown */}
-          <CountdownHero nextMatch={nextMatch} teamMap={teamMap} />
+          <CountdownHero nextMatch={nextMatch} liveMatches={liveMatches} teamMap={teamMap} />
 
           {/* Pending predictions call-to-action */}
           {pendingCount > 0 && (
