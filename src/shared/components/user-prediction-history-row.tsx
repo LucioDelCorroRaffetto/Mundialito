@@ -36,10 +36,11 @@ const OUTCOME_STYLES: Record<
   UserPredictionHistoryItem['outcome'],
   { label: string; chip: string; score: string }
 > = {
+  // Marcador exacto = "carta legendaria" (Clash Royale): arcoíris holográfico.
   exact: {
-    label: 'Exacto',
-    chip: 'bg-emerald-500/15 text-emerald-600 border-emerald-500/40 dark:text-emerald-400',
-    score: 'text-emerald-600 dark:text-emerald-400',
+    label: '✨ Exacto',
+    chip: 'legendary-rainbow',
+    score: 'legendary-rainbow-text',
   },
   correct: {
     label: 'Acertado',
@@ -68,10 +69,14 @@ export function UserPredictionHistoryRow({
   reduced: boolean;
 }) {
   const style = OUTCOME_STYLES[item.outcome];
+  const isExact = item.outcome === 'exact';
   return (
     <motion.div
       variants={staggerItem(reduced)}
-      className="p-3 rounded-xl bg-card border border-border flex flex-col gap-2"
+      className={cn(
+        'p-3 rounded-xl bg-card border flex flex-col gap-2',
+        isExact ? 'border-transparent legendary-rainbow-border' : 'border-border',
+      )}
     >
       {/* Fila de equipos + marcadores */}
       <div className="flex items-center gap-2">

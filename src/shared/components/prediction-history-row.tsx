@@ -15,7 +15,7 @@ function formatMatchDate(iso: string): string {
 // getPointsLabel se usa como title/tooltip — desbordaba en mobile).
 function shortScoreLabel(type: ReturnType<typeof getScoreType>): string {
   switch (type) {
-    case 'exact':       return 'Exacto';
+    case 'exact':       return '✨ Exacto';
     case 'winner_diff': return 'Ganador +Dif';
     case 'winner':      return 'Ganador';
     case 'draw':        return 'Empate';
@@ -45,9 +45,11 @@ export const HistoryRow = memo(function HistoryRow({ entry }: { entry: Predictio
   // Colores semánticos alineados con matches.tsx: acertar (cualquier punto)
   // se muestra en verde, el resultado exacto en emerald (verde más saturado)
   // y el fallo en rojo tenue. Mismo lenguaje cromático que el resto de la app.
+  // El marcador exacto se trata como "carta legendaria": borde arcoíris
+  // holográfico animado en vez del verde habitual.
   const accent =
     scoreType === 'exact'
-      ? 'border-emerald-500/40'
+      ? 'border-transparent legendary-rainbow-border'
       : scoreType === 'miss'
         ? 'border-red-500/30'
         : scoreType
@@ -56,7 +58,7 @@ export const HistoryRow = memo(function HistoryRow({ entry }: { entry: Predictio
 
   const badge =
     scoreType === 'exact'
-      ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/40'
+      ? 'legendary-rainbow'
       : scoreType === 'miss'
         ? 'bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/30'
         : 'bg-green-500/15 text-green-600 dark:text-green-400 border-green-500/40';
@@ -114,7 +116,7 @@ export const HistoryRow = memo(function HistoryRow({ entry }: { entry: Predictio
       <div className="flex items-center justify-between gap-2 mt-2 pt-2 border-t border-border/60">
         <span className="text-xs-s text-muted">
           Tu pronóstico:{' '}
-          <span className="font-semibold text-text">
+          <span className={cn('font-semibold text-text', scoreType === 'exact' && 'legendary-rainbow-text font-black')}>
             {entry.predictedHomeScore} - {entry.predictedAwayScore}
           </span>
         </span>
