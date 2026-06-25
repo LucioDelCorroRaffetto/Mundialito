@@ -2,8 +2,16 @@
  * Sincronización "en vivo" de alta frecuencia: refresca la timeline FIFA
  * (goles/tarjetas/subs minuto a minuto + cooling break + minuto actual) y
  * cierra los partidos por el pitazo final (Type 26) para todos los matches
- * que están `live`. NO toca scores (eso es del sync de scores), ni
+ * que están `live` o `suspended`. NO toca scores (eso es del sync de scores), ni
  * reconcile/squads/fixtures.
+ *
+ * Por qué incluir 'suspended': cuando un partido se suspende (clima, seguridad)
+ * y luego se reanuda, sync-scores mantiene el estado 'suspended' en la DB para
+ * evitar que reconcile lo cierre automáticamente a las 3.5h. Pero eso hacía
+ * que sync-live lo saltee → la cronología FIFA se congelaba desde la suspensión
+ * hasta el final. Al incluir 'suspended' aquí la timeline sigue actualizándose
+ * durante y después de la reanudación, y el final whistle de FIFA puede cerrar
+ * el partido aunque la DB no haya vuelto a 'live'.
  *
  * Se extrajo del handler `POST /sync` (app.ts) para poder reusar exactamente
  * la misma lógica desde un timer interno de alta frecuencia (auto-sync), y así
@@ -12,7 +20,7 @@
  * (FIFA es público y sin límite). Idempotente y defensiva por partido: una
  * falla en un match no contamina al resto del tick.
  */
-import { eq } from 'drizzle-orm';
+import { inArray } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import { matches } from '../db/schema/index.js';
 import { syncFifaStatsForMatch } from './sync-fifa-stats.js';
@@ -37,7 +45,7 @@ export async function syncLiveMatches(): Promise<SyncLiveResult> {
   const liveMatches = await db
     .select({ id: matches.id })
     .from(matches)
-    .where(eq(matches.status, 'live'))
+    .where(inArray(matches.status, ['live', 'suspended']))
     .catch((err) => {
       console.error('[sync-live] failed loading live matches:', err);
       return [] as { id: number }[];

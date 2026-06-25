@@ -36,9 +36,13 @@ export async function finalizeMatchFromFinalWhistle(matchId: number): Promise<Fi
     .where(eq(matches.id, matchId))
     .get();
   if (!m) return { finalized: false, reason: 'not found' };
-  // Solo finalizamos partidos que seguimos teniendo en vivo. Si una fuente ya
-  // lo cerró (status finished) este tick, no hay nada que hacer.
-  if (m.status !== 'live') return { finalized: false, reason: `status ${m.status}` };
+  // Solo finalizamos partidos en juego o suspendidos-pero-reanudados. Si una
+  // fuente ya lo cerró (status finished) este tick, no hay nada que hacer.
+  // Incluimos 'suspended' porque sync-scores puede mantener ese estado
+  // mientras el partido se juega (para evitar el auto-cierre de reconcile),
+  // y el final whistle FIFA debe poder cerrar el partido sin depender de que
+  // la DB haya vuelto a 'live'.
+  if (m.status !== 'live' && m.status !== 'suspended') return { finalized: false, reason: `status ${m.status}` };
   // Sin score no podemos puntuar. Dejamos que las fuentes lo cierren cuando
   // tengan el marcador (caso rarísimo: pitazo sin score sincronizado aún).
   if (m.homeScore == null || m.awayScore == null) return { finalized: false, reason: 'no score yet' };
