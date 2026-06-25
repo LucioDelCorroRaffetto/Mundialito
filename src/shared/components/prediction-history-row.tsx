@@ -2,6 +2,7 @@ import { memo } from 'react';
 import { Link } from 'react-router-dom';
 import { getScoreType, getPointsLabel } from '@/shared/lib/scoring';
 import { cn } from '@/shared/lib/cn';
+import { TeamFlag } from '@/shared/components/ui/team-flag';
 import type { PredictionHistoryEntry } from '@/shared/hooks/use-predictions';
 
 function formatMatchDate(iso: string): string {
@@ -103,13 +104,13 @@ export const HistoryRow = memo(function HistoryRow({ entry }: { entry: Predictio
       <div className="flex items-center gap-2">
         {/* Equipos + marcador real */}
         <div className="flex-1 min-w-0 flex items-center gap-1.5">
-          <span className="text-base-s flex-shrink-0">{entry.homeTeamFlag ?? '🏳️'}</span>
+          <TeamFlag code={entry.homeTeamCode ?? ''} emoji={entry.homeTeamFlag ?? undefined} size={20} />
           <span className="text-sm-s font-semibold text-text truncate">{homeLabel}</span>
           <span className="text-sm-s font-display font-bold text-text px-1 flex-shrink-0">
             {hasResult ? `${entry.actualHomeScore} - ${entry.actualAwayScore}` : 'vs'}
           </span>
           <span className="text-sm-s font-semibold text-text truncate">{awayLabel}</span>
-          <span className="text-base-s flex-shrink-0">{entry.awayTeamFlag ?? '🏳️'}</span>
+          <TeamFlag code={entry.awayTeamCode ?? ''} emoji={entry.awayTeamFlag ?? undefined} size={20} />
         </div>
       </div>
 
