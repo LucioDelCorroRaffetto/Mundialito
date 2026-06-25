@@ -1,6 +1,7 @@
 import { motion } from 'framer-motion';
 import { cn } from '@/shared/lib/cn';
 import { staggerItem } from '@/shared/lib/motion';
+import { TeamFlag } from '@/shared/components/ui/team-flag';
 import type { UserPredictionHistoryItem } from '@/shared/hooks/use-user-profile';
 
 /** Chip de equipo (bandera + código) usado en cada fila del historial. */
@@ -22,7 +23,7 @@ function TeamChip({
         align === 'end' && 'flex-row-reverse',
       )}
     >
-      <span className="text-base-s leading-none" aria-hidden>{flag ?? '🏳️'}</span>
+      <TeamFlag code={code ?? ''} emoji={flag ?? undefined} size={20} />
       <span className="text-sm-s font-semibold text-text truncate" title={name ?? undefined}>
         {code ?? name ?? '—'}
       </span>
