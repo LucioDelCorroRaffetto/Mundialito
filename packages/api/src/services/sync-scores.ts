@@ -352,11 +352,20 @@ export async function syncScores(options: SyncScoresOptions = {}): Promise<SyncS
 
       synced++;
 
-      // Recalculate prediction points when the match just became finished.
+      // Recalculate prediction points when the match is finished — either it
+      // just transitioned, OR it was already finished (e.g. closed by the FIFA
+      // final whistle at 2-0) and the feed is now correcting the score (the 3rd
+      // goal lands while the feed still reports 'live'). We key off `effStatus`,
+      // NOT the raw feed `newStatus`: under `downgradeBlocked` the feed says
+      // 'live' but our row stays 'finished', and using `newStatus` here left the
+      // score corrected to 3-0 while predictions kept their stale 2-0 points (a
+      // 2-0 prediction frozen at the exact-score 5 pts). `scoreChanged` guards
+      // against re-scoring (and re-firing achievements) on idle finished ticks.
       // Skip when score-locked: predictions were already scored against the
       // admin-corrected result; re-scoring here would use the (wrong) feed score.
       if (
-        newStatus === 'finished' &&
+        effStatus === 'finished' &&
+        (statusChanged || scoreChanged) &&
         newHomeScore !== null &&
         newAwayScore !== null &&
         !ourMatch.scoreLocked

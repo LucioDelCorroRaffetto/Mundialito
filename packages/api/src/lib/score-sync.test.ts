@@ -151,4 +151,15 @@ describe('shouldRescorePredictions', () => {
     expect(shouldRescorePredictions({ ...base, homeScore: null })).toBe(false);
     expect(shouldRescorePredictions({ ...base, awayScore: null })).toBe(false);
   });
+
+  // Regression: a match closed by the FIFA final whistle at 2-0 (predictions
+  // scored, a 2-0 prediction frozen at 5 pts) whose feed later corrects the
+  // score to 3-0 while STILL reporting 'live'. Callers must pass the EFFECTIVE
+  // status (downgradeBlocked → 'finished'), NOT the raw feed status — otherwise
+  // the 3-0 correction lands without re-scoring and the 2-0 prediction keeps
+  // its stale 5 pts. With effStatus='finished' this returns true so the
+  // corrected 3-0 re-scores the 2-0 prediction down to 1 pt.
+  it('re-scores a downgrade-blocked correction (feed live, match already finished)', () => {
+    expect(shouldRescorePredictions({ ...base, newStatus: 'finished', homeScore: 3, awayScore: 0 })).toBe(true);
+  });
 });

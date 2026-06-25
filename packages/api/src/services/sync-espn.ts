@@ -324,8 +324,13 @@ export async function syncScoresFromEspn(date: string): Promise<SyncScoresResult
       // Score predictions when match finishes. Skip while holding a shootout
       // whose winner ESPN hasn't published — scoring a tied KO would credit
       // the wrong predictors.
-      if (shouldRescorePredictions({
-        newStatus,
+      // Pass `effStatus`, not the raw feed `newStatus`: a match already closed
+      // by the FIFA final whistle (downgradeBlocked → effStatus 'finished')
+      // whose score the feed later corrects must be re-scored, otherwise the
+      // 3-0 correction lands while a 2-0 prediction stays frozen at 5 pts.
+      // `statusChanged || scoreChanged` avoids re-scoring idle finished ticks.
+      if ((statusChanged || scoreChanged) && shouldRescorePredictions({
+        newStatus: effStatus,
         shootoutWinnerUnknown,
         scoreLocked: ourMatch.scoreLocked,
         homeScore: newHomeScore,
