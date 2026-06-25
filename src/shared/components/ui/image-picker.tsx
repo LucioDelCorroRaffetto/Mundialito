@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
 import { Camera, X, Loader2 } from 'lucide-react';
+import { toast } from 'sonner';
 import { resizeImageToBase64 } from '@/shared/lib/image';
 import { cn } from '@/shared/lib/cn';
 
@@ -40,8 +41,18 @@ export function AvatarPicker({
     try {
       const base64 = await resizeImageToBase64(file, 300, 0.85);
       onChange(base64);
-    } catch {
-      // silently ignore
+    } catch (err) {
+      // Surface the failure instead of swallowing it — on mobile (iPhone
+      // HEIC photos, very large images that blow iOS's canvas limit) this
+      // path fired silently, so the user just saw "nothing happens".
+      console.error('[AvatarPicker] resize failed', {
+        name: file.name,
+        type: file.type,
+        size: file.size,
+        err,
+      });
+      const msg = err instanceof Error ? err.message : 'No se pudo procesar la imagen';
+      toast.error(`No se pudo procesar la foto: ${msg}`);
     } finally {
       setLoading(false);
     }
@@ -133,8 +144,15 @@ export function LeagueBannerPicker({ value, onChange, disabled = false }: Banner
       // Wider max for banners (still reasonable file size)
       const base64 = await resizeImageToBase64(file, 600, 0.8);
       onChange(base64);
-    } catch {
-      // ignore
+    } catch (err) {
+      console.error('[LeagueBannerPicker] resize failed', {
+        name: file.name,
+        type: file.type,
+        size: file.size,
+        err,
+      });
+      const msg = err instanceof Error ? err.message : 'No se pudo procesar la imagen';
+      toast.error(`No se pudo procesar la imagen: ${msg}`);
     } finally {
       setLoading(false);
     }
