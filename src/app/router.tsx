@@ -29,6 +29,8 @@ const LeagueCreatePage = lazyWithReload(() => import('@/pages/league-create').th
 const LeagueJoinPage = lazyWithReload(() => import('@/pages/league-join').then((m) => ({ default: m.LeagueJoinPage })));
 const LeagueInvitePage = lazyWithReload(() => import('@/pages/league-invite').then((m) => ({ default: m.LeagueInvitePage })));
 const ProfilePage = lazyWithReload(() => import('@/pages/profile').then((m) => ({ default: m.ProfilePage })));
+const MyPredictionsPage = lazyWithReload(() => import('@/pages/my-predictions').then((m) => ({ default: m.MyPredictionsPage })));
+const UserPredictionsPage = lazyWithReload(() => import('@/pages/user-predictions').then((m) => ({ default: m.UserPredictionsPage })));
 const SettingsPage = lazyWithReload(() => import('@/pages/settings').then((m) => ({ default: m.SettingsPage })));
 const FantasyPage = lazyWithReload(() => import('@/pages/fantasy').then((m) => ({ default: m.FantasyPage })));
 const AchievementsPage = lazyWithReload(() => import('@/pages/achievements').then((m) => ({ default: m.AchievementsPage })));
@@ -92,6 +94,7 @@ export const router = createBrowserRouter([
       { path: '/leagues/join', element: <Page><LeagueJoinPage /></Page> },
       { path: '/leagues/:id', element: <Page><LeagueDetailPage /></Page> },
       { path: '/profile', element: <Page><ProfilePage /></Page> },
+      { path: '/profile/predictions', element: <Page><MyPredictionsPage /></Page> },
       { path: '/settings', element: <Page><SettingsPage /></Page> },
       { path: '/fantasy', element: <Page><FantasyPage /></Page> },
       { path: '/achievements', element: <Page><AchievementsPage /></Page> },
@@ -99,6 +102,7 @@ export const router = createBrowserRouter([
       { path: '/tournament', element: <Page><TournamentPredictionsPage /></Page> },
       { path: '/stats', element: <Page><StatsPage /></Page> },
       { path: '/u/:userId', element: <Page><UserProfilePage /></Page> },
+      { path: '/u/:userId/predictions', element: <Page><UserPredictionsPage /></Page> },
       { path: '/admin', element: <Page><RequireAdmin><AdminPage /></RequireAdmin></Page> },
     ],
   },

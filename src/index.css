@@ -185,3 +185,57 @@ input, textarea, select, button {
 .wc26-sweep {
   animation: wc26-sweep 1.4s cubic-bezier(0.6, 0, 0.3, 1) both;
 }
+
+/* ── Resultado EXACTO = "carta legendaria" (estilo Clash Royale) ───────────
+   Arcoíris holográfico animado. Se usa en el historial de pronósticos para
+   premiar visualmente el marcador exacto. El degradé corre en loop; el
+   reduce-motion global (arriba) ya frena la animación para quien lo pida. */
+@keyframes legendary-pan {
+  0%   { background-position: 0% 50%; }
+  100% { background-position: 200% 50%; }
+}
+
+/* Paleta arcoíris reusada por las tres variantes. */
+.legendary-rainbow,
+.legendary-rainbow-text,
+.legendary-rainbow-border::before {
+  background-image: linear-gradient(
+    90deg,
+    #ff004c, #ff8a00, #ffe600, #00e676, #00e5ff, #2979ff, #d500f9, #ff004c
+  );
+  background-size: 200% 100%;
+  animation: legendary-pan 3s linear infinite;
+}
+
+/* Fondo arcoíris sólido — para la píldora "Exacto". Texto oscuro + sombra
+   clara para que se lea sobre cualquier color del degradé. */
+.legendary-rainbow {
+  color: #161616;
+  text-shadow: 0 1px 1px rgba(255, 255, 255, 0.45);
+  border-color: rgba(255, 255, 255, 0.6) !important;
+  box-shadow: 0 0 10px rgba(213, 0, 249, 0.35);
+}
+
+/* Texto con relleno arcoíris (clip) — para el marcador exacto. */
+.legendary-rainbow-text {
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+}
+
+/* Borde arcoíris animado — misma técnica de máscara que el borde wc26. */
+.legendary-rainbow-border {
+  position: relative;
+}
+.legendary-rainbow-border::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1.5px;
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
