@@ -201,7 +201,7 @@ function CountdownHero({
   // compact grid so neither match gets buried in "Próximos partidos".
   if (liveMatches.length > 1) {
     return (
-      <div className="relative overflow-hidden rounded-2xl border border-red-500/40 bg-gradient-to-br from-red-500/15 via-card to-card p-5">
+      <div className="relative overflow-hidden rounded-2xl border border-red-500/40 bg-card p-5">
         <div className="flex items-center gap-2 mb-4 justify-center">
           <span className="w-2 h-2 rounded-full bg-red-400 animate-pulse" />
           <p className="text-xs font-bold text-red-400 uppercase tracking-wider">
@@ -268,7 +268,7 @@ function CountdownHero({
   const isLive = Date.now() > kickoffMs;
 
   return (
-    <div className="relative overflow-hidden rounded-2xl border border-accent/40 bg-gradient-to-br from-accent/20 via-card to-card p-5">
+    <div className={`relative overflow-hidden rounded-2xl border p-5 ${isLive ? 'border-red-500/40 bg-card' : 'border-accent/40 bg-gradient-to-br from-accent/20 via-card to-card'}`}>
       {isLive ? (
         <div className="flex items-center gap-2 mb-3 justify-center">
           <span className="w-2 h-2 rounded-full bg-red-400 animate-pulse" />
