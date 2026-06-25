@@ -32,7 +32,10 @@ app.use(cors({
   },
   credentials: true,
 }));
-app.use(express.json());
+// 600kb so a base64 avatar (handler caps it at ~400k chars in update-me)
+// fits comfortably. The default 100kb silently 413s detailed phone photos
+// before they ever reach the handler.
+app.use(express.json({ limit: '600kb' }));
 // 'combined' in prod (timestamp + IP + UA — useful for "what happened at
 // 19:43?" during a live match); 'dev' (terse, colorized) locally.
 app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
