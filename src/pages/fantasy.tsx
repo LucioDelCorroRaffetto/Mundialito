@@ -651,6 +651,19 @@ export function FantasyPage() {
     return counts;
   }, [selectedPlayerIds, players]);
 
+  // ¿La selección local difiere del plantel GUARDADO en el server? Esto es el
+  // "dirty" REAL del plantel. Antes el botón "Guardar plantel" usaba un dirty
+  // trucho (total > 0), así que no reflejaba si había cambios pendientes — y
+  // como vivía al fondo de la lista de ~48 países, el usuario hacía un swap
+  // (ej. Lammens→Courtois), no encontraba dónde guardar, recargaba y el cambio
+  // "se perdía". Con el dirty real podemos mostrar un botón sticky solo cuando
+  // de verdad hay algo para guardar.
+  const squadDirty = useMemo(() => {
+    const saved = new Set((fantasyData?.squad ?? []).map((p) => p.id));
+    if (saved.size !== selectedPlayerIds.length) return true;
+    return selectedPlayerIds.some((id) => !saved.has(id));
+  }, [fantasyData?.squad, selectedPlayerIds]);
+
   // fantasy points lookup from saved squad
   const fantasyPointsById = useMemo(() => {
     const map = new Map<number, number>();
@@ -875,6 +888,7 @@ export function FantasyPage() {
               onSave={handleSave}
               onSetExpandedTeam={setExpandedTeam}
               onSetPosition={setSelectedPosition}
+              isDirty={squadDirty}
             />
           ) : (
             <>
@@ -898,6 +912,7 @@ export function FantasyPage() {
                 onSave={handleSave}
                 onSetExpandedTeam={setExpandedTeam}
                 onSetPosition={setSelectedPosition}
+                isDirty={squadDirty}
                 collapsible
               />
             </>
@@ -1136,6 +1151,7 @@ function SquadPicker({
   onSave,
   onSetExpandedTeam,
   onSetPosition,
+  isDirty,
   collapsible = false,
 }: {
   teams: { id: number; name: string; code: string; flag: string | null; confederation: string | null }[];
@@ -1152,11 +1168,14 @@ function SquadPicker({
   onSave: () => void;
   onSetExpandedTeam: (id: number | null) => void;
   onSetPosition: (pos: PositionFilter) => void;
+  /** ¿La selección difiere del plantel guardado? Lo calcula el padre contra
+   *  el server. Antes era `total > 0` (trucho) y el botón no reflejaba si
+   *  había cambios reales. */
+  isDirty: boolean;
   collapsible?: boolean;
 }) {
   const [open, setOpen] = useState(!collapsible);
   const total = selectedPlayerIds.length;
-  const isDirty = total > 0; // parent tracks server vs local; here we just show save when >0 and not locked
 
   return (
     <div className="flex flex-col gap-3">
@@ -1312,9 +1331,12 @@ function SquadPicker({
             })}
           </div>
 
-          {/* Save button — only when dirty and not locked */}
+          {/* Save button — sticky para que sea visible mientras editás (la
+              lista de países es larga; antes vivía al fondo y el usuario no
+              lo encontraba, así que el cambio nunca se guardaba). Solo cuando
+              hay cambios reales y el plantel no está bloqueado. */}
           {!squadLocked && isDirty && (
-            <div className="px-4">
+            <div className="px-4 sticky z-20 bottom-24 md:bottom-4">
               <button
                 onClick={onSave}
                 disabled={squadSaving || total < MAX_SQUAD}
