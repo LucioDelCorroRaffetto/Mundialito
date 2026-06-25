@@ -1603,9 +1603,15 @@ function PerRoundLineupTab({ squadPlayers }: { squadPlayers: Player[] }) {
 
           {lineupView === 'pitch' ? (
             <LineupPitch
-              players={draft.map((d) => {
-                const p = squadById.get(d.playerId)!;
-                return {
+              players={draft.flatMap((d) => {
+                // null-safe: tras guardar un swap de plantel, por un render el
+                // draft todavía puede tener un playerId que ya no está en el
+                // plantel (squadById) antes de que el effect reconstruya el
+                // draft. Antes esto reventaba con `squadById.get(...)!.id`
+                // (undefined.id). Lo salteamos hasta que el draft se rearme.
+                const p = squadById.get(d.playerId);
+                if (!p) return [];
+                return [{
                   id: p.id,
                   name: p.name,
                   position: p.position as Position,
@@ -1615,8 +1621,8 @@ function PerRoundLineupTab({ squadPlayers }: { squadPlayers: Player[] }) {
                   isStarter: d.isStarter,
                   isCaptain: d.isCaptain,
                   isViceCaptain: d.isViceCaptain,
-                };
-              }).filter((p) => squadById.has(p.id))}
+                }];
+              })}
               isOpen={isOpen}
               onToggleStarter={toggle}
               onSetCaptain={setCaptain}
