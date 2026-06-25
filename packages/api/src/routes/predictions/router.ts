@@ -3,6 +3,7 @@ import { authGuard } from '../../middleware/auth-guard.js';
 import { validate } from '../../middleware/validate.js';
 import { upsertPredictionHandler, upsertPredictionSchema } from './handlers/upsert-prediction.js';
 import { myPredictionsHandler } from './handlers/my-predictions.js';
+import { myPredictionHistoryHandler } from './handlers/my-prediction-history.js';
 import { myPredictionForMatchHandler } from './handlers/my-prediction-for-match.js';
 import { myPredictionByLeagueHandler } from './handlers/my-prediction-by-league.js';
 import { matchPredictionsHandler } from './handlers/match-predictions.js';
@@ -17,6 +18,9 @@ predictionsRouter.post('/', validate(upsertPredictionSchema), (req, res, next) =
   upsertPredictionHandler(req, res).catch(next)
 );
 predictionsRouter.get('/mine', (req, res, next) => myPredictionsHandler(req, res).catch(next));
+predictionsRouter.get('/mine/history', (req, res, next) =>
+  myPredictionHistoryHandler(req, res).catch(next)
+);
 predictionsRouter.get('/match/:matchId/mine', (req, res, next) =>
   myPredictionForMatchHandler(req, res).catch(next)
 );

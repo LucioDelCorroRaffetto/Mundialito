@@ -80,6 +80,47 @@ export function useMyPredictionByLeague(matchId: number | undefined) {
   });
 }
 
+export interface PredictionHistoryEntry {
+  predictionId: number;
+  matchId: number;
+  matchNumber: number;
+  kickoffUtc: string;
+  status: 'scheduled' | 'live' | 'finished' | 'suspended';
+  round: string;
+  group: string | null;
+  /** Marcador real del partido. null si todavía no terminó / no se cargó. */
+  actualHomeScore: number | null;
+  actualAwayScore: number | null;
+  predictedHomeScore: number;
+  predictedAwayScore: number;
+  /** Puntos sumados. null hasta que el partido se puntúa post-final. */
+  points: number | null;
+  homeTeamId: number | null;
+  homeTeamName: string | null;
+  homeTeamCode: string | null;
+  homeTeamFlag: string | null;
+  awayTeamId: number | null;
+  awayTeamName: string | null;
+  awayTeamCode: string | null;
+  awayTeamFlag: string | null;
+}
+
+/** Historial de pronósticos del usuario: SOLO partidos ya empezados, una fila
+ *  por partido, ordenados del más reciente al más viejo. */
+export function useMyPredictionHistory() {
+  return useQuery({
+    // Namespaced aparte de ['predictions','mine', leagueId] para no pisar el
+    // slot de leagueId de useMyPredictions.
+    queryKey: ['predictions', 'history'],
+    queryFn: async () => {
+      const { data } = await apiClient.get<ApiList<PredictionHistoryEntry>>(
+        '/predictions/mine/history',
+      );
+      return data;
+    },
+  });
+}
+
 export interface UpsertPredictionInput {
   matchId: number;
   homeScore: number;
@@ -109,6 +150,7 @@ export function useUpsertPrediction() {
     },
     onSuccess: ({ matchId }) => {
       qc.invalidateQueries({ queryKey: ['predictions', 'mine'] });
+      qc.invalidateQueries({ queryKey: ['predictions', 'history'] });
       qc.invalidateQueries({ queryKey: ['prediction', matchId] });
       qc.invalidateQueries({ queryKey: ['prediction', 'by-league', matchId] });
       qc.invalidateQueries({ queryKey: ['predictions', 'league-match', matchId] });
