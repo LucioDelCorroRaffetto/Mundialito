@@ -5,7 +5,8 @@ import { ArrowLeft, Clock, MapPin, CheckCircle2, Share2, Users, Plus, Minus, Loc
 import { IconBallFootball, IconBallFootballOff, IconShoe, IconHandStop, IconHandFinger, IconCheck } from '@tabler/icons-react';
 import { toast } from 'sonner';
 import { ROUND_LABELS } from '@/shared/data/mock';
-import { getMaxPossiblePoints } from '@/shared/lib/scoring';
+import { getMaxPossiblePoints, getScoreType } from '@/shared/lib/scoring';
+import type { ScoreType } from '@/shared/lib/scoring';
 import { Button } from '@/shared/components/ui/button';
 import { cn } from '@/shared/lib/cn';
 import { sharePredictionCard } from '@/shared/lib/generate-prediction-card';
@@ -166,14 +167,82 @@ function MemberAvatar({ username, avatarUrl }: { username: string; avatarUrl: st
   );
 }
 
+/**
+ * Estilos semánticos por tipo de acierto. Usados para colorear la fila de cada
+ * pronóstico una vez que el partido terminó y conocemos el resultado real.
+ * Nunca dependemos SOLO del color: cada estado lleva además una etiqueta de
+ * texto (accesibilidad / daltonismo).
+ */
+const SCORE_TYPE_STYLE: Record<ScoreType, { row: string; badge: string; label: string }> = {
+  exact: {
+    row: 'bg-emerald-500/10 border-emerald-500/40',
+    badge: 'text-emerald-700 dark:text-emerald-300 bg-emerald-500/15',
+    label: 'Exacto',
+  },
+  winner_diff: {
+    row: 'bg-sky-500/10 border-sky-500/40',
+    badge: 'text-sky-700 dark:text-sky-300 bg-sky-500/15',
+    label: 'Acertado',
+  },
+  draw: {
+    row: 'bg-sky-500/10 border-sky-500/40',
+    badge: 'text-sky-700 dark:text-sky-300 bg-sky-500/15',
+    label: 'Acertado',
+  },
+  winner: {
+    row: 'bg-amber-500/10 border-amber-500/40',
+    badge: 'text-amber-700 dark:text-amber-300 bg-amber-500/15',
+    label: 'Ganador',
+  },
+  miss: {
+    // Atenuamos solo el contenido textual del nombre/avatar (más abajo), no el
+    // badge — así "Falló" sigue legible (evita la doble atenuación
+    // text-muted + opacity que lo dejaba por debajo de contraste AA).
+    row: 'bg-elevated border-border',
+    badge: 'text-text/60 bg-card',
+    label: 'Falló',
+  },
+};
+
 function LeaguePredictionsSection({
   matchId,
   leagueId,
+  currentUserId,
+  actualHome,
+  actualAway,
+  matchFinished,
 }: {
   matchId: number;
   leagueId: number;
+  currentUserId: number | undefined;
+  actualHome: number | null;
+  actualAway: number | null;
+  matchFinished: boolean;
 }) {
   const { data, isLoading, isError } = useLeagueMatchPredictions(matchId, leagueId);
+
+  // Solo coloreamos por resultado cuando el partido terminó y tenemos el
+  // marcador real. En vivo / programado dejamos la fila neutra para no
+  // sugerir un puntaje que todavía puede cambiar.
+  const canScore = matchFinished && actualHome !== null && actualAway !== null;
+
+  // Tipo de acierto por fila (solo si canScore y la fila tiene marcador).
+  const scoreTypeFor = (pred: LeagueMemberPrediction): ScoreType | null => {
+    if (!canScore || pred.homeScore === null || pred.awayScore === null) return null;
+    return getScoreType({
+      predictedHome: pred.homeScore,
+      predictedAway: pred.awayScore,
+      actualHome: actualHome as number,
+      actualAway: actualAway as number,
+    });
+  };
+
+  // Ordenar por puntos desc cuando el partido terminó (mejores arriba).
+  // En vivo / programado conservamos el orden de llegada del backend.
+  const rows = data?.data ?? [];
+  const orderedRows = canScore
+    ? [...rows].sort((a, b) => (b.points ?? -1) - (a.points ?? -1))
+    : rows;
 
   return (
     <div className="p-4 rounded-lg bg-card border border-border">
@@ -196,27 +265,62 @@ function LeaguePredictionsSection({
         <p className="text-xs-s text-muted text-center py-2">Nadie en la liga pronosticó este partido.</p>
       )}
 
-      {data && data.meta.revealed === true && data.data.length > 0 && (
+      {data && data.meta.revealed === true && orderedRows.length > 0 && (
         <div className="flex flex-col gap-2">
-          {data.data.map((pred: LeagueMemberPrediction) => (
-            <div
-              key={pred.predictionId}
-              className="flex items-center gap-3 px-3 py-2.5 rounded-md bg-elevated border border-border"
-            >
-              <MemberAvatar username={pred.username} avatarUrl={pred.avatarUrl} />
-              <span className="text-sm-s font-medium text-text flex-1 truncate">{pred.username}</span>
-              <div className="flex items-center gap-2">
-                <span className="text-base-s font-display font-bold text-text tabular-nums">
-                  {pred.homeScore} – {pred.awayScore}
-                </span>
-                {pred.points !== null && (
-                  <span className="text-xs-s font-semibold text-accent bg-accent/10 px-1.5 py-0.5 rounded">
-                    +{pred.points} pts
-                  </span>
+          {orderedRows.map((pred: LeagueMemberPrediction) => {
+            const type = scoreTypeFor(pred);
+            const style = type ? SCORE_TYPE_STYLE[type] : null;
+            const isMe = currentUserId !== undefined && pred.userId === currentUserId;
+            return (
+              <div
+                key={pred.predictionId}
+                className={cn(
+                  'flex items-center gap-3 px-3 py-2.5 rounded-md border',
+                  style ? style.row : 'bg-elevated border-border',
+                  // Resaltar la fila del propio usuario. Usamos un ring NEUTRO
+                  // con offset (no el accent): el accent es configurable y puede
+                  // coincidir con el color semántico de la fila (emerald/sky/
+                  // amber), volviendo el ring invisible o ambiguo. La señal
+                  // primaria de "soy yo" es el badge "Vos"; el ring solo refuerza.
+                  isMe && 'ring-2 ring-text/30 ring-offset-1 ring-offset-card',
                 )}
+              >
+                <div className={cn('flex items-center gap-3 flex-1 min-w-0', type === 'miss' && 'opacity-60')}>
+                  <MemberAvatar username={pred.username} avatarUrl={pred.avatarUrl} />
+                  <span className="text-sm-s font-medium text-text flex-1 truncate flex items-center gap-1.5 min-w-0">
+                    <span className="truncate">{pred.username}</span>
+                    {isMe && (
+                      <span className="flex-shrink-0 text-[10px] font-bold text-accent bg-accent/10 px-1.5 py-0.5 rounded-full uppercase tracking-wide">
+                        Vos
+                      </span>
+                    )}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-base-s font-display font-bold text-text tabular-nums">
+                    {pred.homeScore} – {pred.awayScore}
+                  </span>
+                  {style ? (
+                    <span
+                      className={cn(
+                        'text-xs-s font-semibold px-1.5 py-0.5 rounded whitespace-nowrap',
+                        style.badge,
+                      )}
+                    >
+                      {style.label}
+                      {pred.points !== null && ` · +${pred.points}`}
+                    </span>
+                  ) : (
+                    pred.points !== null && (
+                      <span className="text-xs-s font-semibold text-accent bg-accent/10 px-1.5 py-0.5 rounded">
+                        +{pred.points} pts
+                      </span>
+                    )
+                  )}
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>
@@ -437,6 +541,7 @@ export function MatchDetailPage() {
   const [sharing, setSharing] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const username = useAuthStore((s) => s.user?.username);
+  const currentUserId = useAuthStore((s) => s.user?.id);
   const upsertMutation = useUpsertPrediction();
   const { vibrate } = useHaptic();
 
@@ -1072,6 +1177,10 @@ export function MatchDetailPage() {
             <LeaguePredictionsSection
               matchId={match.id}
               leagueId={selectedLeagueId}
+              currentUserId={currentUserId}
+              actualHome={match.homeScore}
+              actualAway={match.awayScore}
+              matchFinished={match.status === 'finished'}
             />
           )}
         </div>
