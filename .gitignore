@@ -13,3 +13,10 @@ tsconfig.tsbuildinfo
 .claude/
 
 .vercel
+
+# DB migration dumps — contienen datos de usuarios (emails, hashes). NUNCA commitear.
+db-dump/
+*.dump.json
+packages/api/db-dump/
+packages/api/local*.db
+packages/api/*.db
