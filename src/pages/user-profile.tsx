@@ -173,11 +173,9 @@ export function UserProfilePage() {
 
   const userId = Number(userIdParam);
 
-  // Redirect to own profile if viewing self
-  if (!isNaN(userId) && currentUser && userId === currentUser.id) {
-    return <Navigate to="/profile" replace />;
-  }
-
+  // Los hooks van SIEMPRE antes de cualquier return condicional: el early
+  // return de "es uno mismo" estaba arriba y dejaba sin llamar a useUserProfile
+  // y useState al ver el perfil propio, rompiendo el orden de hooks.
   const { data: profile, isLoading, isError } = useUserProfile(isNaN(userId) ? undefined : userId);
   // Selected achievement for the Pokémon-style modal. We let viewers open
   // any other user's logro card just like they can on their own profile —
@@ -185,6 +183,11 @@ export function UserProfilePage() {
   const [selectedCard, setSelectedCard] = useState<
     { achievement: Achievement; earned: boolean; earnedAt?: string } | null
   >(null);
+
+  // Redirect to own profile if viewing self
+  if (!isNaN(userId) && currentUser && userId === currentUser.id) {
+    return <Navigate to="/profile" replace />;
+  }
 
   if (isNaN(userId)) {
     return (

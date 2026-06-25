@@ -113,7 +113,7 @@ function norm(s: string): string {
   return s
     .toLowerCase()
     .normalize('NFD')
-    // eslint-disable-next-line no-misleading-character-class
+     
     .replace(/[̀-ͯ]/g, '')
     .replace(/[''`´ʹ]/g, "'")
     .replace(/[^a-z0-9' ]/g, '')

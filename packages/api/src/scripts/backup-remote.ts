@@ -93,7 +93,7 @@ main().catch((err) => {
   // best-effort cleanup
   const outputPath = resolve(process.argv[2] ?? '');
   if (outputPath && existsSync(outputPath)) {
-    try { unlinkSync(outputPath); } catch {}
+    try { unlinkSync(outputPath); } catch { /* best-effort: ignorar si no se pudo borrar */ }
   }
   process.exit(1);
 });

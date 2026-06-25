@@ -45,7 +45,7 @@ export async function upsertPredictionHandler(req: Request, res: Response) {
   //    - If omitted → apply to every league the user belongs to. This covers
   //      both the first-ever prediction (propagation) and bulk-update intent
   //      (the user wants the same score across all their leagues).
-  let memberships = await db
+  const memberships = await db
     .select({ leagueId: leagueMembers.leagueId })
     .from(leagueMembers)
     .where(eq(leagueMembers.userId, userId));

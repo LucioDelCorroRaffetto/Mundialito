@@ -35,10 +35,10 @@ function norm(s: string): string {
   return s
     .toLowerCase()
     .normalize('NFD')
-    // eslint-disable-next-line no-misleading-character-class
+     
     .replace(/[̀-ͯ]/g, '')
     .replace(/['’`´ʹ]/g, '')
-    .replace(/[.,\-]/g, ' ')
+    .replace(/[.,-]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
 }
