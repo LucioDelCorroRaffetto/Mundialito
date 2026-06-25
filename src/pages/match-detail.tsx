@@ -174,10 +174,12 @@ function MemberAvatar({ username, avatarUrl }: { username: string; avatarUrl: st
  * texto (accesibilidad / daltonismo).
  */
 const SCORE_TYPE_STYLE: Record<ScoreType, { row: string; badge: string; label: string }> = {
+  // Marcador exacto = "carta legendaria" (Clash Royale): borde arcoíris
+  // holográfico + píldora arcoíris. Mismo lenguaje visual que el historial.
   exact: {
-    row: 'bg-emerald-500/10 border-emerald-500/40',
-    badge: 'text-emerald-700 dark:text-emerald-300 bg-emerald-500/15',
-    label: 'Exacto',
+    row: 'bg-elevated border-transparent legendary-rainbow-border',
+    badge: 'legendary-rainbow',
+    label: '✨ Exacto',
   },
   winner_diff: {
     row: 'bg-sky-500/10 border-sky-500/40',
@@ -297,7 +299,10 @@ function LeaguePredictionsSection({
                   </span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="text-base-s font-display font-bold text-text tabular-nums">
+                  <span className={cn(
+                    'text-base-s font-display font-bold text-text tabular-nums',
+                    type === 'exact' && 'legendary-rainbow-text font-black',
+                  )}>
                     {pred.homeScore} – {pred.awayScore}
                   </span>
                   {style ? (
