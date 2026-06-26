@@ -1,7 +1,7 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ChevronRight, ChevronDown, Clock, CheckCircle2, Check, X } from 'lucide-react';
+import { ChevronRight, ChevronDown, Clock, CheckCircle2, Check, X, Minus } from 'lucide-react';
 import { staggerContainer, staggerItem, useMotionPrefs } from '@/shared/lib/motion';
 import { useMatches } from '@/shared/hooks/use-matches';
 import { useTeams, useTeamMap } from '@/shared/hooks/use-teams';
@@ -589,8 +589,17 @@ export function MatchesPage() {
       : match.liveStatus === 'cooling_break' ? 'Hidratación'
       : match.liveStatus === 'extra_time_break' ? 'Descanso ET'
       : null;
-    const predictionHit =
-      isFinished && prediction && prediction.points !== null ? prediction.points > 0 : null;
+    const finishedPredictions = isFinished
+      ? matchPredictions.filter((p) => p.points !== null)
+      : [];
+    const predictionHit: true | false | 'partial' | null =
+      finishedPredictions.length === 0
+        ? null
+        : finishedPredictions.every((p) => p.points! > 0)
+          ? true
+          : finishedPredictions.every((p) => p.points! === 0)
+            ? false
+            : 'partial';
     return (
       <motion.div
         key={match.id}
@@ -621,6 +630,10 @@ export function MatchesPage() {
               ) : predictionHit === false ? (
                 <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-red-500/15 text-red-500">
                   <X size={12} strokeWidth={3} />
+                </span>
+              ) : predictionHit === 'partial' ? (
+                <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-amber-500/20 text-amber-500">
+                  <Minus size={12} strokeWidth={3} />
                 </span>
               ) : (
                 <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-elevated text-muted text-[9px] font-bold">
@@ -690,7 +703,7 @@ export function MatchesPage() {
               )}
               {renderTeamSide(awayTeam, projAway, match.matchNumber, 'away')}
             </div>
-            {prediction && (
+            {hasPrediction && (
               <p
                 className={cn(
                   'text-xs-s font-semibold mt-0.5',
@@ -698,11 +711,14 @@ export function MatchesPage() {
                     ? 'text-green-500'
                     : predictionHit === false
                       ? 'text-muted'
-                      : 'text-accent',
+                      : predictionHit === 'partial'
+                        ? 'text-amber-500'
+                        : 'text-accent',
                 )}
               >
-                Tu pronóstico: {prediction.homeScore} – {prediction.awayScore}
-                {prediction.points !== null && ` · +${prediction.points} pts`}
+                {prediction
+                  ? <>Tu pronóstico: {prediction.homeScore} – {prediction.awayScore}{prediction.points !== null && ` · +${prediction.points} pts`}</>
+                  : 'Pronósticos distintos por liga'}
               </p>
             )}
             {isFinished && !hasPrediction && (
