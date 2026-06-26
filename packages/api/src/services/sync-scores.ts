@@ -11,6 +11,7 @@ import { recomputeAllFantasyPoints } from './fantasy-scoring-service.js';
 import { broadcastMatchUpdate } from '../ws/broadcast.js';
 import { checkAchievements, finalizeFantasyLegends } from './achievement-service.js';
 import { syncFifaStatsForMatch } from './sync-fifa-stats.js';
+import { resolveTournamentPredictions } from './tournament-resolver.js';
 
 // football-data.org status values
 type FdStatus =
@@ -444,6 +445,17 @@ export async function syncScores(options: SyncScoresOptions = {}): Promise<SyncS
       }
     } catch (err) {
       errors.push(`Fantasy legend finalize failed: ${String(err)}`);
+    }
+
+    // Puntuar las predicciones de Copa (campeón, goleador, etc.) cuando la
+    // final ya está finished. Idempotente y no-op hasta entonces.
+    try {
+      const { resolved, updated } = await resolveTournamentPredictions();
+      if (resolved && updated > 0) {
+        console.log(`[sync-scores] predicciones de Copa puntuadas: ${updated} filas`);
+      }
+    } catch (err) {
+      errors.push(`Tournament predictions resolve failed: ${String(err)}`);
     }
   }
 

@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { db } from '../../../db/index.js';
-import { predictions, leagueMembers, users, matches, userAchievements, achievements } from '../../../db/schema/index.js';
+import { predictions, leagueMembers, users, matches, userAchievements, achievements, tournamentPredictions } from '../../../db/schema/index.js';
 import { NotFoundError, AppError } from '../../../lib/errors.js';
 import { and, eq, inArray } from 'drizzle-orm';
 import { calculatePoints } from '../../../lib/scoring.js';
@@ -77,6 +77,21 @@ export async function standingsHandler(req: Request, res: Response) {
     pointsByUser.set(p.userId, current);
   }
 
+  // Predicciones de Copa de ESTA liga: se suman al total cuando ya fueron
+  // resueltas al final del torneo (points no-null). Antes de eso valen 0.
+  const tournamentRows = await db
+    .select({
+      userId: tournamentPredictions.userId,
+      points: tournamentPredictions.points,
+    })
+    .from(tournamentPredictions)
+    .where(and(eq(tournamentPredictions.leagueId, id), inArray(tournamentPredictions.userId, memberIds)));
+
+  const tournamentPointsByUser = new Map<number, number>();
+  for (const t of tournamentRows) {
+    if (t.points != null) tournamentPointsByUser.set(t.userId, t.points);
+  }
+
   // Fetch top badge per member
   const earnedRows = await db
     .select({
@@ -123,12 +138,13 @@ export async function standingsHandler(req: Request, res: Response) {
   const standings = members
     .map((m) => {
       const predPoints = pointsByUser.get(m.userId)?.total ?? 0;
+      const tournamentPoints = tournamentPointsByUser.get(m.userId) ?? 0;
       const titleSlug = m.selectedTitleSlug ?? null;
       return {
         userId: m.userId,
         username: m.username,
         avatarUrl: m.avatarUrl,
-        points: predPoints,
+        points: predPoints + tournamentPoints,
         matchesPlayed: pointsByUser.get(m.userId)?.matches ?? 0,
         topBadge: badgesByUser.get(m.userId) ?? null,
         level: computeLevel(xpByUser.get(m.userId) ?? 0),

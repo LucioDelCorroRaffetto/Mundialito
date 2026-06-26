@@ -17,6 +17,7 @@ import { calculatePoints } from '../lib/scoring.js';
 import { recomputeAllFantasyPoints } from './fantasy-scoring-service.js';
 import { broadcastMatchUpdate } from '../ws/broadcast.js';
 import { checkAchievements } from './achievement-service.js';
+import { resolveTournamentPredictions } from './tournament-resolver.js';
 
 export interface FinalizeResult {
   finalized: boolean;
@@ -29,6 +30,7 @@ export async function finalizeMatchFromFinalWhistle(matchId: number): Promise<Fi
     .select({
       id: matches.id,
       status: matches.status,
+      round: matches.round,
       homeScore: matches.homeScore,
       awayScore: matches.awayScore,
     })
@@ -79,6 +81,19 @@ export async function finalizeMatchFromFinalWhistle(matchId: number): Promise<Fi
     await recomputeAllFantasyPoints();
   } catch (err) {
     console.error('[finalize-match] fantasy recompute failed:', err);
+  }
+
+  // Si lo que se cerró fue la final, puntuar las predicciones de Copa
+  // (campeón, goleador, etc.). Idempotente; no-op si la final no está firme.
+  if (m.round === 'final') {
+    try {
+      const { resolved, updated: tpUpdated } = await resolveTournamentPredictions();
+      if (resolved && tpUpdated > 0) {
+        console.log(`[finalize-match] predicciones de Copa puntuadas: ${tpUpdated} filas`);
+      }
+    } catch (err) {
+      console.error('[finalize-match] tournament predictions resolve failed:', err);
+    }
   }
 
   if (updated) broadcastMatchUpdate(updated);

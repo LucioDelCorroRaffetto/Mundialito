@@ -800,7 +800,7 @@ export function TournamentPredictionsPage() {
         />
         <PickCard
           title="Ceniciento del torneo"
-          subtitle="Equipo modesto que llegará más lejos de lo esperado"
+          subtitle="El equipo modesto (bajo en el ranking) que más superó lo esperado"
           points={10}
           selectedTeamId={picks.revelationTeamId}
           onSelect={setField('revelationTeamId')}
@@ -811,7 +811,7 @@ export function TournamentPredictionsPage() {
         />
         <PickCard
           title="Decepción del torneo"
-          subtitle="Favorito o candidato que caerá antes de tiempo"
+          subtitle="El favorito que más lejos quedó de lo que se esperaba de él"
           points={10}
           selectedTeamId={picks.surpriseEliminatedTeamId}
           onSelect={setField('surpriseEliminatedTeamId')}
@@ -862,6 +862,21 @@ export function TournamentPredictionsPage() {
           contando todos los partidos jugados en el torneo. Para que cuente, el equipo
           tiene que haber clasificado <span className="text-text font-semibold">al menos a octavos</span> —
           así, los que quedan afuera en grupos no ganan por jugar menos partidos.
+        </p>
+
+        <p className="text-xs-s text-muted mt-3 leading-relaxed">
+          <span className="text-text font-semibold">Ceniciento y decepción</span> se deciden comparando
+          la <span className="text-text font-semibold">ronda esperada</span> de cada equipo (según su
+          fuerza previa al torneo) con la <span className="text-text font-semibold">ronda que realmente
+          alcanzó</span>. El <span className="text-text font-semibold">ceniciento</span> es el equipo
+          modesto (no candidato) que más se pasó de lo esperado; la{' '}
+          <span className="text-text font-semibold">decepción</span> es el favorito que más lejos quedó
+          de lo suyo (ej.: un candidato eliminado en fase de grupos).
+        </p>
+
+        <p className="text-xs-s text-muted mt-3 leading-relaxed">
+          Todos estos puntos se <span className="text-text font-semibold">suman a tu total en la liga</span>{' '}
+          una vez que termina el torneo.
         </p>
       </div>
 
