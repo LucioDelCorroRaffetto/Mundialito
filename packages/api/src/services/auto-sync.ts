@@ -30,11 +30,14 @@ const THIRTY_MINUTES = 30 * 60 * 1000;
 // cooling break + cierre por pitazo. football-data sigue intacto cada 3 min
 // como fuente autoritativa.
 //
-// 20s (antes 45s): el score y la timeline solo se refrescan en este tick, así
-// que su cadencia es el piso del lag del backend. Bajarlo a 20s, combinado con
-// el poll de 15s del detalle, lleva el delay percibido de ~90s a ~35s. ESPN y
-// FIFA son públicos y sin cuota, así que 20s no quema nada.
-const TWENTY_SECONDS = 20 * 1000;
+// 40s: el score y la timeline solo se refrescan en este tick, así que su
+// cadencia es el piso del lag del backend. Estuvo en 20s, pero aunque ESPN y
+// FIFA no tienen cuota de requests, SÍ cuentan para el bandwidth saliente de
+// Render (Service-Initiated): cada tick baja el scoreboard completo de ESPN
+// (hoy + ayer) + la timeline FIFA, y a 20s eso consumía la mayor parte de los
+// 5 GB del free tier durante el torneo. A 40s se corta ese gasto a la mitad
+// con un costo de latencia chico (delay percibido ~55s en vez de ~35s).
+const LIVE_TICK_MS = 40 * 1000;
 
 function todayUTC(): string {
   return new Date().toISOString().slice(0, 10);
@@ -191,9 +194,9 @@ export function startAutoSync() {
   // Every 30 minutes: yesterday too (catches late finishes / delayed status updates)
   yesterdayTimer = setInterval(() => runSync('yesterday', { dateFrom: yesterdayUTC(), dateTo: yesterdayUTC() }), THIRTY_MINUTES);
 
-  // Cada 20s: tick rápido del vivo (solo actúa si hay partidos en vivo).
-  console.log('[AutoSync] live tick (ESPN score + FIFA timeline) — cada 20s mientras haya partidos en vivo');
-  liveTimer = setInterval(() => runLiveSync(), TWENTY_SECONDS);
+  // Cada 40s: tick rápido del vivo (solo actúa si hay partidos en vivo).
+  console.log('[AutoSync] live tick (ESPN score + FIFA timeline) — cada 40s mientras haya partidos en vivo');
+  liveTimer = setInterval(() => runLiveSync(), LIVE_TICK_MS);
 }
 
 /** Stops the auto-sync timers — used by graceful shutdown handlers in server.ts. */
