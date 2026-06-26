@@ -13,9 +13,12 @@ const MEDAL_COLORS = [
   // Each medal carries a colour for both modes so the gold/silver/bronze
   // identity survives the white background of light mode (yellow-300 on
   // white is illegible — we drop to amber-600/700).
-  { bg: 'bg-yellow-400/30 dark:bg-yellow-400/20', border: 'border-yellow-500/60 dark:border-yellow-400/40', text: 'text-amber-700 dark:text-yellow-400', label: '🥇' },
-  { bg: 'bg-slate-300/40 dark:bg-slate-400/20',   border: 'border-slate-400/60 dark:border-slate-400/40',  text: 'text-slate-600 dark:text-slate-300',  label: '🥈' },
-  { bg: 'bg-amber-600/30 dark:bg-amber-700/20',   border: 'border-amber-600/60 dark:border-amber-700/40',  text: 'text-amber-800 dark:text-amber-600',  label: '🥉' },
+  // `aura` is the soft glow that pulses behind the avatar; `glow` is the
+  // static drop-shadow on the avatar ring. Both echo the medal colour so the
+  // podium reads at a glance even without the emoji.
+  { bg: 'bg-yellow-400/30 dark:bg-yellow-400/20', border: 'border-yellow-500/60 dark:border-yellow-400/40', text: 'text-amber-700 dark:text-yellow-400', label: '🥇', aura: 'bg-yellow-400/50', glow: 'shadow-[0_0_18px_rgba(250,204,21,0.6)]', ringW: 'border-[3px]' },
+  { bg: 'bg-slate-300/40 dark:bg-slate-400/20',   border: 'border-slate-400/60 dark:border-slate-400/40',  text: 'text-slate-600 dark:text-slate-300',  label: '🥈', aura: 'bg-slate-300/50', glow: 'shadow-[0_0_14px_rgba(148,163,184,0.55)]', ringW: 'border-2' },
+  { bg: 'bg-amber-600/30 dark:bg-amber-700/20',   border: 'border-amber-600/60 dark:border-amber-700/40',  text: 'text-amber-800 dark:text-amber-600',  label: '🥉', aura: 'bg-amber-600/45', glow: 'shadow-[0_0_14px_rgba(217,119,6,0.5)]', ringW: 'border-2' },
 ];
 
 const TIER_COLORS: Record<string, string> = {
@@ -40,10 +43,14 @@ function BadgeChip({ badge }: { badge: TopBadge }) {
   );
 }
 
-function PodiumCard({ entry, place }: { entry: LeaderboardEntry; place: 0 | 1 | 2 }) {
+function PodiumCard({ entry, place, reduced }: { entry: LeaderboardEntry; place: 0 | 1 | 2; reduced: boolean }) {
   const medal = MEDAL_COLORS[place];
   const initials = entry.username.slice(0, 1).toUpperCase();
   const heights = ['h-28', 'h-20', 'h-16'];
+  // #1 gets a crown on top of the medal; the avatar is also a touch larger so
+  // the winner clearly outranks silver/bronze beyond just the podium height.
+  const avatarSize = place === 0 ? 'w-14 h-14' : 'w-12 h-12';
+  const avatarPx = place === 0 ? 56 : 48;
 
   return (
     <motion.div
@@ -52,19 +59,33 @@ function PodiumCard({ entry, place }: { entry: LeaderboardEntry; place: 0 | 1 | 
       transition={{ delay: place * 0.1 }}
       className={cn('flex flex-col items-center gap-2', place === 0 ? 'order-2' : place === 1 ? 'order-1' : 'order-3')}
     >
-      <span className="text-xl">{medal.label}</span>
+      <span className="text-xl leading-none">{place === 0 ? '👑' : medal.label}</span>
       <Link to={`/u/${entry.userId}`} className="flex flex-col items-center gap-2">
-        <div
-          className={cn(
-            'w-12 h-12 rounded-full border-2 flex items-center justify-center flex-shrink-0 overflow-hidden',
-            medal.border
-          )}
-        >
-          {entry.avatarUrl ? (
-            <img src={entry.avatarUrl} alt={entry.username} width={48} height={48} loading="lazy" className="w-full h-full object-cover" />
-          ) : (
-            <span className={cn('text-base font-bold', medal.text)}>{initials}</span>
-          )}
+        <div className="relative flex items-center justify-center">
+          {/* Pulsing aura in the medal colour — the headline "podium" signal.
+              Skipped under reduced-motion (it stays as a static soft halo). */}
+          <motion.span
+            aria-hidden
+            className={cn('absolute inset-0 rounded-full blur-md', medal.aura)}
+            initial={false}
+            animate={reduced ? { opacity: 0.5, scale: 1.1 } : { opacity: [0.35, 0.75, 0.35], scale: [1.05, 1.25, 1.05] }}
+            transition={reduced ? undefined : { duration: 2.4, repeat: Infinity, ease: 'easeInOut', delay: place * 0.25 }}
+          />
+          <div
+            className={cn(
+              'relative rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden',
+              avatarSize,
+              medal.ringW,
+              medal.border,
+              medal.glow,
+            )}
+          >
+            {entry.avatarUrl ? (
+              <img src={entry.avatarUrl} alt={entry.username} width={avatarPx} height={avatarPx} loading="lazy" className="w-full h-full object-cover" />
+            ) : (
+              <span className={cn('text-base font-bold', medal.text)}>{initials}</span>
+            )}
+          </div>
         </div>
         <div className="flex flex-col items-center gap-0.5">
           <p className={cn('text-xs font-semibold text-center max-w-[80px] truncate', medal.text)}>
@@ -231,7 +252,7 @@ export function LeaderboardPage() {
         <div className="px-4">
           <div className="flex items-end justify-center gap-3 py-4">
             {top3.map((entry, i) => (
-              <PodiumCard key={entry.userId} entry={entry} place={i as 0 | 1 | 2} />
+              <PodiumCard key={entry.userId} entry={entry} place={i as 0 | 1 | 2} reduced={reduced} />
             ))}
           </div>
         </div>
