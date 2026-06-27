@@ -6,6 +6,7 @@ import { staggerContainer, staggerItem, useMotionPrefs } from '@/shared/lib/moti
 import { useMatches } from '@/shared/hooks/use-matches';
 import { useTeams, useTeamMap } from '@/shared/hooks/use-teams';
 import { useMyPredictions } from '@/shared/hooks/use-predictions';
+import { useMyLeagues } from '@/shared/hooks/use-leagues';
 import { ROUND_LABELS } from '@/shared/data/mock';
 import type { Match, Team } from '@/shared/types/api';
 import { TeamFlag } from '@/shared/components/ui/team-flag';
@@ -138,6 +139,22 @@ const WC_GROUPS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L'] a
 const MAIN_TABS = ['Partidos', 'Grupos', 'Terceros', 'Cuadro'] as const;
 type MainTab = (typeof MAIN_TABS)[number];
 
+// Persistimos la pestaña principal y el filtro de estado en sessionStorage para
+// que sobrevivan a navegar a un partido y volver — sin importar cómo se vuelva
+// (botón atrás, link "Partidos" de la barra inferior, etc.). El URL solo
+// persiste con el back del navegador; sessionStorage cubre todos los caminos.
+const TAB_STORAGE_KEY = 'matches:mainTab';
+const STATUS_STORAGE_KEY = 'matches:statusFilter';
+
+function readStoredTab(): MainTab {
+  const v = sessionStorage.getItem(TAB_STORAGE_KEY);
+  return MAIN_TABS.includes(v as MainTab) ? (v as MainTab) : 'Partidos';
+}
+function readStoredStatus(): StatusOption | null {
+  const v = sessionStorage.getItem(STATUS_STORAGE_KEY);
+  return STATUS_OPTIONS.includes(v as StatusOption) ? (v as StatusOption) : null;
+}
+
 /** Dropdown custom (no usa el <select> nativo). En Windows, Chrome ignora
  *  `color-scheme` para el popup del <select> y lo pinta blanco ilegible sobre
  *  el tema oscuro. Un menú propio con los tokens del tema funciona en claro y
@@ -245,13 +262,28 @@ function FilterDropdown({
 
 export function MatchesPage() {
   const [searchParams] = useSearchParams();
-  const [mainTab, setMainTab] = useState<MainTab>('Partidos');
-  const [statusFilter, setStatusFilter] = useState<StatusOption>('Todos');
   const [groupFilter, setGroupFilter] = useState<string | null>(null);
   const { reduced } = useMotionPrefs();
 
   // Clave de "hoy" en hora local, fijada al montar (no cambia entre renders).
   const todayKey = useMemo(() => localDateKey(new Date()), []);
+
+  // mainTab y statusFilter se inicializan desde sessionStorage para recordar
+  // dónde quedó el usuario al volver de un partido. Los setters envuelven el
+  // useState para escribir también en storage en cada cambio.
+  const [mainTab, setMainTabState] = useState<MainTab>(readStoredTab);
+  const [statusFilter, setStatusFilterState] = useState<StatusOption>(
+    () => readStoredStatus() ?? 'Todos',
+  );
+
+  function setMainTab(tab: MainTab) {
+    setMainTabState(tab);
+    sessionStorage.setItem(TAB_STORAGE_KEY, tab);
+  }
+  function setStatusFilter(opt: StatusOption) {
+    setStatusFilterState(opt);
+    sessionStorage.setItem(STATUS_STORAGE_KEY, opt);
+  }
 
   // Se aplica el filtro inicial una sola vez (cuando llegan los datos), sin que
   // el polling de 30s lo vuelva a pisar ni anule la elección del usuario.
@@ -268,12 +300,25 @@ export function MatchesPage() {
   const { data: teamMap } = useTeamMap();
   const { data: teamsData } = useTeams();
   const { data: myPredictionsData } = useMyPredictions();
+  const { data: myLeaguesData } = useMyLeagues();
   const matches = matchesResponse?.data ?? [];
   const teams = teamsData ?? [];
 
   const predictedIds = useMemo(
     () => new Set((myPredictionsData?.data ?? []).map((p) => p.matchId)),
     [myPredictionsData],
+  );
+
+  // Las ligas personales/auto están ocultas en toda la app (el editor por liga
+  // del match-detail solo muestra ligas compartidas). Un marcador viejo en la
+  // liga personal NO debe disparar el flag "distintos por liga", así que las
+  // identificamos para excluirlas del cálculo de divergencia.
+  const personalLeagueIds = useMemo(
+    () =>
+      new Set(
+        (myLeaguesData?.data ?? []).filter((l) => l.isPersonal).map((l) => l.id),
+      ),
+    [myLeaguesData],
   );
 
   // Proyección del cuadro (1°/2° de grupo confirmados o clasificados
@@ -285,22 +330,23 @@ export function MatchesPage() {
     [teams, matches],
   );
 
-  // Filtro inicial (una sola vez, cuando ya hay datos): respeta el deep-link
-  // ?filter del banner de la home y, si no, aterriza en el grupo más relevante
-  // para que los partidos de hoy / próximos se vean sin scrollear. Hacerlo en
-  // render (no en un effect) evita el "flash" de la lista completa antes de
-  // reposicionar. El setState está guardado → re-render inmediato, sin loop.
+  // Filtro inicial (una sola vez, cuando ya hay datos): el deep-link ?filter=
+  // del banner de home siempre gana. Si no, y NO hay un filtro recordado en
+  // sessionStorage (primera visita de la sesión), aterrizamos en el grupo más
+  // relevante. Si ya había uno guardado, el useState lo tomó y no lo tocamos.
   if (!initializedRef.current && matches.length > 0) {
     initializedRef.current = true;
     const f = searchParams.get('filter');
     if (f === 'live') setStatusFilter('En vivo');
     else if (f === 'today') setStatusFilter('Hoy');
-    else if (matches.some((m) => localDateKey(new Date(m.kickoffUtc)) === todayKey)) {
-      setStatusFilter('Hoy');
-    } else if (matches.some((m) => m.status === 'scheduled')) {
-      setStatusFilter('Por jugar');
+    else if (readStoredStatus() === null) {
+      if (matches.some((m) => localDateKey(new Date(m.kickoffUtc)) === todayKey)) {
+        setStatusFilter('Hoy');
+      } else if (matches.some((m) => m.status === 'scheduled')) {
+        setStatusFilter('Por jugar');
+      }
+      // si no quedan partidos por jugar (torneo terminado) se queda en 'Todos'.
     }
-    // si no quedan partidos por jugar (torneo terminado) se queda en 'Todos'.
   }
 
   if (isLoading) {
@@ -566,8 +612,13 @@ export function MatchesPage() {
     // detail to match-detail (which has the divergent view).
     const matchPredictions = (myPredictionsData?.data ?? []).filter((p) => p.matchId === match.id);
     const hasPrediction = matchPredictions.length > 0;
-    const uniqueScores = new Set(matchPredictions.map((p) => `${p.homeScore}-${p.awayScore}`));
-    const prediction = uniqueScores.size === 1 ? matchPredictions[0] : undefined;
+    // La divergencia se evalúa solo sobre las ligas que el usuario puede ver/editar
+    // (las compartidas). Para quien solo tiene su liga personal, caemos de nuevo a
+    // todas las predicciones para que igual se muestre su marcador concreto.
+    const sharedPredictions = matchPredictions.filter((p) => !personalLeagueIds.has(p.leagueId));
+    const consideredPredictions = sharedPredictions.length > 0 ? sharedPredictions : matchPredictions;
+    const uniqueScores = new Set(consideredPredictions.map((p) => `${p.homeScore}-${p.awayScore}`));
+    const prediction = uniqueScores.size === 1 ? consideredPredictions[0] : undefined;
     const homeTeam = getTeam(teamMap, match.homeTeamId);
     const awayTeam = getTeam(teamMap, match.awayTeamId);
     // Para cruces de eliminación aún sin definir, proyectar el equipo desde el
@@ -590,7 +641,7 @@ export function MatchesPage() {
       : match.liveStatus === 'extra_time_break' ? 'Descanso ET'
       : null;
     const finishedPredictions = isFinished
-      ? matchPredictions.filter((p) => p.points !== null)
+      ? consideredPredictions.filter((p) => p.points !== null)
       : [];
     const predictionHit: true | false | 'partial' | null =
       finishedPredictions.length === 0
