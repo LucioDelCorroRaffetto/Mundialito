@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { and, eq, gte, lte, asc, or } from 'drizzle-orm';
 import { db } from '../../../db/index.js';
 import { matches } from '../../../db/schema/index.js';
+import { getCachedMatches, setCachedMatches } from '../../../lib/matches-cache.js';
 
 export const listMatchesQuerySchema = z.object({
   status: z.enum(['scheduled', 'live', 'finished']).optional(),
@@ -18,6 +19,17 @@ export async function listMatchesHandler(req: Request, res: Response) {
     return res.status(400).json({ error: { code: 'VALIDATION_ERROR', message: parsed.error.errors[0].message } });
   }
   const { status, from, to, group, limit } = parsed.data;
+
+  // Cache de lectura (TTL corto, global): este endpoint es el más polleado
+  // (~30s × cada usuario) y no depende del usuario, así que la respuesta se
+  // comparte. Clave = combinación de filtros. Se invalida en cada escritura de
+  // match vía broadcastMatchUpdate, así que un gol/cambio de estado se ve en el
+  // próximo poll sin esperar al TTL.
+  const cacheKey = JSON.stringify({ status, from, to, group, limit });
+  const cached = getCachedMatches(cacheKey);
+  if (cached !== undefined) {
+    return res.json(cached);
+  }
 
   const conditions = [];
   // 'scheduled' incluye también 'live': el sync FIFA puede tardar en elevar
@@ -40,5 +52,7 @@ export async function listMatchesHandler(req: Request, res: Response) {
     .orderBy(asc(matches.kickoffUtc))
     .limit(limit);
 
-  return res.json({ data: rows, meta: { total: rows.length } });
+  const body = { data: rows, meta: { total: rows.length } };
+  setCachedMatches(cacheKey, body);
+  return res.json(body);
 }

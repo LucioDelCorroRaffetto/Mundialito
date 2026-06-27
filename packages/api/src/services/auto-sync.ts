@@ -116,34 +116,52 @@ async function runSync(label: string, options: SyncScoresOptions) {
 async function runLiveSync() {
   // Pre-check barato ANTES de tomar el lock: si no hay partidos en vivo no
   // tocamos el guard ni ninguna fuente externa (este tick corre 24/7).
+  // Traemos también el kickoff para decidir si hace falta pedir "ayer" a ESPN.
   const live = await db
-    .select({ id: matches.id })
+    .select({ id: matches.id, kickoffUtc: matches.kickoffUtc })
     .from(matches)
     .where(eq(matches.status, 'live'))
-    .catch(() => [] as { id: number }[]);
+    .catch(() => [] as { id: number; kickoffUtc: string }[]);
   if (live.length === 0) return;
 
   if (syncInFlight) return; // un sync (3min o vivo) ya está corriendo
   syncInFlight = true;
   try {
     // Score por ESPN (sin key, sin cuota) para que el marcador se mueva rápido
-    // sin quemar football-data. Pedimos hoy + ayer UTC porque un partido que
-    // arranca cerca de medianoche UTC sigue "live" pasada la medianoche y
-    // ESPN interpreta `dates` en horario del Este (Gotcha #3) — sin `ayer`
-    // ese partido se quedaría sin refresco de score en esos ticks.
-    // football-data sigue siendo autoritativo cada 3 min y corrige cualquier
-    // discrepancia.
-    const [espnT, espnY] = await Promise.all([
-      syncScoresFromEspn(todayUTC()).catch((err) => {
+    // sin quemar football-data. Pedimos "hoy" siempre; "ayer" SOLO cuando de
+    // verdad puede contener un partido en vivo, porque cada llamada baja el
+    // scoreboard completo de ESPN y eso cuenta para el bandwidth saliente de
+    // Render (Service-Initiated) — pedir "ayer" en cada tick las 24h era la
+    // mitad del gasto de este tick, casi siempre al pedo.
+    //
+    // "ayer" hace falta sólo si:
+    //  - algún partido en vivo arrancó ayer (UTC), o
+    //  - estamos en la ventana temprana UTC (<6h) donde ESPN, que bucketea por
+    //    horario del Este, todavía archiva el partido de "hoy" bajo "ayer-ET"
+    //    (Gotcha #3). Pasada esa ventana, hoy-UTC == hoy-ET y "ayer" no puede
+    //    contener un partido en curso salvo que literalmente haya arrancado ayer.
+    const today = todayUTC();
+    const yesterday = yesterdayUTC();
+    const anyKickedOffYesterday = live.some((m) => (m.kickoffUtc ?? '').slice(0, 10) === yesterday);
+    const nearMidnightEt = new Date().getUTCHours() < 6;
+    const needYesterday = anyKickedOffYesterday || nearMidnightEt;
+
+    const espnFetches = [
+      syncScoresFromEspn(today).catch((err) => {
         console.error('[LiveSync] ESPN score error (today):', err);
         return null;
       }),
-      syncScoresFromEspn(yesterdayUTC()).catch((err) => {
-        console.error('[LiveSync] ESPN score error (yesterday):', err);
-        return null;
-      }),
-    ]);
-    const espnSynced = (espnT?.synced ?? 0) + (espnY?.synced ?? 0);
+    ];
+    if (needYesterday) {
+      espnFetches.push(
+        syncScoresFromEspn(yesterday).catch((err) => {
+          console.error('[LiveSync] ESPN score error (yesterday):', err);
+          return null;
+        }),
+      );
+    }
+    const espnResults = await Promise.all(espnFetches);
+    const espnSynced = espnResults.reduce((sum, r) => sum + (r?.synced ?? 0), 0);
 
     // Timeline FIFA + cooling break + cierre por pitazo final.
     const res = await syncLiveMatches();

@@ -1,5 +1,6 @@
 import express from 'express';
 import cors from 'cors';
+import compression from 'compression';
 import morgan from 'morgan';
 import { tokenParse } from './middleware/token-parse.js';
 import { errorHandler } from './middleware/error-handler.js';
@@ -20,6 +21,12 @@ const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS
   : ['http://localhost:5174', 'http://localhost:5173'];
 
 console.log('[CORS] Allowed origins:', ALLOWED_ORIGINS);
+
+// gzip/deflate de las respuestas. Toda la API es JSON (matches, leaderboard,
+// fantasy, forecast), que comprime ~70-90%. Reduce el bucket "HTTP Responses"
+// del bandwidth de Render. El costo de CPU a esta escala es ruido y el browser
+// descomprime nativo — no hay cambios en el frontend.
+app.use(compression());
 
 app.use(cors({
   origin: (origin, callback) => {

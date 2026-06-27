@@ -3,10 +3,21 @@ import { eq, and, gt, or } from 'drizzle-orm';
 import { db } from '../../../db/index.js';
 import { matches, playerMatchStats, players, teams, matchEvents } from '../../../db/schema/index.js';
 import { NotFoundError } from '../../../lib/errors.js';
+import { getCachedMatches, setCachedMatches } from '../../../lib/matches-cache.js';
 
 export async function getMatchHandler(req: Request, res: Response) {
   const id = Number(req.params.id);
   if (!Number.isInteger(id)) throw new NotFoundError('Match');
+
+  // Cache de lectura (TTL corto): la pantalla de detalle pollea cada ~45s y
+  // hace 3 queries a Turso (match + stats + timeline). Se invalida en cada
+  // escritura de match vía broadcastMatchUpdate. Clave namespaced para no
+  // colisionar con las del listado.
+  const cacheKey = `match:${id}`;
+  const cached = getCachedMatches(cacheKey);
+  if (cached !== undefined) {
+    return res.json(cached);
+  }
 
   const match = await db.select().from(matches).where(eq(matches.id, id)).get();
   if (!match) throw new NotFoundError('Match');
@@ -69,5 +80,7 @@ export async function getMatchHandler(req: Request, res: Response) {
     return a.id - b.id;
   });
 
-  return res.json({ ...match, events: stats, timeline });
+  const body = { ...match, events: stats, timeline };
+  setCachedMatches(cacheKey, body);
+  return res.json(body);
 }
