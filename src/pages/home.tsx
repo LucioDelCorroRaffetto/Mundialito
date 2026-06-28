@@ -18,6 +18,35 @@ import { useAuthStore } from '@/shared/stores/auth-store';
 import type { Match, Team } from '@/shared/types/api';
 import { Button } from '@/shared/components/ui/button';
 import { TeamFlag } from '@/shared/components/ui/team-flag';
+import { useBracketProjection } from '@/shared/hooks/use-bracket-projection';
+import { resolveBracketSlot, type BracketProjection } from '@/shared/lib/bracket-projection';
+import { R32_LABELS } from '@/shared/data/bracket';
+
+/** Un equipo "real" es uno ya definido en la DB — no el placeholder TBD/??? que
+ *  se muestra mientras un cruce de eliminación todavía no tiene rivales. */
+function isRealTeam(team: Pick<Team, 'id' | 'code'>): boolean {
+  return team.id > 0 && team.code !== 'TBD' && team.code !== '???';
+}
+
+function slotLabelFor(matchNumber: number, side: 'home' | 'away'): string {
+  return R32_LABELS[matchNumber]?.[side] ?? 'Por definir';
+}
+
+/**
+ * Resuelve qué mostrar de un lado de un partido: el equipo real de la DB si ya
+ * está definido, o el proyectado por el cuadro (1°/2° de grupo o mejor 3ro) para
+ * los cruces de eliminación que siguen como TBD. `team` null ⇒ solo hay label.
+ */
+function resolveSide(
+  team: Pick<Team, 'id' | 'code' | 'flag' | 'name'> | undefined,
+  matchNumber: number,
+  side: 'home' | 'away',
+  projection: BracketProjection,
+): { team: Pick<Team, 'code' | 'flag'> | null; label: string; real: boolean } {
+  const real = !!team && isRealTeam(team);
+  const display = real ? team! : resolveBracketSlot(matchNumber, side, projection)?.team ?? null;
+  return { team: display, label: display?.code ?? slotLabelFor(matchNumber, side), real };
+}
 
 const WORLD_CUP_START = '2026-06-11T19:00:00Z';
 
@@ -142,6 +171,10 @@ function CountdownHero({
   teamMap: Map<number, Team> | undefined;
 }) {
   const queryClient = useQueryClient();
+  // Proyección del cuadro para resolver cruces de eliminación que en la DB
+  // siguen como TBD (mismo criterio que la página Partidos). Reusa queries
+  // cacheados de matches/teams, así que no agrega red.
+  const projection = useBracketProjection();
   // Triggered when the countdown reaches 0 — invalidates the matches
   // query so the home auto-advances to the next match without needing the
   // user to refresh. Also kicks the standings / predictions caches because
@@ -210,8 +243,8 @@ function CountdownHero({
         </div>
         <div className="grid grid-cols-2 gap-3">
           {liveMatches.map((m) => {
-            const home = teamMap?.get(m.homeTeamId);
-            const away = teamMap?.get(m.awayTeamId);
+            const home = resolveSide(teamMap?.get(m.homeTeamId), m.matchNumber, 'home', projection);
+            const away = resolveSide(teamMap?.get(m.awayTeamId), m.matchNumber, 'away', projection);
             return (
               <Link
                 key={m.id}
@@ -220,13 +253,13 @@ function CountdownHero({
               >
                 <div className="flex items-center gap-2">
                   <div className="flex flex-col items-center gap-1">
-                    {home && <TeamFlag code={home.code} emoji={home.flag} size={32} />}
-                    <span className="text-xs font-bold text-text">{home?.code ?? '—'}</span>
+                    {home.team && <TeamFlag code={home.team.code} emoji={home.team.flag} size={32} />}
+                    <span className={`text-xs font-bold ${home.real ? 'text-text' : 'text-muted'}`}>{home.label}</span>
                   </div>
                   <span className="text-xs font-bold text-muted">vs</span>
                   <div className="flex flex-col items-center gap-1">
-                    {away && <TeamFlag code={away.code} emoji={away.flag} size={32} />}
-                    <span className="text-xs font-bold text-text">{away?.code ?? '—'}</span>
+                    {away.team && <TeamFlag code={away.team.code} emoji={away.team.flag} size={32} />}
+                    <span className={`text-xs font-bold ${away.real ? 'text-text' : 'text-muted'}`}>{away.label}</span>
                   </div>
                 </div>
                 {m.city && (
@@ -262,8 +295,12 @@ function CountdownHero({
     );
   }
 
-  const homeTeam = teamMap?.get(nextMatch.homeTeamId);
-  const awayTeam = teamMap?.get(nextMatch.awayTeamId);
+  const homeTeam = resolveSide(teamMap?.get(nextMatch.homeTeamId), nextMatch.matchNumber, 'home', projection);
+  const awayTeam = resolveSide(teamMap?.get(nextMatch.awayTeamId), nextMatch.matchNumber, 'away', projection);
+  // Mostrar los equipos cuando ya hay algo concreto (real o proyectado), o
+  // cuando es un cruce de eliminación (ahí el label del slot ya es útil). Para
+  // partidos de grupo todavía cargando, no mostramos nada en vez de "Por definir".
+  const showTeams = (homeTeam.team && awayTeam.team) || nextMatch.round !== 'group';
   const kickoffMs = new Date(nextMatch.kickoffUtc).getTime();
   const isLive = Date.now() > kickoffMs;
 
@@ -280,16 +317,16 @@ function CountdownHero({
         </p>
       )}
 
-      {homeTeam && awayTeam && (
+      {showTeams && (
         <div className="flex items-center justify-center gap-4 mb-4">
           <div className="flex flex-col items-center gap-1.5">
-            <TeamFlag code={homeTeam.code} emoji={homeTeam.flag} size={40} />
-            <span className="text-sm font-bold text-text">{homeTeam.code}</span>
+            {homeTeam.team && <TeamFlag code={homeTeam.team.code} emoji={homeTeam.team.flag} size={40} />}
+            <span className={`text-sm font-bold ${homeTeam.real ? 'text-text' : 'text-muted'}`}>{homeTeam.label}</span>
           </div>
           <span className="text-sm font-bold text-muted">vs</span>
           <div className="flex flex-col items-center gap-1.5">
-            <TeamFlag code={awayTeam.code} emoji={awayTeam.flag} size={40} />
-            <span className="text-sm font-bold text-text">{awayTeam.code}</span>
+            {awayTeam.team && <TeamFlag code={awayTeam.team.code} emoji={awayTeam.team.flag} size={40} />}
+            <span className={`text-sm font-bold ${awayTeam.real ? 'text-text' : 'text-muted'}`}>{awayTeam.label}</span>
           </div>
         </div>
       )}
@@ -458,6 +495,7 @@ export function HomePage() {
   const nextMatch = apiMatches[0] ?? null;
   const upcoming = apiMatches.filter((m) => m.status !== 'live').slice(0, 5).map((m) => ({
     id: m.id,
+    matchNumber: m.matchNumber,
     kickoffUtc: m.kickoffUtc,
     city: m.city,
     homeTeam: teamMap?.get(m.homeTeamId) ?? PLACEHOLDER_TEAM,
@@ -747,6 +785,7 @@ function TournamentShortcut() {
 
 interface UpcomingMatch {
   id: number;
+  matchNumber: number;
   kickoffUtc: string;
   city: string;
   homeTeam: Pick<Team, 'id' | 'code' | 'flag' | 'name'>;
@@ -760,6 +799,11 @@ function UpcomingMatchesSection({
   upcoming: UpcomingMatch[];
   reduced: boolean;
 }) {
+  // Para cruces de eliminación que en la DB siguen como TBD, proyectar el equipo
+  // desde el cuadro (1°/2° de grupo o mejor 3ro), igual que la página Partidos.
+  // Reusa los queries cacheados de matches/teams, así que no agrega red si ya
+  // se pidieron en otra pantalla.
+  const projection = useBracketProjection();
   return (
     <div>
       <div className="flex items-center justify-between mb-3">
@@ -772,7 +816,18 @@ function UpcomingMatchesSection({
         initial="initial"
         animate="animate"
       >
-        {upcoming.map((match) => (
+        {upcoming.map((match) => {
+          const homeReal = isRealTeam(match.homeTeam);
+          const awayReal = isRealTeam(match.awayTeam);
+          const homeDisplay = homeReal
+            ? match.homeTeam
+            : resolveBracketSlot(match.matchNumber, 'home', projection)?.team ?? null;
+          const awayDisplay = awayReal
+            ? match.awayTeam
+            : resolveBracketSlot(match.matchNumber, 'away', projection)?.team ?? null;
+          const homeLabel = homeDisplay?.code ?? slotLabelFor(match.matchNumber, 'home');
+          const awayLabel = awayDisplay?.code ?? slotLabelFor(match.matchNumber, 'away');
+          return (
           <motion.div key={match.id} variants={staggerItem(reduced)}>
           <Link
             to={`/matches/${match.id}`}
@@ -781,14 +836,14 @@ function UpcomingMatchesSection({
             <div className="text-center min-w-0 flex-1">
               <p className="text-xs text-muted">{formatKickoff(match.kickoffUtc)} · {formatTime(match.kickoffUtc)}</p>
               <div className="flex items-center justify-center gap-2 mt-1">
-                <span className="flex items-center justify-end gap-1.5 text-sm font-semibold text-text flex-1 truncate">
-                  <TeamFlag code={match.homeTeam.code} emoji={match.homeTeam.flag} size={20} />
-                  {match.homeTeam.code}
+                <span className={`flex items-center justify-end gap-1.5 text-sm font-semibold flex-1 truncate ${homeReal ? 'text-text' : 'text-muted'}`}>
+                  {homeDisplay && <TeamFlag code={homeDisplay.code} emoji={homeDisplay.flag} size={20} />}
+                  {homeLabel}
                 </span>
                 <span className="text-xs text-muted font-bold">vs</span>
-                <span className="flex items-center justify-start gap-1.5 text-sm font-semibold text-text flex-1 truncate">
-                  {match.awayTeam.code}
-                  <TeamFlag code={match.awayTeam.code} emoji={match.awayTeam.flag} size={20} />
+                <span className={`flex items-center justify-start gap-1.5 text-sm font-semibold flex-1 truncate ${awayReal ? 'text-text' : 'text-muted'}`}>
+                  {awayLabel}
+                  {awayDisplay && <TeamFlag code={awayDisplay.code} emoji={awayDisplay.flag} size={20} />}
                 </span>
               </div>
               <p className="text-xs text-muted mt-0.5">{match.city}</p>
@@ -796,7 +851,8 @@ function UpcomingMatchesSection({
             <ChevronRight size={16} className="text-muted flex-shrink-0" />
           </Link>
           </motion.div>
-        ))}
+          );
+        })}
       </motion.div>
     </div>
   );
