@@ -67,6 +67,16 @@ export const matches = sqliteTable('matches', {
    * la corrección cada 3 min.
    */
   scoreLocked: integer('score_locked').notNull().default(0),
+  /**
+   * 1 cuando el partido de eliminación se definió por PENALES. El marcador
+   * guardado lleva +1 al ganador (lo suman los syncs para que el delta refleje
+   * al ganador), así que este flag es la única señal de que el resultado salió
+   * de la tanda — la lista de partidos no expone el timeline para inferirlo.
+   * Lo escriben sync-scores (football-data `duration=PENALTY_SHOOTOUT`) y
+   * sync-espn (cuando aplica el bump del ganador de la tanda). Permite a la UI
+   * (cuadro, lista) anotar "(pen.)" sin tener que cargar el timeline.
+   */
+  decidedByPenalties: integer('decided_by_penalties').notNull().default(0),
   apiFixtureId: integer('api_fixture_id'), // nullable — API-Football fixture ID (no longer used in free tier)
   // FIFA.com API identifiers for the per-match timeline endpoint. We use
   // FIFA's public API for player stats (goals/assists/cards) because

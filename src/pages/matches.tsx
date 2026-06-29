@@ -759,13 +759,16 @@ export function MatchesPage() {
               {(isLive || isFinished || isSuspended) && match.homeScore !== null ? (
                 <span
                   className={cn(
-                    'font-display font-bold tabular-nums px-2',
+                    'font-display font-bold tabular-nums px-2 inline-flex items-baseline gap-1',
                     isLive
                       ? isHalftime ? 'text-lg-s text-amber-600 dark:text-amber-400' : 'text-lg-s text-red-500'
                       : 'text-sm-s text-muted',
                   )}
                 >
                   {match.homeScore} – {match.awayScore}
+                  {isFinished && !!match.decidedByPenalties && (
+                    <span className="text-[9px] font-bold text-muted" title="Definido por penales">pen.</span>
+                  )}
                 </span>
               ) : (
                 <span className="text-xs-s font-bold text-muted">vs</span>

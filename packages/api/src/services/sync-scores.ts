@@ -138,7 +138,7 @@ interface OurMatch {
  *  - the bracket / champion picks would silently award everyone who
  *    predicted "draw" with `prophet` if it happened in the final.
  */
-function resolveFinalScore(score: FdMatch['score']): { home: number | null; away: number | null } {
+function resolveFinalScore(score: FdMatch['score']): { home: number | null; away: number | null; decidedByPenalties: boolean } {
   // Prefer extra-time score when present (knockouts that went to ET but
   // didn't reach penalties). Otherwise the canonical fullTime.
   const base = score.extraTime && (score.extraTime.home != null || score.extraTime.away != null)
@@ -146,11 +146,12 @@ function resolveFinalScore(score: FdMatch['score']): { home: number | null; away
     : score.fullTime;
   let home = base.home;
   let away = base.away;
-  if (score.duration === 'PENALTY_SHOOTOUT' && score.winner) {
+  const decidedByPenalties = score.duration === 'PENALTY_SHOOTOUT' && score.winner != null;
+  if (decidedByPenalties) {
     if (score.winner === 'HOME_TEAM' && home != null) home = home + 1;
     else if (score.winner === 'AWAY_TEAM' && away != null) away = away + 1;
   }
-  return { home, away };
+  return { home, away, decidedByPenalties };
 }
 
 /**
@@ -318,6 +319,9 @@ export async function syncScores(options: SyncScoresOptions = {}): Promise<SyncS
       if (!ourMatch.scoreLocked) {
         if (newHomeScore !== null) updatePayload.homeScore = newHomeScore;
         if (newAwayScore !== null) updatePayload.awayScore = newAwayScore;
+        // Definición por penales (football-data `duration=PENALTY_SHOOTOUT`):
+        // marca para que el cuadro/lista anoten "(pen.)" sin cargar el timeline.
+        if (resolved.decidedByPenalties) updatePayload.decidedByPenalties = 1;
       }
 
       // If a previously-finished match reverts to scheduled (POSTPONED

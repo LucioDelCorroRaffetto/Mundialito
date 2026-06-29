@@ -83,6 +83,7 @@ describe('resolveShootoutScore', () => {
     expect(r.homeScore).toBe(2);
     expect(r.awayScore).toBe(1);
     expect(r.shootoutWinnerUnknown).toBe(false);
+    expect(r.decidedByPenalties).toBe(true);
   });
 
   it('bumps the away side +1 when away won the shootout', () => {
@@ -90,6 +91,7 @@ describe('resolveShootoutScore', () => {
     expect(r.homeScore).toBe(0);
     expect(r.awayScore).toBe(1);
     expect(r.shootoutWinnerUnknown).toBe(false);
+    expect(r.decidedByPenalties).toBe(true);
   });
 
   it('HOLDS (winner unknown) when a tied KO finishes with no winner flag', () => {
@@ -106,17 +108,22 @@ describe('resolveShootoutScore', () => {
 
   it('does nothing for a non-shootout finished match', () => {
     const r = resolveShootoutScore('finished', 2, 1, { ...base, detail: 'Full Time' });
-    expect(r).toEqual({ homeScore: 2, awayScore: 1, shootoutWinnerUnknown: false });
+    expect(r).toEqual({ homeScore: 2, awayScore: 1, shootoutWinnerUnknown: false, decidedByPenalties: false });
   });
 
   it('does nothing when the KO scores are not tied (decided in regulation/ET)', () => {
     const r = resolveShootoutScore('finished', 2, 1, base);
-    expect(r).toEqual({ homeScore: 2, awayScore: 1, shootoutWinnerUnknown: false });
+    expect(r).toEqual({ homeScore: 2, awayScore: 1, shootoutWinnerUnknown: false, decidedByPenalties: false });
   });
 
   it('does nothing while the match is still live', () => {
     const r = resolveShootoutScore('live', 1, 1, { ...base, homeWinnerFlag: true });
-    expect(r).toEqual({ homeScore: 1, awayScore: 1, shootoutWinnerUnknown: false });
+    expect(r).toEqual({ homeScore: 1, awayScore: 1, shootoutWinnerUnknown: false, decidedByPenalties: false });
+  });
+
+  it('does NOT mark decidedByPenalties when the winner flag is missing (held)', () => {
+    const r = resolveShootoutScore('finished', 1, 1, base);
+    expect(r.decidedByPenalties).toBe(false);
   });
 });
 

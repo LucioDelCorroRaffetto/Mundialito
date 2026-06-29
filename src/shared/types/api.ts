@@ -47,6 +47,12 @@ export interface Match {
   currentMinute: string | null;
   homeScore: number | null;
   awayScore: number | null;
+  /**
+   * 1 cuando el cruce se definió por PENALES. El marcador guardado ya trae +1
+   * al ganador; este flag deja anotar "(pen.)" en el cuadro/lista sin el
+   * timeline. Ausente en payloads viejos ⇒ tratar como 0.
+   */
+  decidedByPenalties?: number;
   // Solo lo devuelve GET /matches/:id (no la lista). Acumulados por jugador.
   events?: MatchEvent[];
   // Timeline minuto-a-minuto: cada gol/asist/tarjeta en su instante.

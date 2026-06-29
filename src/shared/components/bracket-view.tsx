@@ -178,6 +178,10 @@ function MatchCard({ match, matchNumber, roundIndex, teamMap, projectedHome, pro
   const isLive     = match?.status === 'live';
   const isFinished = match?.status === 'finished';
   const showScore  = (isLive || isFinished) && match?.homeScore != null;
+  // Cruce definido por penales: el marcador guardado ya trae +1 al ganador, así
+  // que anotamos "p" junto al puntaje del ganador para que no se lea como un
+  // resultado normal.
+  const decidedByPen = isFinished && !!match?.decidedByPenalties;
 
   const homeLabel = homeTbd ? slotLabel(matchNumber, 'home', roundIndex) : homeTeam.code;
   const awayLabel = awayTbd ? slotLabel(matchNumber, 'away', roundIndex) : awayTeam.code;
@@ -229,10 +233,13 @@ function MatchCard({ match, matchNumber, roundIndex, teamMap, projectedHome, pro
       )}
       {showScore && score != null && (
         <span className={cn(
-          'text-[11px] font-black tabular-nums flex-shrink-0 min-w-[14px] text-right',
+          'text-[11px] font-black tabular-nums flex-shrink-0 text-right inline-flex items-baseline justify-end gap-0.5 min-w-[14px]',
           isLive ? 'text-red-500 dark:text-red-400' : won ? 'text-accent' : 'text-muted/70',
         )}>
           {score}
+          {won && decidedByPen && (
+            <span className="text-[7px] font-bold text-muted not-italic" title="Definido por penales">pen</span>
+          )}
         </span>
       )}
     </div>

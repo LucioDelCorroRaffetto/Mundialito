@@ -81,23 +81,24 @@ export function resolveShootoutScore(
   homeScore: number | null,
   awayScore: number | null,
   opts: { detail: string; homeWinnerFlag: boolean; awayWinnerFlag: boolean; alreadyFinished: boolean },
-): { homeScore: number | null; awayScore: number | null; shootoutWinnerUnknown: boolean } {
+): { homeScore: number | null; awayScore: number | null; shootoutWinnerUnknown: boolean; decidedByPenalties: boolean } {
   let home = homeScore;
   let away = awayScore;
   let shootoutWinnerUnknown = false;
+  let decidedByPenalties = false;
 
   if (newStatus === 'finished' && home != null && away != null) {
     const wasShootout = /penalt|shootout|tiros|tanda/i.test(opts.detail);
     if (wasShootout && home === away) {
-      if (opts.homeWinnerFlag && !opts.awayWinnerFlag) home += 1;
-      else if (opts.awayWinnerFlag && !opts.homeWinnerFlag) away += 1;
+      if (opts.homeWinnerFlag && !opts.awayWinnerFlag) { home += 1; decidedByPenalties = true; }
+      else if (opts.awayWinnerFlag && !opts.homeWinnerFlag) { away += 1; decidedByPenalties = true; }
       // Shootout but no (or contradictory) winner flag yet → don't finalize a
       // tied KO. Only hold while TRANSITIONING into finished.
       else if (!opts.alreadyFinished) shootoutWinnerUnknown = true;
     }
   }
 
-  return { homeScore: home, awayScore: away, shootoutWinnerUnknown };
+  return { homeScore: home, awayScore: away, shootoutWinnerUnknown, decidedByPenalties };
 }
 
 /**

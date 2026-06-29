@@ -152,15 +152,20 @@ function derivePenaltyShootout(match: Match): {
   regAway: number;
 } | null {
   const tl = match.timeline;
-  if (!tl?.some((e) => e.period === 5)) return null;
+  const hasPenaltyEvents = !!tl?.some((e) => e.period === 5);
+  // El flag `decidedByPenalties` (de los syncs) es la señal autoritativa; los
+  // eventos del timeline solo aportan el detalle de la tanda si están cargados.
+  if (!hasPenaltyEvents && !match.decidedByPenalties) return null;
   if (match.homeScore == null || match.awayScore == null) return null;
   if (match.homeScore === match.awayScore) return null; // ganador aún sin resolver
   let penHome = 0;
   let penAway = 0;
-  for (const e of tl) {
-    if (e.period !== 5 || e.type !== 'penalty_goal') continue;
-    if (e.teamId === match.homeTeamId) penHome++;
-    else if (e.teamId === match.awayTeamId) penAway++;
+  if (tl) {
+    for (const e of tl) {
+      if (e.period !== 5 || e.type !== 'penalty_goal') continue;
+      if (e.teamId === match.homeTeamId) penHome++;
+      else if (e.teamId === match.awayTeamId) penAway++;
+    }
   }
   const winnerIsHome = match.homeScore > match.awayScore;
   return {
