@@ -51,10 +51,13 @@ export function resolveBracketSlot(
 // ─── Propagación de ganadores por el cuadro (Octavos → Final + 3er puesto) ──────
 //
 // A diferencia de la R32 (que se proyecta desde la fase de grupos), los slots de
-// las rondas siguientes se llenan con el GANADOR del partido hijo en cuanto ese
-// partido termina, sin esperar a que el feed asigne el equipo al cruce. Como todo
-// se deriva de `matches`, el cuadro se va completando solo a medida que llegan
-// los resultados.
+// las rondas siguientes se llenan con el GANADOR del cruce hijo en cuanto ese
+// partido termina. CLAVE: los partidos de eliminación en la DB no traen los
+// equipos reales (FIFA los asigna tarde — homeTeamId/awayTeamId quedan en el
+// placeholder TBD), así que NO podemos leer el ganador de match.homeTeamId. La
+// identidad del equipo sale de la misma proyección que usa el cuadro (grupos en
+// R32, recursión en rondas siguientes); el MARCADOR del partido decide qué lado
+// ganó. Todo se deriva de `matches`, así que el cuadro se completa solo.
 
 /** matchNumber → [hijoHome, hijoAway] para las rondas con cruce (R16 en adelante). */
 const CHILDREN_BY_MATCH: Map<number, [number, number]> = (() => {
@@ -67,6 +70,11 @@ const CHILDREN_BY_MATCH: Map<number, [number, number]> = (() => {
   return map;
 })();
 
+const PLACEHOLDER_CODES = new Set(['TBD', '???']);
+function isRealTeam(team: Team | undefined): team is Team {
+  return !!team && team.id > 0 && !PLACEHOLDER_CODES.has(team.code);
+}
+
 function isDecided(match: Match | undefined): match is Match {
   return (
     !!match &&
@@ -77,37 +85,64 @@ function isDecided(match: Match | undefined): match is Match {
   );
 }
 
-/**
- * Ganador (teamId) de un partido resuelto en tiempo regular/alargue. Devuelve
- * null si no terminó, no tiene marcador o quedó empatado (definición por penales
- * que la lista de partidos no expone → se espera a que el feed asigne el cruce).
- */
-export function matchWinnerId(match: Match | undefined): number | null {
-  if (!isDecided(match)) return null;
-  return match.homeScore! > match.awayScore! ? match.homeTeamId : match.awayTeamId;
-}
-
-/** Perdedor (teamId) de un partido resuelto — usado para el cruce de 3er puesto. */
-export function matchLoserId(match: Match | undefined): number | null {
-  if (!isDecided(match)) return null;
-  return match.homeScore! > match.awayScore! ? match.awayTeamId : match.homeTeamId;
+/** Datos compartidos para resolver la identidad de un slot del cuadro. */
+export interface SlotContext {
+  matchByNum: Map<number, Match>;
+  teamMap: Map<number, Team> | undefined;
+  projection: BracketProjection;
 }
 
 /**
- * Equipo proyectado (teamId) para un slot de las rondas de cruce — el ganador del
- * partido hijo correspondiente, o el perdedor de la semi para el 3er puesto.
- * Devuelve null si el hijo todavía no está resuelto.
+ * Equipo que ocupa un slot (home/away) de cualquier partido del cuadro:
+ *  1) el equipo real si el feed ya lo asignó;
+ *  2) en la R32, la proyección de la fase de grupos (1°/2° o mejor 3ro);
+ *  3) en rondas de cruce, el GANADOR del hijo correspondiente (recursivo);
+ *  4) en el 3er puesto, el PERDEDOR de la semi correspondiente.
+ * Devuelve null si todavía no se puede determinar.
  */
-export function resolveKnockoutSlotId(
+export function resolveAdvancingSlot(
   matchNumber: number,
   side: 'home' | 'away',
-  matchByNum: Map<number, Match>,
-): number | null {
+  ctx: SlotContext,
+): Team | null {
+  // 1. Equipo real ya asignado por el feed.
+  const m = ctx.matchByNum.get(matchNumber);
+  if (m) {
+    const realId = side === 'home' ? m.homeTeamId : m.awayTeamId;
+    const real = ctx.teamMap?.get(realId);
+    if (isRealTeam(real)) return real;
+  }
+  // 2. R32: proyección desde la fase de grupos.
+  if (R32_LABELS[matchNumber]) {
+    return resolveBracketSlot(matchNumber, side, ctx.projection)?.team ?? null;
+  }
+  // 3. 3er puesto: perdedor de la semifinal correspondiente.
   if (matchNumber === THIRD_PLACE_MATCH.matchNumber) {
     const [sfA, sfB] = THIRD_PLACE_MATCH.children ?? [101, 102];
-    return matchLoserId(matchByNum.get(side === 'home' ? sfA : sfB));
+    return resolveOutcome(side === 'home' ? sfA : sfB, 'loser', ctx);
   }
+  // 4. Ronda de cruce: ganador del hijo que alimenta este lado.
   const children = CHILDREN_BY_MATCH.get(matchNumber);
   if (!children) return null;
-  return matchWinnerId(matchByNum.get(side === 'home' ? children[0] : children[1]));
+  return resolveOutcome(side === 'home' ? children[0] : children[1], 'winner', ctx);
+}
+
+/**
+ * Ganador o perdedor de un partido del cuadro: resuelve las identidades de ambos
+ * lados (vía proyección/recursión) y usa el marcador para elegir. null si el
+ * partido no terminó o quedó empatado (los penales ya vienen con +1 al ganador,
+ * así que un empate finished implica definición aún no resuelta).
+ */
+function resolveOutcome(
+  matchNumber: number,
+  which: 'winner' | 'loser',
+  ctx: SlotContext,
+): Team | null {
+  const m = ctx.matchByNum.get(matchNumber);
+  if (!isDecided(m)) return null;
+  const home = resolveAdvancingSlot(matchNumber, 'home', ctx);
+  const away = resolveAdvancingSlot(matchNumber, 'away', ctx);
+  const homeWon = m.homeScore! > m.awayScore!;
+  const advancing = which === 'winner' ? homeWon : !homeWon;
+  return advancing ? home : away;
 }

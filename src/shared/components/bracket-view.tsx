@@ -5,8 +5,7 @@ import { cn } from '@/shared/lib/cn';
 import { BRACKET_ROUNDS, THIRD_PLACE_MATCH, R32_LABELS } from '@/shared/data/bracket';
 import {
   computeBracketProjection,
-  resolveBracketSlot,
-  resolveKnockoutSlotId,
+  resolveAdvancingSlot,
 } from '@/shared/lib/bracket-projection';
 import type { Match, Team } from '@/shared/types/api';
 
@@ -34,14 +33,6 @@ function isTbd(team: Team) {
   return team.code === 'TBD' || team.id === 0;
 }
 
-/** Equipo proyectado para un slot de cruce a partir de su teamId (o null). */
-function getProjectedTeam(
-  teamId: number | null,
-  teamMap: Map<number, Team> | undefined,
-): Team | null {
-  if (teamId == null) return null;
-  return teamMap?.get(teamId) ?? null;
-}
 
 function slotLabel(matchNumber: number, side: 'home' | 'away', roundIndex: number): string {
   if (roundIndex === 0) return R32_LABELS[matchNumber]?.[side] ?? 'Por definir';
@@ -292,6 +283,13 @@ export function BracketView({ matches, teamMap, teams }: Props) {
     [teams, matches],
   );
 
+  // Contexto único para resolver la identidad de cada slot del cuadro (equipo
+  // real, proyección de grupos en R32, o ganador del cruce anterior).
+  const slotCtx = useMemo(
+    () => ({ matchByNum, teamMap, projection }),
+    [matchByNum, teamMap, projection],
+  );
+
   const positions = useMemo(() => computePositions(), []);
 
   const rounds = [
@@ -355,16 +353,8 @@ export function BracketView({ matches, teamMap, teams }: Props) {
                           matchNumber={mn}
                           roundIndex={ri}
                           teamMap={teamMap}
-                          projectedHome={
-                            ri === 0
-                              ? resolveBracketSlot(mn, 'home', projection)?.team ?? null
-                              : getProjectedTeam(resolveKnockoutSlotId(mn, 'home', matchByNum), teamMap)
-                          }
-                          projectedAway={
-                            ri === 0
-                              ? resolveBracketSlot(mn, 'away', projection)?.team ?? null
-                              : getProjectedTeam(resolveKnockoutSlotId(mn, 'away', matchByNum), teamMap)
-                          }
+                          projectedHome={resolveAdvancingSlot(mn, 'home', slotCtx)}
+                          projectedAway={resolveAdvancingSlot(mn, 'away', slotCtx)}
                         />
                       </div>
                     );
@@ -400,14 +390,8 @@ export function BracketView({ matches, teamMap, teams }: Props) {
           matchNumber={THIRD_PLACE_MATCH.matchNumber}
           roundIndex={3}
           teamMap={teamMap}
-          projectedHome={getProjectedTeam(
-            resolveKnockoutSlotId(THIRD_PLACE_MATCH.matchNumber, 'home', matchByNum),
-            teamMap,
-          )}
-          projectedAway={getProjectedTeam(
-            resolveKnockoutSlotId(THIRD_PLACE_MATCH.matchNumber, 'away', matchByNum),
-            teamMap,
-          )}
+          projectedHome={resolveAdvancingSlot(THIRD_PLACE_MATCH.matchNumber, 'home', slotCtx)}
+          projectedAway={resolveAdvancingSlot(THIRD_PLACE_MATCH.matchNumber, 'away', slotCtx)}
         />
       </div>
 

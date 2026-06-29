@@ -22,7 +22,7 @@ import type { Match } from '@/shared/types/api';
 import { play } from '@/shared/lib/sounds';
 import { useTeamMap } from '@/shared/hooks/use-teams';
 import { useBracketProjection } from '@/shared/hooks/use-bracket-projection';
-import { resolveBracketSlot, resolveKnockoutSlotId } from '@/shared/lib/bracket-projection';
+import { resolveBracketSlot, resolveAdvancingSlot } from '@/shared/lib/bracket-projection';
 import { useMyLeagues } from '@/shared/hooks/use-leagues';
 import { getTeamColors, hexToRgba } from '@/shared/data/team-colors';
 
@@ -531,6 +531,10 @@ export function MatchDetailPage() {
     () => new Map((allMatchesResp?.data ?? []).map((m) => [m.matchNumber, m])),
     [allMatchesResp],
   );
+  const slotCtx = useMemo(
+    () => ({ matchByNum, teamMap, projection: bracketProjection }),
+    [matchByNum, teamMap, bracketProjection],
+  );
 
   // leagueId is only used for viewing league predictions — not for saving.
   // Guard against `?leagueId=abc` which would produce NaN and poison every
@@ -687,10 +691,10 @@ export function MatchDetailPage() {
   // Ganador del cruce anterior, para octavos+ cuyos equipos la DB todavía no
   // asignó (solo display; el pronóstico sigue gobernado por homeOfficialTbd).
   const homeKnockout = homeOfficialTbd && !homeProjection
-    ? teamMap?.get(resolveKnockoutSlotId(match.matchNumber, 'home', matchByNum) ?? -1) ?? null
+    ? resolveAdvancingSlot(match.matchNumber, 'home', slotCtx)
     : null;
   const awayKnockout = awayOfficialTbd && !awayProjection
-    ? teamMap?.get(resolveKnockoutSlotId(match.matchNumber, 'away', matchByNum) ?? -1) ?? null
+    ? resolveAdvancingSlot(match.matchNumber, 'away', slotCtx)
     : null;
 
   const homeTeamDisplay = homeProjection?.team ?? homeKnockout ?? homeTeam ?? { id: match.homeTeamId, name: String(match.homeTeamId), code: '?', flag: '🏳️', group: null, confederation: null };

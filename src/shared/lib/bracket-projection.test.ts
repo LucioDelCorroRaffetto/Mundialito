@@ -1,76 +1,79 @@
 import { describe, it, expect } from 'vitest';
-import { matchWinnerId, matchLoserId, resolveKnockoutSlotId } from './bracket-projection';
+import { resolveAdvancingSlot, type SlotContext } from './bracket-projection';
+import type { BracketProjection } from './bracket-projection';
 import { THIRD_PLACE_MATCH } from '@/shared/data/bracket';
-import type { Match } from '@/shared/types/api';
+import type { Match, Team } from '@/shared/types/api';
 
-function mkMatch(matchNumber: number, homeTeamId: number, awayTeamId: number, partial: Partial<Match> = {}): Match {
+const TBD_ID = 49; // placeholder real en la DB de prod (code 'TBD')
+
+function team(id: number, code: string): Team {
+  return { id, code, flag: '🏳️', name: code, group: null, confederation: null };
+}
+
+// En producción los partidos de eliminación NO traen equipos reales: ambos lados
+// quedan en el placeholder TBD (id 49). Por eso el default refleja esa realidad.
+function mkMatch(matchNumber: number, partial: Partial<Match> = {}): Match {
   return {
-    id: matchNumber, matchNumber, homeTeamId, awayTeamId,
+    id: matchNumber, matchNumber, homeTeamId: TBD_ID, awayTeamId: TBD_ID,
     kickoffUtc: '', predictionLockUtc: '', venue: '', city: '', group: null, round: 'knockout',
     status: 'finished', liveStatus: null, currentMinute: null, homeScore: null, awayScore: null,
     ...partial,
   };
 }
 
-describe('matchWinnerId / matchLoserId', () => {
-  it('devuelve ganador/perdedor cuando el partido terminó con marcador definido', () => {
-    const m = mkMatch(89, 10, 20, { homeScore: 2, awayScore: 1 });
-    expect(matchWinnerId(m)).toBe(10);
-    expect(matchLoserId(m)).toBe(20);
+const ZAF = team(10, 'ZAF');
+const CAN = team(11, 'CAN');
+const teamMap = new Map<number, Team>([[TBD_ID, team(TBD_ID, 'TBD')], [ZAF.id, ZAF], [CAN.id, CAN]]);
+
+// Proyección mínima: 2° de grupo A = ZAF, 2° de grupo B = CAN (los slots home/away
+// de M73 = "2° Grp A" / "2° Grp B"). Eso es lo que muestra el cuadro hoy.
+const projection: BracketProjection = {
+  clinches: new Map([
+    ['A', { first: null, second: ZAF, slot1: null, slot2: { team: ZAF, confirmed: true } }],
+    ['B', { first: null, second: CAN, slot1: null, slot2: { team: CAN, confirmed: true } }],
+  ]),
+  thirdSlots: new Map(),
+};
+
+function ctxWith(matches: Match[]): SlotContext {
+  return { matchByNum: new Map(matches.map((m) => [m.matchNumber, m])), teamMap, projection };
+}
+
+describe('resolveAdvancingSlot — identidad vía proyección, no team IDs del partido', () => {
+  it('R32: resuelve cada lado desde la fase de grupos aunque el partido tenga TBD', () => {
+    const ctx = ctxWith([mkMatch(73, { homeScore: 0, awayScore: 1 })]);
+    expect(resolveAdvancingSlot(73, 'home', ctx)?.code).toBe('ZAF');
+    expect(resolveAdvancingSlot(73, 'away', ctx)?.code).toBe('CAN');
   });
 
-  it('respeta la orientación cuando gana el visitante', () => {
-    const m = mkMatch(89, 10, 20, { homeScore: 0, awayScore: 3 });
-    expect(matchWinnerId(m)).toBe(20);
-    expect(matchLoserId(m)).toBe(10);
+  it('propaga el GANADOR (por marcador) al cruce siguiente — el bug de Canadá', () => {
+    // M73 termina ZAF 0 - 1 CAN (ambos con team_id = 49 en la DB). El ganador
+    // se decide por el marcador y la identidad sale de la proyección: CAN.
+    // M90 children = [73, 75] → su slot home es el ganador de M73.
+    const ctx = ctxWith([mkMatch(73, { homeScore: 0, awayScore: 1 })]);
+    expect(resolveAdvancingSlot(90, 'home', ctx)?.code).toBe('CAN');
   });
 
-  it('devuelve null si no terminó', () => {
-    const m = mkMatch(89, 10, 20, { status: 'live', homeScore: 1, awayScore: 0 });
-    expect(matchWinnerId(m)).toBeNull();
+  it('no propaga mientras el cruce hijo no terminó', () => {
+    const ctx = ctxWith([mkMatch(73, { status: 'live', homeScore: 0, awayScore: 1 })]);
+    expect(resolveAdvancingSlot(90, 'home', ctx)).toBeNull();
   });
 
-  it('devuelve null si está empatado (definición por penales, no expuesta en la lista)', () => {
-    const m = mkMatch(89, 10, 20, { homeScore: 1, awayScore: 1 });
-    expect(matchWinnerId(m)).toBeNull();
-    expect(matchLoserId(m)).toBeNull();
+  it('no propaga un empate finished (penales aún sin resolver en el marcador)', () => {
+    const ctx = ctxWith([mkMatch(73, { homeScore: 1, awayScore: 1 })]);
+    expect(resolveAdvancingSlot(90, 'home', ctx)).toBeNull();
   });
 
-  it('devuelve null si falta el marcador', () => {
-    expect(matchWinnerId(mkMatch(89, 10, 20))).toBeNull();
-    expect(matchWinnerId(undefined)).toBeNull();
+  it('prioriza el equipo REAL si el feed ya lo asignó al cruce', () => {
+    const ctx = ctxWith([mkMatch(90, { homeTeamId: CAN.id, awayTeamId: TBD_ID, status: 'scheduled' })]);
+    expect(resolveAdvancingSlot(90, 'home', ctx)?.code).toBe('CAN');
   });
-});
 
-describe('resolveKnockoutSlotId — propagación de ganadores por el cuadro', () => {
-  it('lleva el ganador del hijo al slot del cruce (Octavos M89 ← R32 74/77)', () => {
-    // M89 children = [74, 77] (ver bracket.ts)
-    const byNum = new Map<number, Match>([
-      [74, mkMatch(74, 100, 101, { homeScore: 2, awayScore: 0 })], // gana 100
-      [77, mkMatch(77, 200, 201, { homeScore: 0, awayScore: 1 })], // gana 201
+  it('3er puesto: toma el PERDEDOR de la semi (con equipos reales en la semi)', () => {
+    // M101 con equipos reales: ZAF 1 - 0 CAN → pierde CAN → va al 3er puesto.
+    const ctx = ctxWith([
+      mkMatch(101, { homeTeamId: ZAF.id, awayTeamId: CAN.id, homeScore: 1, awayScore: 0 }),
     ]);
-    expect(resolveKnockoutSlotId(89, 'home', byNum)).toBe(100);
-    expect(resolveKnockoutSlotId(89, 'away', byNum)).toBe(201);
-  });
-
-  it('deja null el slot mientras el hijo no esté resuelto', () => {
-    const byNum = new Map<number, Match>([
-      [74, mkMatch(74, 100, 101, { status: 'scheduled' })],
-    ]);
-    expect(resolveKnockoutSlotId(89, 'home', byNum)).toBeNull();
-    expect(resolveKnockoutSlotId(89, 'away', byNum)).toBeNull(); // M77 ni existe
-  });
-
-  it('3er puesto: toma los PERDEDORES de las semifinales (101 / 102)', () => {
-    const byNum = new Map<number, Match>([
-      [101, mkMatch(101, 300, 301, { homeScore: 1, awayScore: 0 })], // pierde 301
-      [102, mkMatch(102, 400, 401, { homeScore: 2, awayScore: 3 })], // pierde 400
-    ]);
-    expect(resolveKnockoutSlotId(THIRD_PLACE_MATCH.matchNumber, 'home', byNum)).toBe(301);
-    expect(resolveKnockoutSlotId(THIRD_PLACE_MATCH.matchNumber, 'away', byNum)).toBe(400);
-  });
-
-  it('no proyecta nada para la R32 (sus slots salen de la fase de grupos)', () => {
-    expect(resolveKnockoutSlotId(74, 'home', new Map())).toBeNull();
+    expect(resolveAdvancingSlot(THIRD_PLACE_MATCH.matchNumber, 'home', ctx)?.code).toBe('CAN');
   });
 });

@@ -21,7 +21,7 @@ import { TeamFlag } from '@/shared/components/ui/team-flag';
 import { useBracketProjection } from '@/shared/hooks/use-bracket-projection';
 import {
   resolveBracketSlot,
-  resolveKnockoutSlotId,
+  resolveAdvancingSlot,
   type BracketProjection,
 } from '@/shared/lib/bracket-projection';
 import { R32_LABELS } from '@/shared/data/bracket';
@@ -816,8 +816,10 @@ function UpcomingMatchesSection({
     () => new Map((allMatches?.data ?? []).map((m) => [m.matchNumber, m])),
     [allMatches],
   );
-  const projectKnockout = (matchNumber: number, side: 'home' | 'away') =>
-    teamMap?.get(resolveKnockoutSlotId(matchNumber, side, matchByNum) ?? -1) ?? null;
+  const slotCtx = useMemo(
+    () => ({ matchByNum, teamMap, projection }),
+    [matchByNum, teamMap, projection],
+  );
   return (
     <div>
       <div className="flex items-center justify-between mb-3">
@@ -835,12 +837,10 @@ function UpcomingMatchesSection({
           const awayReal = isRealTeam(match.awayTeam);
           const homeDisplay = homeReal
             ? match.homeTeam
-            : resolveBracketSlot(match.matchNumber, 'home', projection)?.team
-              ?? projectKnockout(match.matchNumber, 'home');
+            : resolveAdvancingSlot(match.matchNumber, 'home', slotCtx);
           const awayDisplay = awayReal
             ? match.awayTeam
-            : resolveBracketSlot(match.matchNumber, 'away', projection)?.team
-              ?? projectKnockout(match.matchNumber, 'away');
+            : resolveAdvancingSlot(match.matchNumber, 'away', slotCtx);
           const homeLabel = homeDisplay?.code ?? slotLabelFor(match.matchNumber, 'home');
           const awayLabel = awayDisplay?.code ?? slotLabelFor(match.matchNumber, 'away');
           return (

@@ -14,11 +14,7 @@ import { GroupStandings } from '@/shared/components/group-standings';
 import { ThirdPlaceTable } from '@/shared/components/third-place-table';
 import { BracketView } from '@/shared/components/bracket-view';
 import { R32_LABELS } from '@/shared/data/bracket';
-import {
-  computeBracketProjection,
-  resolveBracketSlot,
-  resolveKnockoutSlotId,
-} from '@/shared/lib/bracket-projection';
+import { computeBracketProjection, resolveAdvancingSlot } from '@/shared/lib/bracket-projection';
 import { cn } from '@/shared/lib/cn';
 import { SkeletonList } from '@/shared/components/skeleton';
 
@@ -322,11 +318,15 @@ export function MatchesPage() {
     [teams, matches],
   );
 
-  // Para proyectar el ganador de un cruce en su partido siguiente (igual que el
-  // Cuadro): mapa matchNumber → Match sobre el que resuelve resolveKnockoutSlotId.
+  // Contexto para resolver la identidad de cada slot (igual que el Cuadro):
+  // equipo real, proyección de grupos en R32, o ganador del cruce anterior.
   const matchByNum = useMemo(
     () => new Map(matches.map((m) => [m.matchNumber, m])),
     [matches],
+  );
+  const slotCtx = useMemo(
+    () => ({ matchByNum, teamMap, projection: bracketProjection }),
+    [matchByNum, teamMap, bracketProjection],
   );
 
   // Filtro inicial (una sola vez, cuando ya hay datos): el deep-link ?filter=
@@ -623,16 +623,8 @@ export function MatchesPage() {
     // Para cruces de eliminación aún sin definir, proyectar el equipo: en la R32
     // desde la fase de grupos (1°/2° o mejor 3ro); de octavos en adelante, el
     // ganador del cruce anterior — igual que el Cuadro — en vez de "Por definir".
-    const projHome = isRealTeam(homeTeam)
-      ? null
-      : resolveBracketSlot(match.matchNumber, 'home', bracketProjection)?.team
-        ?? teamMap?.get(resolveKnockoutSlotId(match.matchNumber, 'home', matchByNum) ?? -1)
-        ?? null;
-    const projAway = isRealTeam(awayTeam)
-      ? null
-      : resolveBracketSlot(match.matchNumber, 'away', bracketProjection)?.team
-        ?? teamMap?.get(resolveKnockoutSlotId(match.matchNumber, 'away', matchByNum) ?? -1)
-        ?? null;
+    const projHome = isRealTeam(homeTeam) ? null : resolveAdvancingSlot(match.matchNumber, 'home', slotCtx);
+    const projAway = isRealTeam(awayTeam) ? null : resolveAdvancingSlot(match.matchNumber, 'away', slotCtx);
     const isLive = match.status === 'live';
     const isFinished = match.status === 'finished';
     const isScheduled = match.status === 'scheduled';
