@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, memo } from 'react';
+import { useState, useEffect, useRef, useMemo, memo } from 'react';
 import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { ArrowLeft, Clock, MapPin, CheckCircle2, Share2, Users, Plus, Minus, Lock, ArrowRightLeft } from 'lucide-react';
@@ -17,11 +17,12 @@ import { useMatchForecast } from '@/shared/hooks/use-forecasts';
 import { apiClient } from '@/shared/lib/api-client';
 import type { LeagueMemberPrediction } from '@/shared/hooks/use-predictions';
 import { useHaptic } from '@/shared/hooks/use-haptic';
-import { useMatch } from '@/shared/hooks/use-matches';
+import { useMatch, useMatches } from '@/shared/hooks/use-matches';
+import type { Match } from '@/shared/types/api';
 import { play } from '@/shared/lib/sounds';
 import { useTeamMap } from '@/shared/hooks/use-teams';
 import { useBracketProjection } from '@/shared/hooks/use-bracket-projection';
-import { resolveBracketSlot } from '@/shared/lib/bracket-projection';
+import { resolveBracketSlot, resolveKnockoutSlotId } from '@/shared/lib/bracket-projection';
 import { useMyLeagues } from '@/shared/hooks/use-leagues';
 import { getTeamColors, hexToRgba } from '@/shared/data/team-colors';
 
@@ -135,6 +136,39 @@ function liveStatusLabel(liveStatus: string | null | undefined): string | null {
     case 'penalty_shootout':  return 'Penales';
     default:                  return null;
   }
+}
+
+/**
+ * Reconstruye la definición por penales a partir del timeline (período 5). El
+ * marcador guardado trae +1 al ganador (lo suman los syncs para que el delta
+ * refleje al ganador), así que el marcador del TIEMPO REGLAMENTARIO se obtiene
+ * restándole ese 1 al lado ganador. La tanda se cuenta con los `penalty_goal`
+ * del período 5 por equipo. Devuelve null si el partido no fue a penales.
+ */
+function derivePenaltyShootout(match: Match): {
+  penHome: number;
+  penAway: number;
+  regHome: number;
+  regAway: number;
+} | null {
+  const tl = match.timeline;
+  if (!tl?.some((e) => e.period === 5)) return null;
+  if (match.homeScore == null || match.awayScore == null) return null;
+  if (match.homeScore === match.awayScore) return null; // ganador aún sin resolver
+  let penHome = 0;
+  let penAway = 0;
+  for (const e of tl) {
+    if (e.period !== 5 || e.type !== 'penalty_goal') continue;
+    if (e.teamId === match.homeTeamId) penHome++;
+    else if (e.teamId === match.awayTeamId) penAway++;
+  }
+  const winnerIsHome = match.homeScore > match.awayScore;
+  return {
+    penHome,
+    penAway,
+    regHome: winnerIsHome ? match.homeScore - 1 : match.homeScore,
+    regAway: winnerIsHome ? match.awayScore : match.awayScore - 1,
+  };
 }
 
 function formatDate(utc: string) {
@@ -485,6 +519,13 @@ export function MatchDetailPage() {
   // Proyección del cuadro: para mostrar el equipo (ej. el 1° de grupo ya
   // clasificado) en un cruce de R32 cuyo rival/equipo todavía no está oficial.
   const bracketProjection = useBracketProjection();
+  // Para octavos en adelante, proyectar el GANADOR del cruce anterior ya jugado
+  // (solo display: no habilita el pronóstico hasta que el cruce sea oficial).
+  const { data: allMatchesResp } = useMatches({ limit: 200 });
+  const matchByNum = useMemo(
+    () => new Map((allMatchesResp?.data ?? []).map((m) => [m.matchNumber, m])),
+    [allMatchesResp],
+  );
 
   // leagueId is only used for viewing league predictions — not for saving.
   // Guard against `?leagueId=abc` which would produce NaN and poison every
@@ -638,8 +679,20 @@ export function MatchDetailPage() {
   const homeProjection = homeOfficialTbd ? resolveBracketSlot(match.matchNumber, 'home', bracketProjection) : null;
   const awayProjection = awayOfficialTbd ? resolveBracketSlot(match.matchNumber, 'away', bracketProjection) : null;
 
-  const homeTeamDisplay = homeProjection?.team ?? homeTeam ?? { id: match.homeTeamId, name: String(match.homeTeamId), code: '?', flag: '🏳️', group: null, confederation: null };
-  const awayTeamDisplay = awayProjection?.team ?? awayTeam ?? { id: match.awayTeamId, name: String(match.awayTeamId), code: '?', flag: '🏳️', group: null, confederation: null };
+  // Ganador del cruce anterior, para octavos+ cuyos equipos la DB todavía no
+  // asignó (solo display; el pronóstico sigue gobernado por homeOfficialTbd).
+  const homeKnockout = homeOfficialTbd && !homeProjection
+    ? teamMap?.get(resolveKnockoutSlotId(match.matchNumber, 'home', matchByNum) ?? -1) ?? null
+    : null;
+  const awayKnockout = awayOfficialTbd && !awayProjection
+    ? teamMap?.get(resolveKnockoutSlotId(match.matchNumber, 'away', matchByNum) ?? -1) ?? null
+    : null;
+
+  const homeTeamDisplay = homeProjection?.team ?? homeKnockout ?? homeTeam ?? { id: match.homeTeamId, name: String(match.homeTeamId), code: '?', flag: '🏳️', group: null, confederation: null };
+  const awayTeamDisplay = awayProjection?.team ?? awayKnockout ?? awayTeam ?? { id: match.awayTeamId, name: String(match.awayTeamId), code: '?', flag: '🏳️', group: null, confederation: null };
+
+  // Definición por penales (reconstruida del timeline) para anotar el resultado.
+  const shootout = match.status === 'finished' ? derivePenaltyShootout(match) : null;
 
   // Knock-out matches with undetermined opponents can't be predicted yet.
   // Exception: if the bracket projection has confirmed the team (group fully
@@ -914,7 +967,18 @@ export function MatchDetailPage() {
               </div>
             </div>
             {match.status === 'finished' && (
-              <span className="text-xs-s text-muted mt-1">Resultado final</span>
+              shootout ? (
+                <span className="text-xs-s text-muted mt-1 text-center">
+                  {shootout.regHome} – {shootout.regAway} en el juego ·{' '}
+                  <span className="font-semibold text-text">
+                    {shootout.penHome > 0 || shootout.penAway > 0
+                      ? `${shootout.penHome}–${shootout.penAway} en penales`
+                      : 'definido por penales'}
+                  </span>
+                </span>
+              ) : (
+                <span className="text-xs-s text-muted mt-1">Resultado final</span>
+              )
             )}
           </div>
         ) : isPredictionLocked ? (

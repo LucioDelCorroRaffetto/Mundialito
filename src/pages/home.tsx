@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Plus, Search, Trophy, ChevronRight, AlertCircle, Sparkles, Bell, Volume2, X } from 'lucide-react';
@@ -19,7 +19,11 @@ import type { Match, Team } from '@/shared/types/api';
 import { Button } from '@/shared/components/ui/button';
 import { TeamFlag } from '@/shared/components/ui/team-flag';
 import { useBracketProjection } from '@/shared/hooks/use-bracket-projection';
-import { resolveBracketSlot, type BracketProjection } from '@/shared/lib/bracket-projection';
+import {
+  resolveBracketSlot,
+  resolveKnockoutSlotId,
+  type BracketProjection,
+} from '@/shared/lib/bracket-projection';
 import { R32_LABELS } from '@/shared/data/bracket';
 
 /** Un equipo "real" es uno ya definido en la DB — no el placeholder TBD/??? que
@@ -804,6 +808,16 @@ function UpcomingMatchesSection({
   // Reusa los queries cacheados de matches/teams, así que no agrega red si ya
   // se pidieron en otra pantalla.
   const projection = useBracketProjection();
+  // Para octavos en adelante, además del 1°/2° de grupo proyectamos el GANADOR
+  // del cruce anterior una vez jugado — igual que el Cuadro y la lista Partidos.
+  const { data: allMatches } = useMatches({ limit: 200 });
+  const { data: teamMap } = useTeamMap();
+  const matchByNum = useMemo(
+    () => new Map((allMatches?.data ?? []).map((m) => [m.matchNumber, m])),
+    [allMatches],
+  );
+  const projectKnockout = (matchNumber: number, side: 'home' | 'away') =>
+    teamMap?.get(resolveKnockoutSlotId(matchNumber, side, matchByNum) ?? -1) ?? null;
   return (
     <div>
       <div className="flex items-center justify-between mb-3">
@@ -821,10 +835,12 @@ function UpcomingMatchesSection({
           const awayReal = isRealTeam(match.awayTeam);
           const homeDisplay = homeReal
             ? match.homeTeam
-            : resolveBracketSlot(match.matchNumber, 'home', projection)?.team ?? null;
+            : resolveBracketSlot(match.matchNumber, 'home', projection)?.team
+              ?? projectKnockout(match.matchNumber, 'home');
           const awayDisplay = awayReal
             ? match.awayTeam
-            : resolveBracketSlot(match.matchNumber, 'away', projection)?.team ?? null;
+            : resolveBracketSlot(match.matchNumber, 'away', projection)?.team
+              ?? projectKnockout(match.matchNumber, 'away');
           const homeLabel = homeDisplay?.code ?? slotLabelFor(match.matchNumber, 'home');
           const awayLabel = awayDisplay?.code ?? slotLabelFor(match.matchNumber, 'away');
           return (

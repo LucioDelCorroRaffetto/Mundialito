@@ -127,4 +127,5 @@ export const BRACKET_ROUNDS: BracketRound[] = [
   },
 ];
 
-export const THIRD_PLACE_MATCH: BracketMatch = { matchNumber: 103 };
+/** 3er puesto (M103): lo juegan los PERDEDORES de las dos semifinales. */
+export const THIRD_PLACE_MATCH: BracketMatch = { matchNumber: 103, children: [101, 102] };

@@ -14,8 +14,11 @@ import { GroupStandings } from '@/shared/components/group-standings';
 import { ThirdPlaceTable } from '@/shared/components/third-place-table';
 import { BracketView } from '@/shared/components/bracket-view';
 import { R32_LABELS } from '@/shared/data/bracket';
-import { computeBracketProjection, resolveBracketSlot } from '@/shared/lib/bracket-projection';
-import type { SlotResolution } from '@/shared/lib/group-clinch';
+import {
+  computeBracketProjection,
+  resolveBracketSlot,
+  resolveKnockoutSlotId,
+} from '@/shared/lib/bracket-projection';
 import { cn } from '@/shared/lib/cn';
 import { SkeletonList } from '@/shared/components/skeleton';
 
@@ -76,32 +79,21 @@ function slotLabelFor(matchNumber: number, side: 'home' | 'away'): string {
   return R32_LABELS[matchNumber]?.[side] ?? 'Por definir';
 }
 
-/** Marcador junto a un equipo proyectado: ✓ verde = posición confirmada
- *  matemáticamente; ≈ ámbar = clasificado pero con el orden 1°/2° por definir. */
-function ClinchMark({ confirmed }: { confirmed: boolean }) {
-  return confirmed ? (
-    <span className="text-[10px] text-green-500 dark:text-green-400 font-black flex-shrink-0" title="Posición confirmada matemáticamente">✓</span>
-  ) : (
-    <span className="text-[10px] text-amber-500 dark:text-amber-400 font-black flex-shrink-0" title="Clasificado · orden 1°/2° por definir (ubicación provisional)">≈</span>
-  );
-}
-
 /** Renderiza un lado (home/away) de un partido en la lista. Tres casos:
  *  1) equipo real en la DB → bandera + código.
  *  2) cruce de eliminación sin definir pero proyectado por el cuadro → bandera +
- *     código (atenuado) + ✓/≈.
+ *     código (atenuado).
  *  3) sin proyección → label del slot ("1° Grp A" / "Mejor 3ro" / "Por definir").
  *  En home la bandera va a la izquierda; en away, a la derecha (espejada). */
 function renderTeamSide(
   team: Team,
-  projected: SlotResolution | null,
+  projected: Team | null,
   matchNumber: number,
   side: 'home' | 'away',
 ) {
   const real = isRealTeam(team);
-  const display = real ? team : projected?.team ?? null;
+  const display = real ? team : projected ?? null;
   const flag = display ? <TeamFlag code={display.code} emoji={display.flag} size={20} /> : null;
-  const mark = !real && projected ? <ClinchMark confirmed={projected.confirmed} /> : null;
   const label = display ? display.code : slotLabelFor(matchNumber, side);
   const text = (
     <span className={cn('truncate', !real && 'text-muted', !real && !projected && 'text-xs-s')}>
@@ -111,9 +103,9 @@ function renderTeamSide(
   return (
     <span className="flex items-center gap-1.5 text-sm-s font-semibold text-text min-w-0">
       {side === 'home' ? (
-        <>{flag}{text}{mark}</>
+        <>{flag}{text}</>
       ) : (
-        <>{mark}{text}{flag}</>
+        <>{text}{flag}</>
       )}
     </span>
   );
@@ -328,6 +320,13 @@ export function MatchesPage() {
   const bracketProjection = useMemo(
     () => computeBracketProjection(teams, matches),
     [teams, matches],
+  );
+
+  // Para proyectar el ganador de un cruce en su partido siguiente (igual que el
+  // Cuadro): mapa matchNumber → Match sobre el que resuelve resolveKnockoutSlotId.
+  const matchByNum = useMemo(
+    () => new Map(matches.map((m) => [m.matchNumber, m])),
+    [matches],
   );
 
   // Filtro inicial (una sola vez, cuando ya hay datos): el deep-link ?filter=
@@ -621,10 +620,19 @@ export function MatchesPage() {
     const prediction = uniqueScores.size === 1 ? consideredPredictions[0] : undefined;
     const homeTeam = getTeam(teamMap, match.homeTeamId);
     const awayTeam = getTeam(teamMap, match.awayTeamId);
-    // Para cruces de eliminación aún sin definir, proyectar el equipo desde el
-    // cuadro (1°/2° de grupo o mejor 3ro) en vez de mostrar solo el label.
-    const projHome = isRealTeam(homeTeam) ? null : resolveBracketSlot(match.matchNumber, 'home', bracketProjection);
-    const projAway = isRealTeam(awayTeam) ? null : resolveBracketSlot(match.matchNumber, 'away', bracketProjection);
+    // Para cruces de eliminación aún sin definir, proyectar el equipo: en la R32
+    // desde la fase de grupos (1°/2° o mejor 3ro); de octavos en adelante, el
+    // ganador del cruce anterior — igual que el Cuadro — en vez de "Por definir".
+    const projHome = isRealTeam(homeTeam)
+      ? null
+      : resolveBracketSlot(match.matchNumber, 'home', bracketProjection)?.team
+        ?? teamMap?.get(resolveKnockoutSlotId(match.matchNumber, 'home', matchByNum) ?? -1)
+        ?? null;
+    const projAway = isRealTeam(awayTeam)
+      ? null
+      : resolveBracketSlot(match.matchNumber, 'away', bracketProjection)?.team
+        ?? teamMap?.get(resolveKnockoutSlotId(match.matchNumber, 'away', matchByNum) ?? -1)
+        ?? null;
     const isLive = match.status === 'live';
     const isFinished = match.status === 'finished';
     const isScheduled = match.status === 'scheduled';
@@ -651,6 +659,12 @@ export function MatchesPage() {
           : finishedPredictions.every((p) => p.points! === 0)
             ? false
             : 'partial';
+    // Partido terminado, el usuario SÍ pronosticó pero todavía no tiene puntos:
+    // típicamente el lag entre el pitazo final y el cron de scoring (o una
+    // predicción recién traída por el carry-over al unirse a una liga). No es
+    // "no pronosticaste" — no hay que mostrar el badge alarmante de "sin
+    // resultado", sino un estado neutro de "puntuando…".
+    const isPendingScore = isFinished && hasPrediction && predictionHit === null;
     return (
       <motion.div
         key={match.id}
@@ -686,9 +700,13 @@ export function MatchesPage() {
                 <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-amber-500/20 text-amber-500">
                   <Minus size={12} strokeWidth={3} />
                 </span>
+              ) : isPendingScore ? (
+                <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-elevated text-muted">
+                  <Clock size={12} />
+                </span>
               ) : (
-                <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-elevated text-muted text-[9px] font-bold">
-                  FT
+                <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-elevated text-muted">
+                  <Minus size={14} strokeWidth={2.5} />
                 </span>
               )
             ) : hasPrediction ? (
@@ -768,7 +786,7 @@ export function MatchesPage() {
                 )}
               >
                 {prediction
-                  ? <>Tu pronóstico: {prediction.homeScore} – {prediction.awayScore}{prediction.points !== null && ` · +${prediction.points} pts`}</>
+                  ? <>Tu pronóstico: {prediction.homeScore} – {prediction.awayScore}{prediction.points !== null ? ` · +${prediction.points} pts` : isPendingScore ? ' · puntuando…' : ''}</>
                   : 'Pronósticos distintos por liga'}
               </p>
             )}
