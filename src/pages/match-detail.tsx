@@ -140,13 +140,19 @@ function liveStatusLabel(liveStatus: string | null | undefined): string | null {
 }
 
 /**
- * Reconstruye la definición por penales a partir del timeline (período 5). El
- * marcador guardado trae +1 al ganador (lo suman los syncs para que el delta
- * refleje al ganador), así que el marcador del TIEMPO REGLAMENTARIO se obtiene
- * restándole ese 1 al lado ganador. La tanda se cuenta con los `penalty_goal`
- * del período 5 por equipo. Devuelve null si el partido no fue a penales.
+ * Reconstruye la definición por penales a partir del timeline (período 5).
+ *
+ * Dos modelos de almacenamiento soportados:
+ * - Bump (+1): el sync sumó 1 al ganador (homeScore ≠ awayScore). Se resta para
+ *   recuperar el marcador de juego.
+ * - Igual (sin bump): el DB guarda el resultado de juego directamente (homeScore
+ *   === awayScore). El ganador de la tanda se infiere de los penalty_goal del
+ *   timeline.
+ *
+ * Usa `teamCode` en lugar de `teamId` para que funcione con partidos de
+ * eliminatoria cuyo homeTeamId/awayTeamId siguen siendo el placeholder TBD.
  */
-function derivePenaltyShootout(match: Match): {
+function derivePenaltyShootout(match: Match, homeTeamCode: string): {
   penHome: number;
   penAway: number;
   regHome: number;
@@ -158,23 +164,28 @@ function derivePenaltyShootout(match: Match): {
   // eventos del timeline solo aportan el detalle de la tanda si están cargados.
   if (!hasPenaltyEvents && !match.decidedByPenalties) return null;
   if (match.homeScore == null || match.awayScore == null) return null;
-  if (match.homeScore === match.awayScore) return null; // ganador aún sin resolver
   let penHome = 0;
   let penAway = 0;
   if (tl) {
     for (const e of tl) {
       if (e.period !== 5 || e.type !== 'penalty_goal') continue;
-      if (e.teamId === match.homeTeamId) penHome++;
-      else if (e.teamId === match.awayTeamId) penAway++;
+      if (e.teamCode === homeTeamCode) penHome++;
+      else penAway++;
     }
   }
-  const winnerIsHome = match.homeScore > match.awayScore;
-  return {
-    penHome,
-    penAway,
-    regHome: winnerIsHome ? match.homeScore - 1 : match.homeScore,
-    regAway: winnerIsHome ? match.awayScore : match.awayScore - 1,
-  };
+  if (match.homeScore !== match.awayScore) {
+    // Modelo con bump: el sync sumó +1 al ganador para indicarlo en el score.
+    const winnerIsHome = match.homeScore > match.awayScore;
+    return {
+      penHome,
+      penAway,
+      regHome: winnerIsHome ? match.homeScore - 1 : match.homeScore,
+      regAway: winnerIsHome ? match.awayScore : match.awayScore - 1,
+    };
+  }
+  // Modelo sin bump: el DB ya tiene el resultado de juego (empate). La tanda
+  // se lee directo del timeline.
+  return { penHome, penAway, regHome: match.homeScore, regAway: match.awayScore };
 }
 
 function formatDate(utc: string) {
@@ -714,7 +725,7 @@ export function MatchDetailPage() {
   const awayTeamDisplay = awayProjection?.team ?? awayKnockout ?? awayTeam ?? { id: match.awayTeamId, name: String(match.awayTeamId), code: '?', flag: '🏳️', group: null, confederation: null };
 
   // Definición por penales (reconstruida del timeline) para anotar el resultado.
-  const shootout = match.status === 'finished' ? derivePenaltyShootout(match) : null;
+  const shootout = match.status === 'finished' ? derivePenaltyShootout(match, homeTeamDisplay.code) : null;
 
   // Knock-out matches with undetermined opponents can't be predicted yet.
   // Exception: if the bracket projection has confirmed the team (group fully
@@ -991,7 +1002,12 @@ export function MatchDetailPage() {
             {match.status === 'finished' && (
               shootout ? (
                 <span className="text-xs-s text-muted mt-1 text-center">
-                  {shootout.regHome} – {shootout.regAway} en el juego ·{' '}
+                  {/* Cuando el DB guarda el resultado de juego sin bump, el marcador principal
+                      ya lo refleja — solo mostramos la tanda. Con bump (scores distintos)
+                      necesitamos aclarar cuál fue el marcador de juego. */}
+                  {(match.homeScore !== shootout.regHome || match.awayScore !== shootout.regAway) && (
+                    <>{shootout.regHome} – {shootout.regAway} en el juego · </>
+                  )}
                   <span className="font-semibold text-text">
                     {shootout.penHome > 0 || shootout.penAway > 0
                       ? `${shootout.penHome}–${shootout.penAway} en penales`

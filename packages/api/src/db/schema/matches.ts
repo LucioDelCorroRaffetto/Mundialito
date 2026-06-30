@@ -38,7 +38,7 @@ export const matches = sqliteTable('matches', {
    * mostrar siempre "EN VIVO". Null mientras el partido no esté en curso
    * o el feed no aporte detalle.
    *
-   * Valores: 'in_play' | 'half_time' | 'cooling_break' |
+   * Valores: 'in_play' | 'half_time' | 'cooling_break' | 'extra_time' |
    *          'extra_time_break' | 'penalty_shootout' | 'full_time'
    *
    * Nota de diseño: lo escriben los syncs de score (sync-scores y

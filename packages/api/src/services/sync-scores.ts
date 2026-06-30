@@ -28,6 +28,7 @@ type OurStatus = 'scheduled' | 'live' | 'finished' | 'suspended';
 type OurLiveStatus =
   | 'in_play'
   | 'half_time'
+  | 'extra_time'
   | 'extra_time_break'
   | 'penalty_shootout'
   | 'full_time'
@@ -91,8 +92,11 @@ function mapStatus(fdStatus: FdStatus): OurStatus {
  *             no diferencia entre los dos, asumimos entretiempo de
  *             tiempo regular salvo que `duration` indique extra/penales)
  * Cuando `duration` es EXTRA_TIME y status PAUSED, lo etiquetamos
- * extra_time_break (pausa entre los dos tiempos del alargue). Si el feed
- * marca PENALTY_SHOOTOUT como duración con status IN_PLAY, mostramos
+ * extra_time_break (pausa entre los dos tiempos del alargue). Cuando es
+ * EXTRA_TIME con status IN_PLAY, el alargue se está jugando: lo marcamos
+ * "extra_time" para que el front muestre "Tiempo suplementario" en vez de
+ * un "EN VIVO" pelado idéntico al tiempo reglamentario. Si el feed marca
+ * PENALTY_SHOOTOUT como duración con status IN_PLAY, mostramos
  * "penalty_shootout".
  */
 function mapLiveStatus(
@@ -104,7 +108,9 @@ function mapLiveStatus(
     return duration === 'EXTRA_TIME' ? 'extra_time_break' : 'half_time';
   }
   if (fdStatus === 'IN_PLAY') {
-    return duration === 'PENALTY_SHOOTOUT' ? 'penalty_shootout' : 'in_play';
+    if (duration === 'PENALTY_SHOOTOUT') return 'penalty_shootout';
+    if (duration === 'EXTRA_TIME') return 'extra_time';
+    return 'in_play';
   }
   return null;
 }

@@ -280,45 +280,26 @@ async function doSync(matchId: number): Promise<SyncStatsResult> {
     return { matched: 0, unmatched: [], upserted: 0, skipped: 'no events' };
   }
 
-  // 3. Load home + away rosters with their (possibly-cached) FIFA IDs.
-  const teamIds = [m.homeTeamId, m.awayTeamId].filter((id): id is number => id != null);
-  const roster: RosterPlayer[] = await db
-    .select({
-      id: players.id,
-      name: players.name,
-      teamId: players.teamId,
-      position: players.position,
-      fifaIdPlayer: players.fifaIdPlayer,
-    })
-    .from(players)
-    .where(inArray(players.teamId, teamIds));
-  const rosterByTeam = new Map<number, RosterPlayer[]>();
-  for (const p of roster) {
-    const list = rosterByTeam.get(p.teamId) ?? [];
-    list.push(p);
-    rosterByTeam.set(p.teamId, list);
-  }
-  const rosterByFifaId = new Map<string, RosterPlayer>();
-  for (const p of roster) {
-    if (p.fifaIdPlayer) rosterByFifaId.set(p.fifaIdPlayer, p);
-  }
-
+  // 3. Build a GLOBAL team name/code → id index, then resolve which two
+  // teams actually played this match.
+  //
   // Two lookups for resolving an event's team:
-  //   1. fifa IdTeam (always present on player events) — keyed by our match's
-  //      home/away pair via the FIFA team IDs we discover on the fly.
+  //   1. fifa IdTeam (always present on player events) — keyed by the FIFA
+  //      team IDs we discover on the fly.
   //   2. country name from the description ("FODEN (England)") for the very
   //      first event of the match before we've cached any FIFA team IDs.
-  const teamRows = await db
+  //
+  // Indexamos TODOS los equipos por (a) nombre normalizado de la BD ("méxico"
+  // → "mexico"), (b) code ISO ("MEX") y (c) alias en inglés de FIFA mapeados
+  // via FIFA_NAME_TO_CODE → code → team_id. Cargamos los 48 equipos (no solo
+  // los del match) porque en eliminación el match guarda el placeholder TBD y
+  // necesitamos mapear el país real del feed a su team_id — ver más abajo.
+  const allTeams = await db
     .select({ id: teams.id, name: teams.name, code: teams.code })
-    .from(teams)
-    .where(inArray(teams.id, teamIds));
-  // Indexamos por (a) nombre normalizado de la BD ("méxico" → "mexico"),
-  // (b) code ISO ("MEX") y (c) alias en inglés de FIFA mapeados via
-  // FIFA_NAME_TO_CODE → code → team_id. Sin (b) y (c) los partidos con
-  // nombres distintos entre español/inglés terminaban con matched=0.
-  const teamIdByCode = new Map(teamRows.map((t) => [t.code.toUpperCase(), t.id] as const));
+    .from(teams);
+  const teamIdByCode = new Map(allTeams.map((t) => [t.code.toUpperCase(), t.id] as const));
   const teamIdByNorm = new Map<string, number>();
-  for (const t of teamRows) {
+  for (const t of allTeams) {
     teamIdByNorm.set(normName(t.name), t.id);
     teamIdByNorm.set(t.code.toLowerCase(), t.id);
   }
@@ -331,6 +312,69 @@ async function doSync(matchId: number): Promise<SyncStatsResult> {
   for (const [alias, code] of Object.entries(FIFA_NAME_TO_CODE)) {
     const id = teamIdByCode.get(code);
     if (id != null) teamIdByNorm.set(normName(alias), id);
+  }
+
+  // Resolver los DOS equipos participantes. En fase de grupos el match ya
+  // trae los IDs reales y los usamos directo. En eliminación los slots son el
+  // placeholder 'TBD' (el cuadro arma los equipos por proyección, no escribe
+  // matches.home_team_id), así que el roster por esos IDs vendría vacío y
+  // NINGÚN evento resolvería jugador → la cronología quedaba en blanco en toda
+  // la fase final. En ese caso derivamos los equipos reales del propio feed:
+  // contamos los países que aparecen en las descripciones ("MESSI (Argentina)")
+  // y nos quedamos con los dos más frecuentes.
+  const tbdTeamIds = new Set(
+    allTeams.filter((t) => t.code.toUpperCase() === 'TBD').map((t) => t.id),
+  );
+  const storedTeamIds = [...new Set(
+    [m.homeTeamId, m.awayTeamId].filter(
+      (id): id is number => id != null && !tbdTeamIds.has(id),
+    ),
+  )];
+  const participantTeamIds = [...storedTeamIds];
+  if (participantTeamIds.length < 2) {
+    const freq = new Map<number, number>();
+    for (const ev of events) {
+      const parsed = parseDescription(ev.EventDescription?.[0]?.Description);
+      if (!parsed?.country) continue;
+      const id = teamIdByNorm.get(normName(parsed.country));
+      if (id == null) continue;
+      freq.set(id, (freq.get(id) ?? 0) + 1);
+    }
+    const derived = [...freq.entries()].sort((a, b) => b[1] - a[1]).map(([id]) => id);
+    for (const id of derived) {
+      if (participantTeamIds.length >= 2) break;
+      if (!participantTeamIds.includes(id)) participantTeamIds.push(id);
+    }
+    if (storedTeamIds.length === 0 && participantTeamIds.length > 0) {
+      console.log(
+        `[sync-fifa-stats] match ${matchId}: slots TBD en DB → equipos derivados del feed: ` +
+        participantTeamIds.map((id) => allTeams.find((t) => t.id === id)?.code ?? id).join(' vs '),
+      );
+    }
+  }
+
+  // Load the participating rosters with their (possibly-cached) FIFA IDs.
+  const roster: RosterPlayer[] = participantTeamIds.length
+    ? await db
+        .select({
+          id: players.id,
+          name: players.name,
+          teamId: players.teamId,
+          position: players.position,
+          fifaIdPlayer: players.fifaIdPlayer,
+        })
+        .from(players)
+        .where(inArray(players.teamId, participantTeamIds))
+    : [];
+  const rosterByTeam = new Map<number, RosterPlayer[]>();
+  for (const p of roster) {
+    const list = rosterByTeam.get(p.teamId) ?? [];
+    list.push(p);
+    rosterByTeam.set(p.teamId, list);
+  }
+  const rosterByFifaId = new Map<string, RosterPlayer>();
+  for (const p of roster) {
+    if (p.fifaIdPlayer) rosterByFifaId.set(p.fifaIdPlayer, p);
   }
   // Lazy-populated as we observe (IdPlayer, IdTeam) pairs.
   const teamIdByFifaIdTeam = new Map<string, number>();

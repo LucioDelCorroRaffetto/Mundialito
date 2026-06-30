@@ -60,6 +60,7 @@ type OurStatus = 'scheduled' | 'live' | 'finished' | 'suspended';
 type OurLiveStatus =
   | 'in_play'
   | 'half_time'
+  | 'extra_time'
   | 'extra_time_break'
   | 'penalty_shootout'
   | 'full_time'
@@ -88,6 +89,7 @@ function mapState(
  *   STATUS_FIRST_HALF / STATUS_SECOND_HALF / STATUS_IN_PROGRESS → in_play
  *   STATUS_HALFTIME / STATUS_END_PERIOD                         → half_time
  *   STATUS_END_OF_EXTRATIME / STATUS_HALFTIME_EXTRA             → extra_time_break
+ *   STATUS_FIRST_EXTRA / STATUS_SECOND_EXTRA / STATUS_OVERTIME  → extra_time
  *   STATUS_SHOOTOUT                                             → penalty_shootout
  *   STATUS_FINAL / STATUS_FULL_TIME                             → full_time
  * `STATUS_END_PERIOD` también lo emite ESPN entre 1° y 2° tiempo regular,
@@ -101,6 +103,8 @@ function mapEspnLiveStatus(typeName: string, state: 'pre' | 'in' | 'post', compl
   if (n === 'STATUS_HALFTIME' || n === 'STATUS_END_PERIOD') return 'half_time';
   if (n === 'STATUS_END_OF_EXTRATIME' || n === 'STATUS_HALFTIME_EXTRA') return 'extra_time_break';
   if (n === 'STATUS_SHOOTOUT' || n.includes('PENALT')) return 'penalty_shootout';
+  // Alargue jugándose (no la pausa entre ET1/ET2, ya cubierta arriba).
+  if (n.includes('EXTRA') || n === 'STATUS_OVERTIME') return 'extra_time';
   return 'in_play';
 }
 
