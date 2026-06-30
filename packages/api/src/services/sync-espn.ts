@@ -317,7 +317,13 @@ export async function syncScoresFromEspn(date: string): Promise<SyncScoresResult
         if (newAwayScore !== null) updatePayload.awayScore = newAwayScore;
         // El bump del ganador de la tanda implica definición por penales: lo
         // marcamos para que el cuadro/lista anoten "(pen.)" sin el timeline.
-        if (shootout.decidedByPenalties) updatePayload.decidedByPenalties = 1;
+        // También bloqueamos el score (scoreLocked) para que ticks posteriores
+        // de ESPN — que siempre devuelven el score de reglamento sin el +1 —
+        // no reviertan el bump una vez aplicado.
+        if (shootout.decidedByPenalties) {
+          updatePayload.decidedByPenalties = 1;
+          updatePayload.scoreLocked = 1;
+        }
       }
 
       const [updatedMatch] = await db

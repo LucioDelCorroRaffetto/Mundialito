@@ -327,7 +327,13 @@ export async function syncScores(options: SyncScoresOptions = {}): Promise<SyncS
         if (newAwayScore !== null) updatePayload.awayScore = newAwayScore;
         // Definición por penales (football-data `duration=PENALTY_SHOOTOUT`):
         // marca para que el cuadro/lista anoten "(pen.)" sin cargar el timeline.
-        if (resolved.decidedByPenalties) updatePayload.decidedByPenalties = 1;
+        // También bloqueamos el score para que el feed no revierta el +1 del
+        // ganador en ticks posteriores (football-data siempre reporta el score
+        // de reglamento, sin el bump de penales).
+        if (resolved.decidedByPenalties) {
+          updatePayload.decidedByPenalties = 1;
+          updatePayload.scoreLocked = 1;
+        }
       }
 
       // If a previously-finished match reverts to scheduled (POSTPONED
