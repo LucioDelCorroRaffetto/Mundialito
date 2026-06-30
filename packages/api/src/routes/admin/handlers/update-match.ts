@@ -13,6 +13,10 @@ export const updateMatchSchema = z.object({
   homeScore: z.number().int().min(0).max(30).optional(),
   awayScore: z.number().int().min(0).max(30).optional(),
   status: z.enum(['scheduled', 'live', 'finished', 'suspended']).optional(),
+  // Cruce definido por penales: el marcador cargado debe traer +1 al ganador
+  // (convención del sync) y este flag deja que el cuadro/lista anoten "(pen.)".
+  // Útil cuando el feed cerró un KO empatado sin reportar la tanda.
+  decidedByPenalties: z.boolean().optional(),
 });
 
 export async function updateMatchHandler(req: Request, res: Response) {
@@ -26,7 +30,7 @@ export async function updateMatchHandler(req: Request, res: Response) {
     return res.status(400).json({ error: { code: 'VALIDATION_ERROR', message: parsed.error.errors[0].message } });
   }
 
-  const { homeScore, awayScore, status } = parsed.data;
+  const { homeScore, awayScore, status, decidedByPenalties } = parsed.data;
 
   // Verify match exists
   const match = await db.select().from(matches).where(eq(matches.id, matchId)).get();
@@ -39,6 +43,7 @@ export async function updateMatchHandler(req: Request, res: Response) {
   if (homeScore !== undefined) updatePayload.homeScore = homeScore;
   if (awayScore !== undefined) updatePayload.awayScore = awayScore;
   if (status !== undefined) updatePayload.status = status;
+  if (decidedByPenalties !== undefined) updatePayload.decidedByPenalties = decidedByPenalties ? 1 : 0;
   if (homeScore !== undefined || awayScore !== undefined) updatePayload.scoreLocked = 1;
 
   if (Object.keys(updatePayload).length === 0) {
