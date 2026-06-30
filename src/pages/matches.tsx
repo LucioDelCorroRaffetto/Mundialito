@@ -293,6 +293,7 @@ export function MatchesPage() {
   const { data: myLeaguesData } = useMyLeagues();
   const matches = matchesResponse?.data ?? [];
   const teams = teamsData ?? [];
+  const phase = useTournamentPhase(matches);
 
   const predictedIds = useMemo(
     () => new Set((myPredictionsData?.data ?? []).map((p) => p.matchId)),
@@ -398,7 +399,6 @@ export function MatchesPage() {
   const grouped = groupByDate(filtered);
   const dates = Object.keys(grouped).sort();
   const liveCount = matches.filter((m) => m.status === 'live').length;
-  const phase = useTournamentPhase(matches);
   const finishedCount = matches.filter((m) => m.status === 'finished').length;
   const todayCount = matches.filter((m) => localDateKey(new Date(m.kickoffUtc)) === todayKey).length;
 
