@@ -13,6 +13,9 @@ import { syncFixtureTimes } from './services/fixture-time-sync.js';
 import { reconcileSquadsFromWikipedia } from './services/squad-reconcile.js';
 import { invalidateForecastCache } from './services/forecast-service.js';
 import { libsqlClient } from './db/client.js';
+import { db } from './db/index.js';
+import { matches } from './db/schema/index.js';
+import { computeSyncDateFrom } from './lib/sync-window.js';
 
 export const app = express();
 
@@ -88,9 +91,32 @@ app.post('/sync', async (req, res) => {
   }
 
   const today = new Date().toISOString().slice(0, 10);
-  // Include yesterday so matches that started near midnight UTC and
-  // finished after 00:00 UTC are still picked up in the next tick.
-  const yesterday = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
+  // Ventana del feed adaptativa: normalmente "ayer" (matches que arrancaron
+  // cerca de medianoche UTC y terminaron pasadas las 00:00), pero si hay algún
+  // partido NO finalizado con kickoff ya pasado ("colgado"), retrocede hasta su
+  // fecha para que el feed lo traiga (FINISHED + score) y la lógica de sync lo
+  // cierre sola. Sin esto, un colgado que pasó las ~48h de la ventana fija (cron
+  // caído >2 días, o feed que no lo matcheó un rato) quedaba en scheduled/live
+  // para siempre. football-data acepta el rango en una sola request.
+  const matchWindowRows = await db
+    .select({ status: matches.status, kickoffUtc: matches.kickoffUtc })
+    .from(matches)
+    .catch((err) => {
+      console.error('[sync] no se pudieron leer matches para la ventana adaptativa:', err);
+      return [] as { status: string; kickoffUtc: string }[];
+    });
+  const feedDateFrom = computeSyncDateFrom(matchWindowRows, new Date());
+  // Lista de días UTC [feedDateFrom .. today] inclusive, para el fallback ESPN
+  // (que consulta por día). En estado normal son 2 días (ayer+hoy); sólo se
+  // ensancha cuando hay un colgado y football-data no está disponible.
+  const espnDays: string[] = [];
+  for (
+    let t = new Date(`${feedDateFrom}T00:00:00Z`).getTime();
+    t <= new Date(`${today}T00:00:00Z`).getTime();
+    t += 86_400_000
+  ) {
+    espnDays.push(new Date(t).toISOString().slice(0, 10));
+  }
 
   // Pull fresh kickoff times from FIFA before any other sync. If a match
   // was rescheduled (FIFA moves a game by hours, common close to kickoff)
@@ -104,25 +130,26 @@ app.post('/sync', async (req, res) => {
   });
 
   // Try primary (football-data.org), fall back to ESPN if it fails.
-  // dateFrom=yesterday covers matches that started before midnight UTC.
-  let result = await syncScores({ dateFrom: yesterday, dateTo: today }).catch((err) => ({
+  // feedDateFrom es "ayer" en estado normal, o más atrás si hay un colgado —
+  // football-data acepta el rango entero en una sola request.
+  let result = await syncScores({ dateFrom: feedDateFrom, dateTo: today }).catch((err) => ({
     synced: 0, errors: [String(err)], matchesChecked: 0,
   }));
 
   if (result.errors.length > 0 || !process.env.FOOTBALL_DATA_API_KEY) {
-    // Run ESPN for both dates; merge results.
-    const [espnY, espnT] = await Promise.all([
-      syncScoresFromEspn(yesterday).catch((err) => ({ synced: 0, errors: [String(err)], matchesChecked: 0 })),
-      syncScoresFromEspn(today).catch((err) => ({ synced: 0, errors: [String(err)], matchesChecked: 0 })),
-    ]);
+    // Run ESPN per day across the window; merge results. (ESPN consulta por día.)
+    const espnResults = await Promise.all(
+      espnDays.map((d) =>
+        syncScoresFromEspn(d).catch((err) => ({ synced: 0, errors: [`${d}: ${String(err)}`], matchesChecked: 0 })),
+      ),
+    );
     result = {
-      synced: result.synced + espnY.synced + espnT.synced,
+      synced: result.synced + espnResults.reduce((s, r) => s + r.synced, 0),
       errors: [
         ...result.errors.map((e) => `[fd] ${e}`),
-        ...espnY.errors.map((e) => `[espn-y] ${e}`),
-        ...espnT.errors.map((e) => `[espn-t] ${e}`),
+        ...espnResults.flatMap((r) => r.errors.map((e) => `[espn] ${e}`)),
       ],
-      matchesChecked: Math.max(result.matchesChecked, espnY.matchesChecked, espnT.matchesChecked),
+      matchesChecked: Math.max(result.matchesChecked, ...espnResults.map((r) => r.matchesChecked)),
     };
   }
 

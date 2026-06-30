@@ -19,6 +19,7 @@ import { syncLiveMatches } from './sync-live.js';
 import { invalidateForecastCache } from './forecast-service.js';
 import { db } from '../db/index.js';
 import { matches } from '../db/schema/index.js';
+import { computeSyncDateFrom } from '../lib/sync-window.js';
 
 const THREE_MINUTES  = 3  * 60 * 1000;
 const THIRTY_MINUTES = 30 * 60 * 1000;
@@ -105,6 +106,27 @@ async function runSync(label: string, options: SyncScoresOptions) {
   } finally {
     syncInFlight = false;
   }
+}
+
+/**
+ * Catch-up periódico (cada 30 min): en vez de mirar sólo "ayer", calcula una
+ * ventana de feed adaptativa que retrocede hasta el partido NO finalizado más
+ * viejo con kickoff ya pasado ("colgado"). Así un partido que se perdió la
+ * ventana fija ayer→hoy (cron caído, feed que no lo matcheó un rato) se vuelve
+ * a re-chequear y se cierra solo contra el feed. En estado normal la ventana es
+ * "ayer", idéntico al comportamiento previo. football-data acepta el rango en
+ * una sola request, así que ensanchar no agrega costo de cuota.
+ */
+async function runCatchUpSync() {
+  const rows = await db
+    .select({ status: matches.status, kickoffUtc: matches.kickoffUtc })
+    .from(matches)
+    .catch((err) => {
+      console.error('[AutoSync:catchup] no se pudo leer matches para la ventana adaptativa:', err);
+      return [] as { status: string; kickoffUtc: string }[];
+    });
+  const dateFrom = computeSyncDateFrom(rows, new Date());
+  await runSync('catchup', { dateFrom, dateTo: todayUTC() });
 }
 
 /**
@@ -209,8 +231,9 @@ export function startAutoSync() {
   // Every 3 minutes: today's matches
   todayTimer = setInterval(() => runSync('today', { dateFrom: todayUTC(), dateTo: todayUTC() }), THREE_MINUTES);
 
-  // Every 30 minutes: yesterday too (catches late finishes / delayed status updates)
-  yesterdayTimer = setInterval(() => runSync('yesterday', { dateFrom: yesterdayUTC(), dateTo: yesterdayUTC() }), THIRTY_MINUTES);
+  // Every 30 minutes: catch-up con ventana adaptativa (recupera finishes tardíos,
+  // updates de status demorados y partidos colgados que pasaron la ventana fija).
+  yesterdayTimer = setInterval(() => runCatchUpSync(), THIRTY_MINUTES);
 
   // Cada 40s: tick rápido del vivo (solo actúa si hay partidos en vivo).
   console.log('[AutoSync] live tick (ESPN score + FIFA timeline) — cada 40s mientras haya partidos en vivo');
