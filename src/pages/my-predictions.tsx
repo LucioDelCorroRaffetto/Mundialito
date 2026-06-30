@@ -1,7 +1,7 @@
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { ArrowLeft } from 'lucide-react';
-import { useMyPredictionHistory } from '@/shared/hooks/use-predictions';
+import { useEnrichedPredictionHistory } from '@/shared/hooks/use-enriched-history';
 import { HistoryRow } from '@/shared/components/prediction-history-row';
 import { staggerContainer, staggerItem, useMotionPrefs } from '@/shared/lib/motion';
 
@@ -13,7 +13,7 @@ import { staggerContainer, staggerItem, useMotionPrefs } from '@/shared/lib/moti
 export function MyPredictionsPage() {
   const navigate = useNavigate();
   const { reduced } = useMotionPrefs();
-  const { data, isLoading } = useMyPredictionHistory();
+  const { data, isLoading } = useEnrichedPredictionHistory();
   const entries = data?.data ?? [];
 
   return (

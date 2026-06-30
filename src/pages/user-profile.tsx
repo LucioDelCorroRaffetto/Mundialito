@@ -4,7 +4,8 @@ import { motion } from 'framer-motion';
 import { ArrowLeft, Star, Target, Crosshair, ClipboardList, Sparkles, ListChecks, ChevronRight } from 'lucide-react';
 import { cn } from '@/shared/lib/cn';
 import { useAuthStore } from '@/shared/stores/auth-store';
-import { useUserProfile, useUserPredictionHistory } from '@/shared/hooks/use-user-profile';
+import { useUserProfile } from '@/shared/hooks/use-user-profile';
+import { useEnrichedUserPredictionHistory } from '@/shared/hooks/use-enriched-history';
 import { UserLevelCard, UserLevelBadge } from '@/shared/components/user-level-badge';
 import { AchievementCardModal } from '@/shared/components/achievement-card-modal';
 import { UserPredictionHistoryRow } from '@/shared/components/user-prediction-history-row';
@@ -98,7 +99,7 @@ function PredictionHistorySection({
   userId: number;
   reduced: boolean;
 }) {
-  const { data, isLoading, isError } = useUserPredictionHistory(userId);
+  const { data, isLoading, isError } = useEnrichedUserPredictionHistory(userId);
   const items = data ?? [];
   // Solo mostramos los primeros N acá; el resto vive en la página dedicada.
   const preview = items.slice(0, HISTORY_PREVIEW_COUNT);

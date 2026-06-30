@@ -28,12 +28,30 @@ export interface TournamentForecastRow {
   topOfGroup: number;
 }
 
-/** Pronóstico estadístico para un partido (Poisson + Elo). */
-export function useMatchForecast(matchId: number | undefined) {
+/**
+ * Pronóstico estadístico para un partido (Poisson + Elo).
+ *
+ * `homeTeamId`/`awayTeamId` son opcionales: en los cruces de eliminación la DB
+ * guarda TBD en los equipos del partido, así que el front resuelve los equipos
+ * reales vía proyección del cuadro y los pasa acá para que el modelo no calcule
+ * TBD vs TBD (un 50/50 simétrico sin sentido).
+ */
+export function useMatchForecast(
+  matchId: number | undefined,
+  homeTeamId?: number,
+  awayTeamId?: number,
+) {
   return useQuery({
-    queryKey: ['forecast', 'match', matchId],
+    queryKey: ['forecast', 'match', matchId, homeTeamId ?? null, awayTeamId ?? null],
     queryFn: async () => {
-      const { data } = await apiClient.get<{ data: MatchForecast }>(`/forecasts/match/${matchId}`);
+      const params =
+        homeTeamId != null && awayTeamId != null
+          ? { home: homeTeamId, away: awayTeamId }
+          : undefined;
+      const { data } = await apiClient.get<{ data: MatchForecast }>(
+        `/forecasts/match/${matchId}`,
+        { params },
+      );
       return data.data;
     },
     enabled: matchId !== undefined,

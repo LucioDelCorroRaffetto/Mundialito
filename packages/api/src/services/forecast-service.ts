@@ -71,6 +71,28 @@ export interface MatchForecast extends MatchProbabilities {
   awayTeamId: number;
 }
 
+/**
+ * Probabilidades 1X2 + marcador más probable para un cruce de dos equipos
+ * concretos (por id). Es la base de `forecastMatch`, pero se expone aparte
+ * porque en los partidos de eliminación la DB todavía guarda el placeholder
+ * TBD en home/awayTeamId — el front resuelve los equipos reales vía proyección
+ * del cuadro y nos los pasa directo, evitando que el modelo calcule TBD vs TBD
+ * (que da un 50/50 simétrico sin sentido).
+ */
+export async function forecastTeams(
+  homeTeamId: number,
+  awayTeamId: number,
+): Promise<MatchForecast> {
+  const elo = await currentEloByTeamId();
+  const eloHome = elo.get(homeTeamId) ?? 1500;
+  const eloAway = elo.get(awayTeamId) ?? 1500;
+  const { lambdaHome, lambdaAway } = lambdasFromElo(eloHome, eloAway);
+  const grid = scoreDistribution(lambdaHome, lambdaAway);
+  const probs = probabilitiesFromGrid(grid);
+
+  return { ...probs, lambdaHome, lambdaAway, homeTeamId, awayTeamId };
+}
+
 export async function forecastMatch(matchId: number): Promise<MatchForecast | null> {
   const m = await db
     .select({ id: matches.id, homeTeamId: matches.homeTeamId, awayTeamId: matches.awayTeamId })
@@ -79,14 +101,7 @@ export async function forecastMatch(matchId: number): Promise<MatchForecast | nu
     .get();
   if (!m || m.homeTeamId == null || m.awayTeamId == null) return null;
 
-  const elo = await currentEloByTeamId();
-  const eloHome = elo.get(m.homeTeamId) ?? 1500;
-  const eloAway = elo.get(m.awayTeamId) ?? 1500;
-  const { lambdaHome, lambdaAway } = lambdasFromElo(eloHome, eloAway);
-  const grid = scoreDistribution(lambdaHome, lambdaAway);
-  const probs = probabilitiesFromGrid(grid);
-
-  return { ...probs, lambdaHome, lambdaAway, homeTeamId: m.homeTeamId, awayTeamId: m.awayTeamId };
+  return forecastTeams(m.homeTeamId, m.awayTeamId);
 }
 
 // ─── Monte Carlo completo ─────────────────────────────────────────────────────

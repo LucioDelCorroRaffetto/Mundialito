@@ -2,7 +2,8 @@ import { Navigate, useNavigate, useParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { ArrowLeft } from 'lucide-react';
 import { useAuthStore } from '@/shared/stores/auth-store';
-import { useUserProfile, useUserPredictionHistory } from '@/shared/hooks/use-user-profile';
+import { useUserProfile } from '@/shared/hooks/use-user-profile';
+import { useEnrichedUserPredictionHistory } from '@/shared/hooks/use-enriched-history';
 import { UserPredictionHistoryRow } from '@/shared/components/user-prediction-history-row';
 import { staggerContainer, useMotionPrefs } from '@/shared/lib/motion';
 
@@ -23,7 +24,7 @@ export function UserPredictionsPage() {
   // return quedaba arriba, al ver el perfil propio React renderizaba menos
   // hooks que en el caso ajeno y rompía el orden de hooks (rules-of-hooks).
   const { data: profile } = useUserProfile(isNaN(userId) ? undefined : userId);
-  const { data, isLoading, isError } = useUserPredictionHistory(isNaN(userId) ? undefined : userId);
+  const { data, isLoading, isError } = useEnrichedUserPredictionHistory(isNaN(userId) ? undefined : userId);
   const items = data ?? [];
 
   // Si es uno mismo, mandar a la versión propia.

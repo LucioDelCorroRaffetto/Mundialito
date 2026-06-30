@@ -132,6 +132,7 @@ function liveStatusLabel(liveStatus: string | null | undefined): string | null {
   switch (liveStatus) {
     case 'half_time':         return 'Entretiempo';
     case 'cooling_break':     return 'Descanso de hidratación';
+    case 'extra_time':        return 'Tiempo suplementario';
     case 'extra_time_break':  return 'Descanso del alargue';
     case 'penalty_shootout':  return 'Penales';
     default:                  return null;
@@ -378,8 +379,20 @@ function LeaguePredictionsSection({
  * Si el endpoint falla (modelo no disponible), no rendereamos nada para
  * no ensuciar la UI.
  */
-function ForecastPanel({ matchId, homeCode, awayCode }: { matchId: number; homeCode: string; awayCode: string }) {
-  const { data, isLoading } = useMatchForecast(matchId);
+function ForecastPanel({
+  matchId,
+  homeCode,
+  awayCode,
+  homeTeamId,
+  awayTeamId,
+}: {
+  matchId: number;
+  homeCode: string;
+  awayCode: string;
+  homeTeamId: number;
+  awayTeamId: number;
+}) {
+  const { data, isLoading } = useMatchForecast(matchId, homeTeamId, awayTeamId);
   if (isLoading || !data) return null;
 
   const homePct = Math.round(data.homeWin * 100);
@@ -1058,6 +1071,8 @@ export function MatchDetailPage() {
           matchId={matchId}
           homeCode={homeTeamDisplay.code}
           awayCode={awayTeamDisplay.code}
+          homeTeamId={homeTeamDisplay.id}
+          awayTeamId={awayTeamDisplay.id}
         />
       )}
 

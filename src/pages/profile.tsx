@@ -5,7 +5,7 @@ import { Settings, ChevronRight, Star, LogOut, History } from 'lucide-react';
 import { useAuthStore } from '@/shared/stores/auth-store';
 import { useMyStats } from '@/shared/hooks/use-my-stats';
 import { useMyAchievements, useAllAchievements, type Achievement } from '@/shared/hooks/use-achievements';
-import { useMyPredictionHistory } from '@/shared/hooks/use-predictions';
+import { useEnrichedPredictionHistory } from '@/shared/hooks/use-enriched-history';
 import { UserLevelBadge, UserLevelCard } from '@/shared/components/user-level-badge';
 import { AchievementCardModal } from '@/shared/components/achievement-card-modal';
 import { HistoryRow } from '@/shared/components/prediction-history-row';
@@ -27,7 +27,7 @@ const StatCard = memo(function StatCard({ label, value }: { label: string; value
 
 function PredictionHistorySection() {
   const { reduced } = useMotionPrefs();
-  const { data, isLoading } = useMyPredictionHistory();
+  const { data, isLoading } = useEnrichedPredictionHistory();
   const entries = data?.data ?? [];
   // Solo mostramos los primeros N acá; el resto vive en la página dedicada.
   const preview = entries.slice(0, HISTORY_PREVIEW_COUNT);
