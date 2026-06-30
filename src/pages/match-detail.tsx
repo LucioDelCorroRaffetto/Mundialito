@@ -1335,9 +1335,9 @@ import type { MatchEvent, MatchTimelineEvent } from '@/shared/types/api';
  *  así que solo etiquetamos con el sufijo "'" estándar.
  *  ET1/ET2/penales se muestran con prefijo claro. */
 function formatMinute(minute: number | null, period: number | null): string {
-  if (minute == null) return '?';
-  if (period === 3 || period === 4) return `ET ${minute}'`;
   if (period === 5) return 'Penales';
+  if (minute == null) return '—';
+  if (period === 3 || period === 4) return `ET ${minute}'`;
   return `${minute}'`;
 }
 
@@ -1499,39 +1499,6 @@ const MatchEvents = memo(function MatchEvents({
   // equipo. Eventos en orden descendente (lo más reciente arriba) +
   // marcadores de fin de período intercalados.
   if (hasTimeline) {
-    // Ordenamos descendente: período mayor + minuto mayor arriba. Es el
-    // orden natural para alguien que abre el partido en vivo.
-    const sorted = [...timeline].sort((a, b) => {
-      const pa = a.period ?? 99, pb = b.period ?? 99;
-      if (pa !== pb) return pb - pa;
-      const ma = a.minute ?? 999, mb = b.minute ?? 999;
-      return mb - ma;
-    });
-
-    // Marcadores de transición de período: "Entretiempo" entre el último
-    // evento del 1T y el primero del 2T, etc. Construimos la lista
-    // intercalando eventos + marcadores.
-    type Row =
-      | { kind: 'event'; ev: MatchTimelineEvent }
-      | { kind: 'marker'; id: string; label: string };
-
-    const rows: Row[] = [];
-    let lastPeriod: number | null = null;
-    for (const ev of sorted) {
-      if (lastPeriod != null && ev.period != null && ev.period !== lastPeriod) {
-        // Transición de período → marcador.
-        const label =
-          lastPeriod === 2 ? 'Entretiempo'
-          : lastPeriod === 3 ? 'Fin del 1° tiempo extra'
-          : lastPeriod === 4 ? 'Fin del 2° tiempo extra'
-          : 'Inicio';
-        rows.push({ kind: 'marker', id: `m-${ev.id}`, label });
-      }
-      rows.push({ kind: 'event', ev });
-      lastPeriod = ev.period;
-    }
-    rows.push({ kind: 'marker', id: 'kick-off', label: 'Inicio del juego' });
-
     const isSub = (type: MatchTimelineEvent['type']) => type === 'sub_in' || type === 'sub_out';
 
     // Para gol en contra el `teamCode` del evento es el equipo del autor
@@ -1543,13 +1510,76 @@ const MatchEvents = memo(function MatchEvents({
       return ev.type === 'own_goal' ? !playersTeamIsHome : playersTeamIsHome;
     };
 
+    // Los remates de la tanda (period=5) se muestran en un bloque visual
+    // pareado propio, no mezclados en la cronología principal.
+    const isPenaltyKick = (ev: MatchTimelineEvent) =>
+      ev.period === 5 &&
+      (ev.type === 'penalty_goal' || ev.type === 'penalty_miss' || ev.type === 'penalty_save');
+
+    const allPenaltyKicks = [...timeline]
+      .filter(isPenaltyKick)
+      .sort((a, b) => (a.minute ?? 0) - (b.minute ?? 0));
+
+    // Separarlos por equipo y parear por índice (tanda alterna: local,
+    // visitante, local…), usando el minuto sintético para el orden.
+    const homeKicks = allPenaltyKicks.filter(e => displaySideIsHome(e));
+    const awayKicks  = allPenaltyKicks.filter(e => !displaySideIsHome(e));
+    const penaltyRounds = Math.max(homeKicks.length, awayKicks.length);
+
+    // Eventos no-tanda: orden ascendente (inicio → fin), igual que la
+    // cronología real del partido. Null-period va al final (period ?? 99).
+    const sorted = [...timeline]
+      .filter(ev => !isPenaltyKick(ev))
+      .sort((a, b) => {
+        const pa = a.period ?? 99, pb = b.period ?? 99;
+        if (pa !== pb) return pa - pb;
+        const ma = a.minute ?? 999, mb = b.minute ?? 999;
+        return ma - mb;
+      });
+
+    // Marcadores de transición. En orden ascendente el marcador se inserta
+    // DESPUÉS de que termina un período y ANTES del siguiente.
+    type Row =
+      | { kind: 'event'; ev: MatchTimelineEvent }
+      | { kind: 'marker'; id: string; label: string };
+
+    const rows: Row[] = [];
+    rows.push({ kind: 'marker', id: 'kick-off', label: 'Inicio del juego' });
+
+    let lastPeriod: number | null = null;
+    let lastKnownPeriod: number | null = null;
+    for (const ev of sorted) {
+      if (lastPeriod != null && ev.period != null && ev.period !== lastPeriod) {
+        const label =
+          lastPeriod === 1 ? 'Entretiempo'
+          : lastPeriod === 2 ? 'Fin de los 90 minutos'
+          : lastPeriod === 3 ? 'Fin del 1° suplementario'
+          : 'Continuación';
+        rows.push({ kind: 'marker', id: `m-${ev.id}`, label });
+      }
+      rows.push({ kind: 'event', ev });
+      lastPeriod = ev.period;
+      if (ev.period != null) lastKnownPeriod = ev.period;
+    }
+
+    // Marcador entre los eventos regulares/ET y la tanda de penales.
+    const preKnockLabel =
+      lastKnownPeriod === 4 ? 'Fin del 2° suplementario'
+      : lastKnownPeriod === 3 ? 'Fin del 1° suplementario'
+      : lastKnownPeriod === 2 ? 'Fin de los 90 minutos'
+      : null;
+
+    // Para partidos en vivo el evento más reciente está al FINAL del array
+    // (orden ascendente), no al principio.
+    const freshEventId =
+      status === 'live'
+        ? [...sorted].reverse().find((e) => !isSub(e.type))?.id ?? sorted[sorted.length - 1]?.id ?? null
+        : null;
+
     const EventSide = ({ ev, highlight = false }: { ev: MatchTimelineEvent; highlight?: boolean }) => {
       const cfg = EVENT_LABEL[ev.type];
       const isHome = displaySideIsHome(ev);
       const sub = isSub(ev.type);
-      // Fresh goals get a brief celebration on the ball: scale-up + rotate.
-      // Run it once on mount (initial→animate); not infinite, otherwise it
-      // turns into a distraction while the user reads the rest of the list.
       const ballMotion = highlight
         ? {
             initial: { scale: 0.4, rotate: -180 },
@@ -1586,20 +1616,14 @@ const MatchEvents = memo(function MatchEvents({
       );
     };
 
-    // While the match is live, the freshest item (rows[0] event, since
-    // we sort desc) gets a ring + soft pulse so a returning viewer can
-    // immediately spot what's new. Goals also get a brief icon wiggle.
-    const freshEventId =
-      status === 'live'
-        ? sorted.find((e) => !isSub(e.type))?.id ?? sorted[0]?.id ?? null
-        : null;
-
     return (
       <div className="mx-4 mt-3 p-4 rounded-lg bg-elevated border border-border">
         <p className="text-xs-s text-muted font-bold uppercase tracking-wider mb-3">
           Minuto a minuto
         </p>
         <div className="flex flex-col">
+
+          {/* ── Cronología regular / ET ────────────────────────────────── */}
           {rows.map((row, i) => {
             if (row.kind === 'marker') {
               return (
@@ -1644,6 +1668,71 @@ const MatchEvents = memo(function MatchEvents({
               </motion.div>
             );
           })}
+
+          {/* ── Separador + Tanda de penales ──────────────────────────── */}
+          {penaltyRounds > 0 && (
+            <>
+              {preKnockLabel && (
+                <div className="flex items-center gap-2 py-2 text-[10px] font-bold text-accent uppercase tracking-wider">
+                  <div className="flex-1 h-px bg-gradient-to-r from-transparent via-accent/30 to-accent/40" />
+                  <span>{preKnockLabel}</span>
+                  <div className="flex-1 h-px bg-gradient-to-l from-transparent via-accent/30 to-accent/40" />
+                </div>
+              )}
+              <div className="flex items-center gap-2 py-2 text-[10px] font-bold text-amber-400 uppercase tracking-wider">
+                <div className="flex-1 h-px bg-gradient-to-r from-transparent via-amber-400/30 to-amber-400/40" />
+                <span>Tanda de penales</span>
+                <div className="flex-1 h-px bg-gradient-to-l from-transparent via-amber-400/30 to-amber-400/40" />
+              </div>
+              {Array.from({ length: penaltyRounds }, (_, i) => {
+                const home = homeKicks[i];
+                const away = awayKicks[i];
+                const homeScored = home?.type === 'penalty_goal';
+                const awayScored = away?.type === 'penalty_goal';
+                return (
+                  <motion.div
+                    key={`pk-${i}`}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ delay: Math.min(i * 0.05, 0.4), duration: 0.2 }}
+                    className="grid grid-cols-[1fr_auto_auto_auto_1fr] items-center gap-x-2 py-[5px] border-b border-border/30 last:border-b-0"
+                  >
+                    <span className="text-xs font-medium text-text truncate text-right">
+                      {home?.playerName ?? ''}
+                    </span>
+                    {home ? (
+                      <span className={cn(
+                        'w-5 h-5 rounded-full flex-shrink-0 flex items-center justify-center text-[9px] font-bold',
+                        homeScored
+                          ? 'bg-emerald-500/20 border border-emerald-500 text-emerald-400'
+                          : 'bg-red-500/20 border border-red-400 text-red-400',
+                      )}>
+                        {homeScored ? '✓' : '✗'}
+                      </span>
+                    ) : (
+                      <span className="w-5 h-5 flex-shrink-0" />
+                    )}
+                    <span className="text-[10px] text-muted tabular-nums w-4 text-center">{i + 1}</span>
+                    {away ? (
+                      <span className={cn(
+                        'w-5 h-5 rounded-full flex-shrink-0 flex items-center justify-center text-[9px] font-bold',
+                        awayScored
+                          ? 'bg-emerald-500/20 border border-emerald-500 text-emerald-400'
+                          : 'bg-red-500/20 border border-red-400 text-red-400',
+                      )}>
+                        {awayScored ? '✓' : '✗'}
+                      </span>
+                    ) : (
+                      <span className="w-5 h-5 flex-shrink-0" />
+                    )}
+                    <span className="text-xs font-medium text-text truncate">
+                      {away?.playerName ?? ''}
+                    </span>
+                  </motion.div>
+                );
+              })}
+            </>
+          )}
         </div>
       </div>
     );

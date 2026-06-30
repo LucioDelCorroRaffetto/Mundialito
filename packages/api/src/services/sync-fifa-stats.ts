@@ -704,19 +704,28 @@ async function doSync(matchId: number): Promise<SyncStatsResult> {
       : parsedMinute == null && fifaPeriod === 8 ? 105 // pre-ET2 cae al inicio del ET2
       : parsedMinute == null && fifaPeriod === 10 ? 120 // pre-penales cae al inicio de los penales
       : null;
-    // En la tanda (Period 11) forzamos un minuto sintético incremental por
-    // evento — único y estable entre syncs (FIFA devuelve los eventos en orden)
-    // — para que la clave natural de dedupe distinga penales del mismo jugador.
-    const minute =
-      fifaPeriod === FIFA_SHOOTOUT_PERIOD ? 120 + shootoutSeq++ : (parsedMinute ?? syntheticMinute);
-
+    // Fallback para eventos sin período (fifaPeriod=null): si hay MatchMinute
+    // lo usamos para inferir el período. Sin minuto ni período se ubican al
+    // final de ET2 (120') — el momento más tardío antes de penales y el más
+    // conservador para una sub cuyo contexto exacto FIFA no reportó.
+    const inferredPeriodFromMinute =
+      parsedMinute != null && fifaPeriod == null
+        ? parsedMinute <= 45 ? 1
+          : parsedMinute <= 90 ? 2
+          : parsedMinute <= 105 ? 3
+          : 4
+        : null;
+    const resolvedPeriod = normalizedPeriod ?? inferredPeriodFromMinute;
+    const resolvedMinute =
+      fifaPeriod === FIFA_SHOOTOUT_PERIOD ? 120 + shootoutSeq++
+      : parsedMinute ?? syntheticMinute ?? (fifaPeriod == null && parsedMinute == null ? 120 : null);
     if (eventType) {
       timeline.push({
         playerId: player.id,
         teamId: player.teamId,
         type: eventType,
-        minute,
-        period: normalizedPeriod,
+        minute: resolvedMinute,
+        period: resolvedPeriod,
       });
     }
 
@@ -729,8 +738,8 @@ async function doSync(matchId: number): Promise<SyncStatsResult> {
         playerId: player.id,
         teamId: player.teamId,
         type: 'sub_in',
-        minute,
-        period: normalizedPeriod,
+        minute: resolvedMinute,
+        period: resolvedPeriod,
       });
 
       let subOut: RosterPlayer | null = null;
@@ -769,8 +778,8 @@ async function doSync(matchId: number): Promise<SyncStatsResult> {
           playerId: subOut.id,
           teamId: subOut.teamId,
           type: 'sub_out',
-          minute,
-          period: normalizedPeriod,
+          minute: resolvedMinute,
+          period: resolvedPeriod,
         });
       }
     }
