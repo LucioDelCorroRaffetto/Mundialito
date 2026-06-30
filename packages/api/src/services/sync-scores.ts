@@ -309,6 +309,9 @@ export async function syncScores(options: SyncScoresOptions = {}): Promise<SyncS
       // finished: if our row is 'finished' and the new payload would un-set
       // full_time (a stray IN_PLAY tick after FT), we keep the existing
       // liveStatus instead of overwriting it.
+      // cooling_break: football-data no conoce hydration breaks (siempre reporta
+      // IN_PLAY), así que si sync-fifa-stats ya marcó 'cooling_break', no lo
+      // pisamos — sync-fifa-stats lo resetea a 'in_play' cuando el break termina.
       const effectiveLiveStatus =
         suspendedHold
           ? null // 'suspended' no tiene sub-estado de juego
@@ -316,7 +319,9 @@ export async function syncScores(options: SyncScoresOptions = {}): Promise<SyncS
             ? (ourMatch.liveStatus ?? 'full_time')
             : ourMatch.status === 'finished' && newStatus === 'finished' && newLiveStatus !== 'full_time'
               ? ourMatch.liveStatus
-              : newLiveStatus;
+              : ourMatch.liveStatus === 'cooling_break' && newLiveStatus === 'in_play'
+                ? 'cooling_break' // preservar hasta que sync-fifa-stats lo resetee
+                : newLiveStatus;
       const liveStatusChanged = ourMatch.liveStatus !== effectiveLiveStatus;
 
       if (!statusChanged && !scoreChanged && !liveStatusChanged) continue;

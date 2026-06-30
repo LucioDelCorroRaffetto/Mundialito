@@ -861,11 +861,13 @@ async function doSync(matchId: number): Promise<SyncStatsResult> {
     // Recorremos events EN ORDEN para que el último gana.
     let latestMinute: string | null = null;
     let coolingBreakActive = false;
+    let coolingBreakSeen = false;
     for (const ev of events) {
       if (ev.MatchMinute) latestMinute = ev.MatchMinute;
       const desc = (ev.EventDescription?.[0]?.Description ?? '').toLowerCase();
       if (desc.includes('hydration break') || desc.includes('cooling break')) {
         coolingBreakActive = true;
+        coolingBreakSeen = true;
       } else if (
         coolingBreakActive &&
         (desc.includes('match resumed') || desc.includes('resumed after interruption'))
@@ -876,8 +878,11 @@ async function doSync(matchId: number): Promise<SyncStatsResult> {
     if (latestMinute) updates.currentMinute = latestMinute;
     // Cooling break tiene prioridad porque half_time es más persistente
     // y suele venir del feed de scores; cooling es siempre transitorio
-    // y solo FIFA lo publica.
-    if (coolingBreakActive) updates.liveStatus = 'cooling_break';
+    // y solo FIFA lo publica. Cuando termina (seen pero inactive) reseteamos
+    // a 'in_play' para que sync-scores no deba encargarse de esto.
+    if (coolingBreakSeen) {
+      updates.liveStatus = coolingBreakActive ? 'cooling_break' : 'in_play';
+    }
     if (Object.keys(updates).length > 0) {
       await db.update(matches).set(updates).where(eq(matches.id, matchId));
     }

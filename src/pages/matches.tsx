@@ -8,6 +8,8 @@ import { useTeams, useTeamMap } from '@/shared/hooks/use-teams';
 import { useMyPredictions } from '@/shared/hooks/use-predictions';
 import { useMyLeagues } from '@/shared/hooks/use-leagues';
 import { ROUND_LABELS } from '@/shared/data/mock';
+import { useTournamentPhase } from '@/shared/hooks/use-tournament-phase';
+import { KnockoutPhaseBanner } from '@/shared/components/knockout-phase-banner';
 import type { Match, Team } from '@/shared/types/api';
 import { TeamFlag } from '@/shared/components/ui/team-flag';
 import { GroupStandings } from '@/shared/components/group-standings';
@@ -396,6 +398,7 @@ export function MatchesPage() {
   const grouped = groupByDate(filtered);
   const dates = Object.keys(grouped).sort();
   const liveCount = matches.filter((m) => m.status === 'live').length;
+  const phase = useTournamentPhase(matches);
   const finishedCount = matches.filter((m) => m.status === 'finished').length;
   const todayCount = matches.filter((m) => localDateKey(new Date(m.kickoffUtc)) === todayKey).length;
 
@@ -455,6 +458,16 @@ export function MatchesPage() {
           Mundial FIFA 2026 · {finishedCount}/{matches.length} jugados
         </p>
       </div>
+
+      {/* Banner de fase knockout */}
+      {(phase.kind === 'knockout' || phase.kind === 'completed') && (
+        <div className="px-4 pb-2">
+          <KnockoutPhaseBanner
+            phase={phase}
+            onViewBracket={() => setMainTab('Cuadro')}
+          />
+        </div>
+      )}
 
       {/* Main tabs: Partidos / Grupos */}
       <div className="flex gap-1 px-4 pt-2 pb-3">
@@ -757,7 +770,18 @@ export function MatchesPage() {
                       : 'text-sm-s text-muted',
                   )}
                 >
-                  {match.homeScore} – {match.awayScore}
+                  {(() => {
+                    const h = match.homeScore!;
+                    const a = match.awayScore!;
+                    // Bump model: el sync sumó +1 al ganador cuando se fueron a
+                    // penales; para mostrar el resultado de reglamento (empate)
+                    // usamos el mínimo de ambos lados.
+                    if (!!match.decidedByPenalties && h !== a) {
+                      const reg = Math.min(h, a);
+                      return `${reg} – ${reg}`;
+                    }
+                    return `${h} – ${a}`;
+                  })()}
                   {isFinished && !!match.decidedByPenalties && (
                     <span className="text-[9px] font-bold text-muted" title="Definido por penales">pen.</span>
                   )}

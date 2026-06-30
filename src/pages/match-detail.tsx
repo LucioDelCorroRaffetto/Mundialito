@@ -974,23 +974,23 @@ export function MatchDetailPage() {
                 match.status === 'live' ? 'text-red-400' : 'text-text'
               )}>
                 <motion.span
-                  key={`h-${match.homeScore ?? '—'}`}
+                  key={`h-${(shootout?.regHome ?? match.homeScore) ?? '—'}`}
                   initial={{ scale: 1.6, opacity: 0 }}
                   animate={{ scale: 1, opacity: 1 }}
                   transition={{ duration: 0.4, ease: [0.34, 1.56, 0.64, 1] }}
                   className="inline-block"
                 >
-                  {match.homeScore ?? '—'}
+                  {(shootout?.regHome ?? match.homeScore) ?? '—'}
                 </motion.span>
                 <span>–</span>
                 <motion.span
-                  key={`a-${match.awayScore ?? '—'}`}
+                  key={`a-${(shootout?.regAway ?? match.awayScore) ?? '—'}`}
                   initial={{ scale: 1.6, opacity: 0 }}
                   animate={{ scale: 1, opacity: 1 }}
                   transition={{ duration: 0.4, ease: [0.34, 1.56, 0.64, 1] }}
                   className="inline-block"
                 >
-                  {match.awayScore ?? '—'}
+                  {(shootout?.regAway ?? match.awayScore) ?? '—'}
                 </motion.span>
               </span>
               <div className="flex flex-col items-center gap-1">
@@ -1002,12 +1002,8 @@ export function MatchDetailPage() {
             {match.status === 'finished' && (
               shootout ? (
                 <span className="text-xs-s text-muted mt-1 text-center">
-                  {/* Cuando el DB guarda el resultado de juego sin bump, el marcador principal
-                      ya lo refleja — solo mostramos la tanda. Con bump (scores distintos)
-                      necesitamos aclarar cuál fue el marcador de juego. */}
-                  {(match.homeScore !== shootout.regHome || match.awayScore !== shootout.regAway) && (
-                    <>{shootout.regHome} – {shootout.regAway} en el juego · </>
-                  )}
+                  {/* El score principal ya muestra el resultado de reglamento;
+                      aquí solo anotamos el resultado de la tanda. */}
                   <span className="font-semibold text-text">
                     {shootout.penHome > 0 || shootout.penAway > 0
                       ? `${shootout.penHome}–${shootout.penAway} en penales`
@@ -1295,8 +1291,8 @@ export function MatchDetailPage() {
               matchId={match.id}
               leagueId={selectedLeagueId}
               currentUserId={currentUserId}
-              actualHome={match.homeScore}
-              actualAway={match.awayScore}
+              actualHome={shootout ? shootout.regHome : match.homeScore}
+              actualAway={shootout ? shootout.regAway : match.awayScore}
               matchFinished={match.status === 'finished'}
             />
           )}
@@ -1480,9 +1476,18 @@ const MatchEvents = memo(function MatchEvents({
   const hasTimeline = timeline && timeline.length > 0;
   const hasAggregated = events && events.length > 0;
 
-  // Match terminado pero todavía sin nada cargado — placeholder claro.
+  // Sin eventos todavía — placeholder diferenciado por estado.
   if (!hasTimeline && !hasAggregated) {
-    if (status === 'live') return null;
+    if (status === 'live') {
+      return (
+        <div className="mx-4 mt-3 p-4 rounded-lg bg-elevated border border-border">
+          <p className="text-sm-s font-semibold text-text mb-1">Minuto a minuto</p>
+          <p className="text-xs-s text-muted leading-snug">
+            El partido está en curso — los eventos aparecen a medida que FIFA los publica.
+          </p>
+        </div>
+      );
+    }
     return (
       <div className="mx-4 mt-3 p-4 rounded-lg bg-elevated border border-border">
         <p className="text-sm-s font-semibold text-text mb-1">Resumen del partido</p>

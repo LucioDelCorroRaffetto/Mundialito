@@ -33,28 +33,27 @@ function isTbd(team: Team) {
   return team.code === 'TBD' || team.id === 0;
 }
 
-
 function slotLabel(matchNumber: number, side: 'home' | 'away', roundIndex: number): string {
   if (roundIndex === 0) return R32_LABELS[matchNumber]?.[side] ?? 'Por definir';
   return 'Por definir';
 }
 
-// ─── Round accent colours — dual-mode pills ──────────────────────────────────
+// ─── Round accent colours ─────────────────────────────────────────────────────
 const ROUND_STYLES = [
-  { label: 'R32',     pill: 'bg-slate-200 text-slate-700 dark:bg-slate-700/60 dark:text-slate-300',     accent: '#64748b', lineColor: 'rgba(100,116,139,0.45)' },
-  { label: 'Octavos', pill: 'bg-blue-100 text-blue-700 dark:bg-blue-900/60 dark:text-blue-300',         accent: '#3b82f6', lineColor: 'rgba(59,130,246,0.45)'  },
-  { label: 'Cuartos', pill: 'bg-violet-100 text-violet-700 dark:bg-violet-900/60 dark:text-violet-300', accent: '#8b5cf6', lineColor: 'rgba(139,92,246,0.45)'  },
-  { label: 'Semis',   pill: 'bg-orange-100 text-orange-700 dark:bg-orange-900/60 dark:text-orange-300', accent: '#f97316', lineColor: 'rgba(249,115,22,0.45)'  },
-  { label: 'Final',   pill: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/60 dark:text-yellow-300', accent: '#eab308', lineColor: 'rgba(234,179,8,0.55)'   },
+  { label: 'R32',     accent: '#64748b', lineColor: 'rgba(100,116,139,0.5)', headerBg: 'rgba(100,116,139,0.12)', headerText: '#94a3b8' },
+  { label: 'Octavos', accent: '#3b82f6', lineColor: 'rgba(59,130,246,0.5)',  headerBg: 'rgba(59,130,246,0.12)',  headerText: '#60a5fa' },
+  { label: 'Cuartos', accent: '#8b5cf6', lineColor: 'rgba(139,92,246,0.5)',  headerBg: 'rgba(139,92,246,0.12)', headerText: '#a78bfa' },
+  { label: 'Semis',   accent: '#f97316', lineColor: 'rgba(249,115,22,0.5)',  headerBg: 'rgba(249,115,22,0.12)', headerText: '#fb923c' },
+  { label: 'Final',   accent: '#eab308', lineColor: 'rgba(234,179,8,0.6)',   headerBg: 'rgba(234,179,8,0.14)',  headerText: '#facc15' },
 ];
 
 // ─── Layout constants ─────────────────────────────────────────────────────────
-const CARD_H    = 44;   // px — 2 rows × 22 px
-const CARD_W    = 118;  // px
-const SLOT_H    = 50;   // CARD_H + 6 px gap
-const HALF_GAP  = 16;
-const CONN_W    = 22;   // width of SVG connector between columns
-const COL_GAP   = 0;    // columns abut the connectors directly
+const CARD_H   = 58;   // px — 2 rows × 29 px
+const CARD_W   = 152;  // px
+const SLOT_H   = 66;   // CARD_H + 8 px gap
+const HALF_GAP = 18;
+const CONN_W   = 28;   // width of SVG connector between columns
+const COL_GAP  = 0;
 
 const TOTAL_H = 8 * SLOT_H + HALF_GAP + 8 * SLOT_H;
 
@@ -92,7 +91,7 @@ function BracketConnectors({
   positions,
   lineColor,
 }: {
-  roundIndex: number;   // index of the RIGHT (parent) round
+  roundIndex: number;
   positions: Map<number, { top: number; center: number }>;
   lineColor: string;
 }) {
@@ -109,7 +108,6 @@ function BracketConnectors({
     const mid = par.center;
     const cx  = CONN_W / 2;
 
-    // Two arms from child centres → midpoint, then one line to parent
     paths.push(
       <path
         key={bm.matchNumber}
@@ -131,12 +129,7 @@ function BracketConnectors({
   }
 
   return (
-    <svg
-      width={CONN_W}
-      height={TOTAL_H}
-      className="flex-shrink-0 self-end"
-      style={{ marginBottom: 0 }}
-    >
+    <svg width={CONN_W} height={TOTAL_H} className="flex-shrink-0 self-end">
       {paths}
     </svg>
   );
@@ -148,8 +141,6 @@ interface MatchCardProps {
   matchNumber: number;
   roundIndex: number;
   teamMap: Map<number, Team> | undefined;
-  /** Equipo proyectado para el slot (1°/2° de grupo en R32, o ganador del cruce
-   *  en las rondas siguientes) mientras el feed no asignó el equipo real. */
   projectedHome?: Team | null;
   projectedAway?: Team | null;
 }
@@ -161,27 +152,35 @@ function MatchCard({ match, matchNumber, roundIndex, teamMap, projectedHome, pro
   const homeTbd = isTbd(homeTeam);
   const awayTbd = isTbd(awayTeam);
 
-  // Si el slot todavía no tiene equipo real pero el grupo ya proyecta uno
-  // (1°/2° confirmado, o clasificado con orden provisional), lo mostramos.
   const homeProjected = homeTbd ? (projectedHome ?? null) : null;
   const awayProjected = awayTbd ? (projectedAway ?? null) : null;
 
   const isLive     = match?.status === 'live';
   const isFinished = match?.status === 'finished';
   const showScore  = (isLive || isFinished) && match?.homeScore != null;
-  // Cruce definido por penales: el marcador guardado ya trae +1 al ganador, así
-  // que anotamos "p" junto al puntaje del ganador para que no se lea como un
-  // resultado normal.
   const decidedByPen = isFinished && !!match?.decidedByPenalties;
 
   const homeLabel = homeTbd ? slotLabel(matchNumber, 'home', roundIndex) : homeTeam.code;
   const awayLabel = awayTbd ? slotLabel(matchNumber, 'away', roundIndex) : awayTeam.code;
 
-  const homeWon = isFinished && match!.homeScore! > match!.awayScore!;
-  const awayWon = isFinished && match!.awayScore! > match!.homeScore!;
+  // Bump model: el sync sumó +1 al ganador de penales para indicarlo en el score.
+  // Revertimos al resultado de reglamento (empate) para el display.
+  const rawHome = match?.homeScore ?? null;
+  const rawAway = match?.awayScore ?? null;
+  const displayHomeScore = (decidedByPen && rawHome != null && rawAway != null && rawHome !== rawAway)
+    ? Math.min(rawHome, rawAway) : rawHome;
+  const displayAwayScore = (decidedByPen && rawHome != null && rawAway != null && rawHome !== rawAway)
+    ? Math.min(rawHome, rawAway) : rawAway;
+
+  // El ganador se determina por el score original (bumpeado) o, si no hay bump,
+  // permanece indeterminado desde el match row (no tenemos el timeline aquí).
+  const homeWon = isFinished && rawHome != null && rawAway != null && rawHome > rawAway;
+  const awayWon = isFinished && rawHome != null && rawAway != null && rawAway > rawHome;
 
   const rs = ROUND_STYLES[Math.min(roundIndex, ROUND_STYLES.length - 1)];
   const accentColor = rs.accent;
+
+  const ROW_H = CARD_H / 2; // 29px
 
   const row = (
     tbd: boolean,
@@ -191,81 +190,132 @@ function MatchCard({ match, matchNumber, roundIndex, teamMap, projectedHome, pro
     score: number | null | undefined,
     isTop: boolean,
     projected: Team | null,
-  ) => (
-    <div
-      className={cn(
-        'flex items-center gap-1.5 px-2 min-w-0 relative',
-        isTop && 'border-b border-border',
-        won && 'bg-accent/10 dark:bg-white/5',
-      )}
-      style={{ height: CARD_H / 2 }}
-    >
-      {tbd && projected ? (
-        // Slot sin equipo asignado por el feed, pero ya proyectado: 1°/2° de grupo
-        // en la R32, o el ganador del cruce anterior en las rondas siguientes.
-        <>
-          <TeamFlag code={projected.code} emoji={projected.flag} size={16} />
-          <span className="flex-1 text-[9px] font-bold truncate leading-tight tracking-wide text-muted">
-            {projected.code}
-          </span>
-        </>
-      ) : tbd ? (
-        <span className="text-[7px] leading-tight text-muted/50 flex-1 truncate italic">{label}</span>
-      ) : (
-        <>
-          <TeamFlag code={team.code} emoji={team.flag} size={16} />
-          <span className={cn(
-            'flex-1 text-[9px] font-bold truncate leading-tight tracking-wide',
-            won ? 'text-text' : 'text-muted',
-          )}>
-            {team.code}
-          </span>
-        </>
-      )}
-      {showScore && score != null && (
-        <span className={cn(
-          'text-[11px] font-black tabular-nums flex-shrink-0 text-right inline-flex items-baseline justify-end gap-0.5 min-w-[14px]',
-          isLive ? 'text-red-500 dark:text-red-400' : won ? 'text-accent' : 'text-muted/70',
-        )}>
-          {score}
-          {won && decidedByPen && (
-            <span className="text-[7px] font-bold text-muted not-italic" title="Definido por penales">pen</span>
-          )}
-        </span>
-      )}
-    </div>
-  );
+  ) => {
+    const displayTeam = (!tbd) ? team : (projected ?? null);
+    const isProjected = tbd && !!projected;
+    const isBlank = tbd && !projected;
+
+    return (
+      <div
+        className={cn(
+          'flex items-center gap-2 px-2.5 min-w-0 relative transition-colors',
+          isTop && 'border-b border-border/60',
+          won && 'bg-white/[0.04]',
+        )}
+        style={{ height: ROW_H }}
+      >
+        {/* Flag */}
+        {displayTeam && !isBlank ? (
+          <TeamFlag
+            code={displayTeam.code}
+            emoji={displayTeam.flag}
+            size={20}
+            className={cn('flex-shrink-0', isProjected && 'opacity-60')}
+          />
+        ) : (
+          <div className="w-5 h-5 flex-shrink-0 rounded-sm bg-border/40" />
+        )}
+
+        {/* Name block */}
+        <div className="flex-1 min-w-0 flex flex-col justify-center gap-0">
+          {isBlank ? (
+            <span className="text-[8px] leading-tight text-muted/40 italic truncate">{label}</span>
+          ) : displayTeam ? (
+            <>
+              <span className={cn(
+                'text-[10px] font-bold leading-tight tracking-wide truncate',
+                isProjected ? 'text-muted/70' : won ? 'text-text' : 'text-muted',
+              )}>
+                {displayTeam.code}
+              </span>
+              <span className={cn(
+                'text-[7.5px] leading-tight truncate',
+                isProjected ? 'text-muted/40' : 'text-muted/60',
+              )}>
+                {displayTeam.name}
+              </span>
+            </>
+          ) : null}
+        </div>
+
+        {/* Score */}
+        {showScore && score != null && (
+          <div className="flex-shrink-0 flex items-center gap-0.5">
+            <span className={cn(
+              'text-[13px] font-black tabular-nums leading-none',
+              isLive ? 'text-red-400' : won ? 'text-accent' : 'text-muted/60',
+            )}>
+              {score}
+            </span>
+            {won && decidedByPen && (
+              <span className="text-[6.5px] font-bold text-muted/50 leading-none mb-px">p</span>
+            )}
+          </div>
+        )}
+
+        {/* Live pulse dot */}
+        {isLive && isTop && (
+          <span
+            className="absolute right-1.5 top-1.5 w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse"
+            aria-label="En vivo"
+          />
+        )}
+      </div>
+    );
+  };
 
   const card = (
     <div
       className={cn(
         'flex flex-col overflow-hidden flex-shrink-0 relative',
-        'rounded-lg border border-border bg-card',
-        isLive && 'border-red-500/60 shadow-[0_0_8px_rgba(239,68,68,0.3)]',
-        !isLive && 'shadow-sm dark:shadow-[0_2px_8px_rgba(0,0,0,0.4)]',
+        'rounded-xl border border-border/80 bg-card',
+        isLive
+          ? 'border-red-500/50 shadow-[0_0_12px_rgba(239,68,68,0.25)]'
+          : 'shadow-[0_2px_12px_rgba(0,0,0,0.25)]',
       )}
       style={{
         width: CARD_W,
         height: CARD_H,
-        // Left accent bar coloured by round (or red if live)
-        borderLeft: `2.5px solid ${isLive ? '#ef4444' : accentColor}`,
+        borderLeft: `3px solid ${isLive ? '#ef4444' : accentColor}`,
       }}
     >
-      {/* Subtle gradient overlay for depth */}
+      {/* Gradient overlay — more visible than before */}
       <div
         className="absolute inset-0 pointer-events-none"
-        style={{ background: `linear-gradient(135deg, ${accentColor}14 0%, transparent 60%)` }}
+        style={{ background: `linear-gradient(120deg, ${accentColor}1a 0%, transparent 55%)` }}
       />
-      {row(homeTbd, homeLabel, homeTeam, homeWon, match?.homeScore, true, homeProjected)}
-      {row(awayTbd, awayLabel, awayTeam, awayWon, match?.awayScore, false, awayProjected)}
+      {row(homeTbd, homeLabel, homeTeam, homeWon, displayHomeScore, true, homeProjected)}
+      {row(awayTbd, awayLabel, awayTeam, awayWon, displayAwayScore, false, awayProjected)}
     </div>
   );
 
   if (!match) return card;
   return (
-    <Link to={`/matches/${match.id}`} className="hover:opacity-80 transition-opacity">
+    <Link to={`/matches/${match.id}`} className="hover:opacity-80 transition-opacity active:scale-[0.98]">
       {card}
     </Link>
+  );
+}
+
+// ─── Round header ─────────────────────────────────────────────────────────────
+function RoundHeader({ rs, width }: { rs: typeof ROUND_STYLES[number]; width: number }) {
+  return (
+    <div
+      className="flex justify-center items-center flex-shrink-0 rounded-lg"
+      style={{
+        width,
+        height: 28,
+        background: rs.headerBg,
+        border: `1px solid ${rs.accent}30`,
+      }}
+    >
+      <span
+        className="text-[9px] font-black uppercase tracking-[0.12em]"
+        style={{ color: rs.headerText }}
+      >
+        {rs.label}
+      </span>
+    </div>
   );
 }
 
@@ -276,15 +326,11 @@ export function BracketView({ matches, teamMap, teams }: Props) {
     [matches],
   );
 
-  // Proyección de la R32: 1°/2° de grupo (confirmados o clasificados
-  // provisionales) + mejores terceros al cerrar la fase de grupos.
   const projection = useMemo(
     () => computeBracketProjection(teams ?? [], matches),
     [teams, matches],
   );
 
-  // Contexto único para resolver la identidad de cada slot del cuadro (equipo
-  // real, proyección de grupos en R32, o ganador del cruce anterior).
   const slotCtx = useMemo(
     () => ({ matchByNum, teamMap, projection }),
     [matchByNum, teamMap, projection],
@@ -304,44 +350,32 @@ export function BracketView({ matches, teamMap, teams }: Props) {
 
   return (
     <div className="pb-6">
-      {/* Labels + bracket share a SINGLE horizontal scroll container, so the
-          column headers stay aligned with their cards no matter how far the
-          user scrolls. Previously the labels lived outside the scroll area
-          and forced the page itself to widen, breaking the layout once the
-          bracket extended past Cuartos. */}
       <div className="overflow-x-auto pb-3">
         <div style={{ minWidth: 'max-content' }}>
-          {/* Round labels row */}
-          <div
-            className="flex items-center mb-3"
-            style={{ gap: COL_GAP, paddingLeft: 4, paddingRight: 4 }}
-          >
-            {rounds.map(({ ri }) => {
+
+          {/* Round headers */}
+          <div className="flex items-center gap-1 mb-3" style={{ padding: '0 4px' }}>
+            {rounds.map(({ ri }, colIdx) => {
               const rs = ROUND_STYLES[ri];
-              // each label is centred over its column + half of both adjacent connectors
               const colW = ri === 0
                 ? CARD_W + CONN_W / 2
                 : ri === rounds.length - 1
                   ? CARD_W + CONN_W / 2
                   : CARD_W + CONN_W;
               return (
-                <div key={ri} style={{ width: colW, flexShrink: 0 }} className="flex justify-center">
-                  <span className={cn('text-[9px] font-bold uppercase tracking-widest px-2.5 py-1 rounded-full', rs.pill)}>
-                    {rs.label}
-                  </span>
-                </div>
+                <RoundHeader
+                  key={ri}
+                  rs={rs}
+                  width={colIdx === 0 ? colW - 4 : colW}
+                />
               );
             })}
           </div>
 
-        <div
-          className="flex items-start"
-          style={{ gap: COL_GAP, padding: '0 4px 8px' }}
-        >
-          {rounds.map(({ matchNums, ri }, colIdx) => {
-            return (
+          {/* Bracket columns */}
+          <div className="flex items-start" style={{ gap: COL_GAP, padding: '0 4px 8px' }}>
+            {rounds.map(({ matchNums, ri }, colIdx) => (
               <div key={ri} className="flex items-start flex-shrink-0">
-                {/* Match column */}
                 <div className="relative flex-shrink-0" style={{ width: CARD_W, height: TOTAL_H }}>
                   {matchNums.map((mn) => {
                     const p = positions.get(mn);
@@ -361,9 +395,8 @@ export function BracketView({ matches, teamMap, teams }: Props) {
                   })}
                 </div>
 
-                {/* Connector SVG to the right (except after the last column) */}
                 {colIdx < rounds.length - 1 && (
-                  <div style={{ height: TOTAL_H, paddingTop: 0 }}>
+                  <div style={{ height: TOTAL_H }}>
                     <BracketConnectors
                       roundIndex={ri + 1}
                       positions={positions}
@@ -372,16 +405,24 @@ export function BracketView({ matches, teamMap, teams }: Props) {
                   </div>
                 )}
               </div>
-            );
-          })}
-        </div>
+            ))}
+          </div>
         </div>
       </div>
 
       {/* Third-place match */}
-      <div className="mt-3 px-1">
-        <div className="flex items-center gap-2 mb-2">
-          <span className="text-[9px] font-bold uppercase tracking-widest px-2.5 py-1 rounded-full bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300/70">
+      <div className="mt-4 px-1">
+        <div
+          className="inline-flex items-center px-3 py-1 rounded-lg mb-2"
+          style={{
+            background: ROUND_STYLES[3].headerBg,
+            border: `1px solid ${ROUND_STYLES[3].accent}30`,
+          }}
+        >
+          <span
+            className="text-[9px] font-black uppercase tracking-[0.12em]"
+            style={{ color: ROUND_STYLES[3].headerText }}
+          >
             3er Puesto
           </span>
         </div>
@@ -396,15 +437,18 @@ export function BracketView({ matches, teamMap, teams }: Props) {
       </div>
 
       {/* Legend */}
-      <div className="mt-4 px-1 flex items-center gap-5 flex-wrap">
+      <div className="mt-4 px-1 flex items-center gap-4 flex-wrap">
         {ROUND_STYLES.map((rs) => (
-          <span key={rs.label} className="flex items-center gap-1.5 text-[9px] text-muted">
-            <span className="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ background: rs.accent + '80', border: `1px solid ${rs.accent}80` }} />
+          <span key={rs.label} className="flex items-center gap-1.5 text-[8.5px]" style={{ color: rs.headerText }}>
+            <span
+              className="w-2 h-2 rounded-sm flex-shrink-0"
+              style={{ background: rs.accent + '70', border: `1px solid ${rs.accent}60` }}
+            />
             {rs.label}
           </span>
         ))}
-        <span className="flex items-center gap-1.5 text-[9px] text-muted">
-          <span className="w-2.5 h-2.5 rounded-sm bg-red-500/40 border border-red-500/60 flex-shrink-0" />
+        <span className="flex items-center gap-1.5 text-[8.5px] text-red-400">
+          <span className="w-2 h-2 rounded-full bg-red-500/60 border border-red-500/60 flex-shrink-0" />
           En vivo
         </span>
       </div>
