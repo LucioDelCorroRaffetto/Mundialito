@@ -68,3 +68,33 @@ services:
         value: https://mundialito-d2jk.onrender.com
       - key: SYNC_SECRET
         sync: false
+
+  # ── Recordatorio diario de pronósticos (Cron — 1 vez al día) ─────────────────
+  # 12:00 UTC ≈ 09:00 AR: temprano, para que el usuario tenga todo el día para
+  # pronosticar los partidos de hoy. El job sale sin enviar si no hay partidos
+  # hoy o si el usuario ya pronosticó todo. Necesita las VAPID_* para firmar el
+  # push (el worker de deadlines NO las tenía porque nunca las usó vía este cron;
+  # este job sí las requiere).
+  - type: cron
+    name: mundialito-daily-reminder
+    runtime: node
+    repo: https://github.com/LucioDelCorroRaffetto/Mundialito
+    plan: free
+    region: virginia
+    rootDir: packages/worker
+    buildCommand: yarn install --production=false && yarn build
+    startCommand: node dist/run-daily.js
+    schedule: "0 12 * * *"
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: TURSO_DATABASE_URL
+        sync: false
+      - key: TURSO_AUTH_TOKEN
+        sync: false
+      - key: VAPID_PUBLIC_KEY
+        sync: false
+      - key: VAPID_PRIVATE_KEY
+        sync: false
+      - key: VAPID_SUBJECT
+        sync: false
