@@ -1,10 +1,11 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Plus, Search, Trophy, ChevronRight, AlertCircle, Sparkles, Bell, Volume2, X } from 'lucide-react';
 import { staggerContainer, staggerItem, useMotionPrefs } from '@/shared/lib/motion';
 import { useQueryClient } from '@tanstack/react-query';
 import { useMatches } from '@/shared/hooks/use-matches';
+import { useTournamentPhase } from '@/shared/hooks/use-tournament-phase';
 import { useMyLeagues } from '@/shared/hooks/use-leagues';
 import { useTeamMap } from '@/shared/hooks/use-teams';
 import { useMyPredictions } from '@/shared/hooks/use-predictions';
@@ -25,6 +26,7 @@ import {
   type BracketProjection,
 } from '@/shared/lib/bracket-projection';
 import { R32_LABELS } from '@/shared/data/bracket';
+import { KnockoutPhaseBanner } from '@/shared/components/knockout-phase-banner';
 
 /** Un equipo "real" es uno ya definido en la DB — no el placeholder TBD/??? que
  *  se muestra mientras un cruce de eliminación todavía no tiene rivales. */
@@ -484,6 +486,7 @@ export function HomePage() {
     { status: 'scheduled', limit: 6 },
     { refetchInterval: 60_000 },
   );
+  const { data: allMatchesResponse } = useMatches({ limit: 200 });
   const { data: teamMap } = useTeamMap();
   const { data: leaguesResponse } = useMyLeagues();
   const { data: myPredictionsData } = useMyPredictions();
@@ -491,8 +494,10 @@ export function HomePage() {
   const { isInstallable, isInstalled, install } = usePwaInstall();
   const username = useAuthStore((s) => s.user?.username);
   const { reduced } = useMotionPrefs();
+  const navigate = useNavigate();
 
   const apiMatches = matchesResponse?.data ?? [];
+  const phase = useTournamentPhase(allMatchesResponse?.data ?? []);
   const liveMatches = apiMatches.filter((m) => m.status === 'live');
   // First match is used for the countdown; live-only matches excluded from
   // upcoming so they don't appear in "Próximos partidos" while already live.
@@ -605,6 +610,17 @@ export function HomePage() {
 
           {/* Countdown */}
           <CountdownHero nextMatch={nextMatch} liveMatches={liveMatches} teamMap={teamMap} />
+
+          {/* Indicador de fase knockout */}
+          {(phase.kind === 'knockout' || phase.kind === 'completed') && (
+            <KnockoutPhaseBanner
+              phase={phase}
+              onViewBracket={() => {
+                sessionStorage.setItem('matches:mainTab', 'Cuadro');
+                navigate('/matches');
+              }}
+            />
+          )}
 
           {/* Pending predictions call-to-action */}
           {pendingCount > 0 && (
