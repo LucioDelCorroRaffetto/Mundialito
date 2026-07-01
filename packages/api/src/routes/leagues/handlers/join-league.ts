@@ -1,9 +1,10 @@
 import { Request, Response } from 'express';
 import { z } from 'zod';
 import { db } from '../../../db/index.js';
-import { leagues, leagueMembers, predictions, tournamentPredictions } from '../../../db/schema/index.js';
+import { leagues, leagueMembers, predictions, tournamentPredictions, matches } from '../../../db/schema/index.js';
 import { NotFoundError, ConflictError, AppError } from '../../../lib/errors.js';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
+import { calculatePoints } from '../../../lib/scoring.js';
 import { checkAchievements } from '../../../services/achievement-service.js';
 
 export const joinLeagueSchema = z.object({
@@ -62,16 +63,41 @@ export async function joinLeagueHandler(req: Request, res: Response) {
     for (const p of myPredictions) byMatch.set(p.matchId, p);
 
     if (byMatch.size > 0) {
+      // Pre-score predictions for matches that already finished. A finished
+      // match is never re-scored by sync-scores (it only re-scores on a
+      // status/score change and skips score-locked rows), so a carried-over
+      // prediction inserted with points=null would stay unscored forever —
+      // mostrándose como "sin resultado" en la lista y, peor, sumando 0 en la
+      // tabla de esta liga aunque el pronóstico fuera correcto.
+      const matchRows = await db
+        .select({
+          id: matches.id,
+          status: matches.status,
+          homeScore: matches.homeScore,
+          awayScore: matches.awayScore,
+        })
+        .from(matches)
+        .where(inArray(matches.id, [...byMatch.keys()]));
+      const matchById = new Map(matchRows.map((m) => [m.id, m]));
+
       await db
         .insert(predictions)
         .values(
-          [...byMatch.entries()].map(([matchId, p]) => ({
-            userId,
-            matchId,
-            leagueId: league.id,
-            homeScore: p.homeScore,
-            awayScore: p.awayScore,
-          })),
+          [...byMatch.entries()].map(([matchId, p]) => {
+            const m = matchById.get(matchId);
+            const points =
+              m && m.status === 'finished' && m.homeScore !== null && m.awayScore !== null
+                ? calculatePoints(p, { homeScore: m.homeScore, awayScore: m.awayScore })
+                : null;
+            return {
+              userId,
+              matchId,
+              leagueId: league.id,
+              homeScore: p.homeScore,
+              awayScore: p.awayScore,
+              points,
+            };
+          }),
         )
         .onConflictDoNothing();
     }
