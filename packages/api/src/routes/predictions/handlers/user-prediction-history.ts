@@ -4,6 +4,7 @@ import { alias } from 'drizzle-orm/sqlite-core';
 import { db } from '../../../db/index.js';
 import { predictions, matches, teams, users } from '../../../db/schema/index.js';
 import { AppError, NotFoundError } from '../../../lib/errors.js';
+import { regulationScore } from '../../../lib/score-sync.js';
 
 /**
  * GET /predictions/user/:userId/history
@@ -117,6 +118,7 @@ export async function userPredictionHistoryHandler(req: Request, res: Response) 
       matchStatus: matches.status,
       matchHomeScore: matches.homeScore,
       matchAwayScore: matches.awayScore,
+      decidedByPenalties: matches.decidedByPenalties,
       round: matches.round,
       homeTeamName: homeTeams.name,
       homeTeamCode: homeTeams.code,
@@ -160,8 +162,14 @@ export async function userPredictionHistoryHandler(req: Request, res: Response) 
       //  - 'correct': acertó ganador/empate pero no el marcador exacto.
       //  - 'missed' : falló.
       let outcome: 'pending' | 'exact' | 'correct' | 'missed' = 'pending';
-      const mh = row.matchHomeScore;
-      const ma = row.matchAwayScore;
+      // El score guardado puede venir "bumpeado" (+1 al ganador) si se decidió
+      // por penales — usamos el resultado de reglamento, igual que
+      // match-detail/matches/bracket-view (ver acfe7c2).
+      const { homeScore: mh, awayScore: ma } = regulationScore(
+        row.matchHomeScore,
+        row.matchAwayScore,
+        row.decidedByPenalties === 1,
+      );
       if (mh != null && ma != null) {
         const exact = mh === row.homeScore && ma === row.awayScore;
         const sign = (h: number, a: number) => (h > a ? 1 : h < a ? -1 : 0);

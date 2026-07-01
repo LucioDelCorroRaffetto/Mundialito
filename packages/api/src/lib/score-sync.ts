@@ -102,6 +102,29 @@ export function resolveShootoutScore(
 }
 
 /**
+ * Inverse of the bump applied by `resolveShootoutScore`: given the stored
+ * (possibly bumped) score and the `decidedByPenalties` flag, returns the
+ * regulation-time score (the draw before the shootout). Used anywhere we
+ * display or score against the "real" result — bumped DB scores would
+ * otherwise show a fake winning margin (e.g. DB 1-2 for a 1-1 decided on
+ * penalties) and mis-score predictions that correctly called the draw.
+ */
+export function regulationScore(
+  homeScore: number | null,
+  awayScore: number | null,
+  decidedByPenalties: boolean,
+): { homeScore: number | null; awayScore: number | null } {
+  if (!decidedByPenalties || homeScore == null || awayScore == null || homeScore === awayScore) {
+    return { homeScore, awayScore };
+  }
+  const winnerIsHome = homeScore > awayScore;
+  return {
+    homeScore: winnerIsHome ? homeScore - 1 : homeScore,
+    awayScore: winnerIsHome ? awayScore : awayScore - 1,
+  };
+}
+
+/**
  * Whether the sync should (re)score the match's predictions this tick. Encodes
  * the score_locked guard (Gotcha #15): an admin-locked score must never be
  * re-scored by the feed, and a held shootout must not score a tied KO.

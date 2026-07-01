@@ -4,6 +4,7 @@ import { alias } from 'drizzle-orm/sqlite-core';
 import { db } from '../../../db/index.js';
 import { predictions, matches, teams } from '../../../db/schema/index.js';
 import { ensurePersonalLeague } from '../../../lib/personal-league.js';
+import { regulationScore } from '../../../lib/score-sync.js';
 
 /**
  * Historial de pronósticos del usuario autenticado, para el perfil propio.
@@ -40,6 +41,7 @@ export async function myPredictionHistoryHandler(req: Request, res: Response) {
       group: matches.group,
       actualHomeScore: matches.homeScore,
       actualAwayScore: matches.awayScore,
+      decidedByPenalties: matches.decidedByPenalties,
       predictedHomeScore: predictions.homeScore,
       predictedAwayScore: predictions.awayScore,
       points: predictions.points,
@@ -73,5 +75,13 @@ export async function myPredictionHistoryHandler(req: Request, res: Response) {
       new Date(r.kickoffUtc).getTime() <= now,
   );
 
-  return res.json({ data: started, meta: { total: started.length } });
+  // El score guardado en `matches` puede venir "bumpeado" (+1 al ganador) si
+  // se decidió por penales — mostramos el resultado de reglamento, igual que
+  // match-detail/matches/bracket-view (ver acfe7c2).
+  const data = started.map(({ decidedByPenalties, ...r }) => {
+    const reg = regulationScore(r.actualHomeScore, r.actualAwayScore, decidedByPenalties === 1);
+    return { ...r, actualHomeScore: reg.homeScore, actualAwayScore: reg.awayScore };
+  });
+
+  return res.json({ data, meta: { total: data.length } });
 }
