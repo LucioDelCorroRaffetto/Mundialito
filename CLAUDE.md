@@ -287,6 +287,51 @@ FIFA.com no necesita key.
 > Orden cronológico inverso (lo nuevo arriba). Cada entrada: **qué cambió y por qué**.
 > Agregá una entrada cada vez que cambies un comportamiento por una razón.
 
+### 2026-06-29 — Auditoría stats (goleadores/asistidores/amarillas/rojas) + mapeo de fifa_id
+
+Disparado por un reporte de usuario ("le falta un gol a Mbappé"). Se corrió
+`audit-stats.ts` (feed FIFA vs `player_match_stats`) + un audit ad-hoc de
+asistencias (el script original NO chequeaba assists). **Solo se tocó data de
+prod (mapeos + re-sync), no código.**
+
+**✅ Lo bueno (arreglado y verificado contra el feed):**
+- **Mbappé/Dembélé (#41 FRA-IRQ)**: faltaban el 2° gol de Mbappé (54') y el gol
+  de Dembélé (66') + sus assists. **Causa: feed parcial** — el partido se
+  sincronizó cuando la timeline solo tenía el gol del 14' y nunca se re-sincronizó
+  con el 2T. Ambos ya estaban en el roster con `fifa_id_player` cacheado → un
+  `resync-all-finished` (force) los recuperó solo. Idem assists de Olise.
+- **Desajustes de transliteración** (FIFA escribe distinto que nuestro roster, el
+  matcher fuzzy no llega): se cacheó `players.fifa_id_player` extrayendo el
+  `IdPlayer` del evento del feed, para que el resolver matchee por ID (1ª rama,
+  saltea el fuzzy). Mapeados: Mostafa **Ziko** (FIFA "ZICO", #38 gol+asist),
+  Mohanad **Lasheen** ("LASHIN", #38/#62 amarillas), **Diney** ("DINEY BORGES",
+  #40), Musa **Al-Taamari** ("MOUSA ALTAMARI", #44 asist), Husam **Abu Dahab**
+  ("ABUDAHAB", #44), Hossein **Kanaanizadegan** ("KANANI", #62), Firas
+  **Al-Buraikan** ("FERAS ALBRIKAN", #64), Mohannad **Abu Taha** ("ABUTAHA", #67),
+  Mohammad **Abu Zrayq** ("ABUZRAIQ", #67).
+- **Ambigüedad Danilo (BRA, #53)**: hay DOS "Danilo" en el plantel → el matcher
+  rechazaba la amarilla por ambiguo. Se mapeó el `IdPlayer` 335656 al Danilo
+  **defensor** (id 5576).
+- **#55 asistencia fantasma**: Eren Elmalı tenía `assists=1` que FIFA después
+  reasignó (timeline editada). El resync hace upsert pero **no borra** filas de
+  jugadores que ya no aparecen en el feed → quedó stale. Se puso a 0 a mano.
+- Tras cada cambio: `recomputeAllFantasyPoints`. **Rojas: 100% OK desde el vamos.**
+
+**⚠️ Lo malo / pendiente:**
+- 🟡 **#73/#74/#76 (octavos, stage 289287) están TBD-TBD** (placeholder id 49):
+  los equipos clasificados reales todavía no se asignaron al match, así que el
+  sync carga el roster vacío de TBD y `player_match_stats` queda en 0 (#74: feed
+  con 9 goles, db 0). **No es bug del sync** — necesita asignar los equipos del
+  cuadro + `backfill:fifa`. Queda para el flujo de bracket (dueño).
+- 🟡 **#32 Carlos González (PAR)**: el feed cuenta su amarilla pero NO está en
+  nuestro plantel de 26 y el evento ni trae `IdPlayer` → imposible mapear. Además
+  el feed cuenta la amarilla de **Montella (DT de Türkiye)**, que bien ignoramos.
+  Por eso #32 queda Y feed=4 / db=2 — esperado, no se fuerza.
+- 🟢 **Idea de robustez (post-torneo)**: el matcher falla sistemáticamente con
+  apellidos compuestos colapsados ("Abu Dahab"→"ABUDAHAB", "DINEY BORGES" vs solo
+  "Diney") y apellidos < 5 chars fuera del umbral fuzzy ("Ziko"/"ZICO"). El
+  resync tampoco limpia stats stale (ver #55). Ambos se podrían endurecer.
+
 ### 2026-06-24 — Clinch nunca confirmaba 1° + R32 en la lista mostraba "???"
 
 Dos bugs reportados desde la UI (el cuadro y la lista de Partidos). **Solo
