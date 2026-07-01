@@ -729,10 +729,12 @@ export function MatchDetailPage() {
 
   // Knock-out matches with undetermined opponents can't be predicted yet.
   // Exception: if the bracket projection has confirmed the team (group fully
-  // resolved), we allow predictions even if the DB record still shows TBD.
+  // resolved) or the previous cruce already decided a winner (homeKnockout/
+  // awayKnockout, octavos+), we allow predictions even if the DB record still
+  // shows TBD.
   const teamsAreTbd =
-    (homeOfficialTbd && !homeProjection?.confirmed) ||
-    (awayOfficialTbd && !awayProjection?.confirmed);
+    (homeOfficialTbd && !homeProjection?.confirmed && !homeKnockout) ||
+    (awayOfficialTbd && !awayProjection?.confirmed && !awayKnockout);
 
   // Hide personal/auto-created leagues from the chip selector — the user
   // doesn't think of them as "leagues" and the chip would just confuse the
