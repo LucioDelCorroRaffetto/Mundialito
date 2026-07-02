@@ -1,6 +1,6 @@
 import { useState, useEffect, memo } from 'react';
 import { useParams, useNavigate, Navigate, Link } from 'react-router-dom';
-import { motion } from 'framer-motion';
+import { motion, LayoutGroup } from 'framer-motion';
 import { ArrowLeft, Share2, Users, Trophy, ChevronRight, Pencil, X, Check } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/shared/lib/cn';
@@ -10,7 +10,7 @@ import { LeagueBannerPicker } from '@/shared/components/ui/image-picker';
 import { useLeague, useLeagueStandings, useLeaveLeague, useUpdateLeague, type StandingRow } from '@/shared/hooks/use-leagues';
 import { useAuthStore } from '@/shared/stores/auth-store';
 import { podiumStyle } from '@/shared/components/logros-gate-banner';
-import { staggerContainer, staggerItem, useMotionPrefs } from '@/shared/lib/motion';
+import { staggerContainer, staggerItem, useMotionPrefs, springSnappy, useCountUp } from '@/shared/lib/motion';
 
 const TABS = ['Tabla', 'Info'] as const;
 type Tab = (typeof TABS)[number];
@@ -115,9 +115,10 @@ const Row = memo(function Row({ row, isMe, reduced }: { row: StandingRow; isMe: 
   // Podium spots get medal styling. The "me" highlight wins when it overlaps —
   // people care more about finding themselves than seeing a medal anyway.
   const podium = podiumStyle(row.position);
+  const points = useCountUp(row.points);
 
   return (
-    <motion.div variants={staggerItem(reduced)}>
+    <motion.div layout={!reduced} transition={springSnappy} variants={staggerItem(reduced)}>
       <Link
         to={`/u/${row.userId}`}
         aria-current={isMe ? 'true' : undefined}
@@ -172,11 +173,11 @@ const Row = memo(function Row({ row, isMe, reduced }: { row: StandingRow; isMe: 
         <div className="flex items-center gap-1.5">
           <span
             className={cn(
-              'text-base-s font-bold',
+              'text-base-s font-bold tabular-nums',
               isMe ? 'text-accent' : podium ? podium.text : 'text-text',
             )}
           >
-            {row.points}
+            {points}
           </span>
           <ChevronRight size={16} className="text-muted flex-shrink-0" />
         </div>
@@ -312,15 +313,17 @@ export function LeagueDetailPage() {
               </div>
             </div>
           ) : (
-            <motion.div
-              variants={staggerContainer(reduced)}
-              initial="initial"
-              animate="animate"
-            >
-              {standings.map((row) => (
-                <Row key={row.userId} row={row} isMe={row.userId === currentUser?.id} reduced={reduced} />
-              ))}
-            </motion.div>
+            <LayoutGroup>
+              <motion.div
+                variants={staggerContainer(reduced)}
+                initial="initial"
+                animate="animate"
+              >
+                {standings.map((row) => (
+                  <Row key={row.userId} row={row} isMe={row.userId === currentUser?.id} reduced={reduced} />
+                ))}
+              </motion.div>
+            </LayoutGroup>
           )}
         </div>
       )}

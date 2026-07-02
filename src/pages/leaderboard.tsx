@@ -1,13 +1,13 @@
 import { memo, useMemo } from 'react';
 import { Link } from 'react-router-dom';
-import { motion } from 'framer-motion';
+import { motion, LayoutGroup } from 'framer-motion';
 import { BarChart2, ChevronRight, RotateCw } from 'lucide-react';
 import { cn } from '@/shared/lib/cn';
 import { SkeletonList } from '@/shared/components/skeleton';
 import { useGlobalLeaderboard, type LeaderboardEntry, type TopBadge } from '@/shared/hooks/use-leaderboard';
 import { useAuthStore } from '@/shared/stores/auth-store';
 import { UserLevelBadge } from '@/shared/components/user-level-badge';
-import { staggerContainer, staggerItem, useMotionPrefs } from '@/shared/lib/motion';
+import { staggerContainer, staggerItem, useMotionPrefs, springSnappy, useCountUp } from '@/shared/lib/motion';
 
 const MEDAL_COLORS = [
   // Each medal carries a colour for both modes so the gold/silver/bronze
@@ -45,6 +45,7 @@ function BadgeChip({ badge }: { badge: TopBadge }) {
 
 function PodiumCard({ entry, place, reduced }: { entry: LeaderboardEntry; place: 0 | 1 | 2; reduced: boolean }) {
   const medal = MEDAL_COLORS[place];
+  const points = useCountUp(entry.totalPoints);
   const initials = entry.username.slice(0, 1).toUpperCase();
   const heights = ['h-28', 'h-20', 'h-16'];
   // #1 gets a crown on top of the medal; the avatar is also a touch larger so
@@ -94,7 +95,7 @@ function PodiumCard({ entry, place, reduced }: { entry: LeaderboardEntry; place:
           {entry.topBadge && <BadgeChip badge={entry.topBadge} />}
         </div>
       </Link>
-      <p className="text-xs text-muted">{entry.totalPoints} pts</p>
+      <p className="text-xs text-muted tabular-nums">{points} pts</p>
       <div
         className={cn(
           'w-16 rounded-t-lg border flex items-end justify-center pb-1',
@@ -117,9 +118,12 @@ const LeaderboardRow = memo(function LeaderboardRow({
   reduced: boolean;
 }) {
   const initials = entry.username.slice(0, 1).toUpperCase();
+  const points = useCountUp(entry.totalPoints);
   return (
     <Link to={`/u/${entry.userId}`}>
     <motion.div
+      layout={!reduced}
+      transition={springSnappy}
       variants={staggerItem(reduced)}
       className={cn(
         'flex items-center gap-3 px-4 py-3 border-b border-border last:border-0 hover:bg-elevated transition-colors',
@@ -155,8 +159,8 @@ const LeaderboardRow = memo(function LeaderboardRow({
           <p className="text-xs text-muted">{entry.leagueCount} liga{entry.leagueCount !== 1 ? 's' : ''}</p>
         )}
       </div>
-      <span className={cn('text-base font-bold', isMe ? 'text-accent' : 'text-text')}>
-        {entry.totalPoints}
+      <span className={cn('text-base font-bold tabular-nums', isMe ? 'text-accent' : 'text-text')}>
+        {points}
       </span>
       <ChevronRight size={16} className="text-muted flex-shrink-0" />
     </motion.div>
@@ -269,21 +273,25 @@ export function LeaderboardPage() {
             <span className="text-xs text-muted">Pts</span>
           </div>
           {/* Stagger sólo en mount: la key del contenedor es estable, así el
-              polling de TanStack actualiza filas sin re-disparar la entrada. */}
-          <motion.div
-            variants={staggerContainer(reduced)}
-            initial="initial"
-            animate="animate"
-          >
-            {rest.map((entry) => (
-              <LeaderboardRow
-                key={entry.userId}
-                entry={entry}
-                isMe={entry.userId === currentUser?.id}
-                reduced={reduced}
-              />
-            ))}
-          </motion.div>
+              polling de TanStack actualiza filas sin re-disparar la entrada.
+              LayoutGroup + layout en cada fila anima el reordenamiento
+              cuando cambian los puntos entre polls. */}
+          <LayoutGroup>
+            <motion.div
+              variants={staggerContainer(reduced)}
+              initial="initial"
+              animate="animate"
+            >
+              {rest.map((entry) => (
+                <LeaderboardRow
+                  key={entry.userId}
+                  entry={entry}
+                  isMe={entry.userId === currentUser?.id}
+                  reduced={reduced}
+                />
+              ))}
+            </motion.div>
+          </LayoutGroup>
         </div>
       )}
 

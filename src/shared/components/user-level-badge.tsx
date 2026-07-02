@@ -1,4 +1,5 @@
 import { cn } from '@/shared/lib/cn';
+import { useCountUp } from '@/shared/lib/motion';
 import type { LevelInfo } from '@/shared/lib/levels';
 
 /**
@@ -56,6 +57,8 @@ export function UserLevelCard({
   level: LevelInfo | null | undefined;
   className?: string;
 }) {
+  // useCountUp antes del early return (regla de hooks) — cae en 0 sin level.
+  const xp = useCountUp(level?.xp ?? 0);
   if (!level) return null;
   const progressDenom = level.nextLevelXp != null
     ? level.nextLevelXp - level.currentLevelXp
@@ -96,7 +99,7 @@ export function UserLevelCard({
           />
         </div>
         <div className="mt-1 flex justify-between text-[11px] text-muted">
-          <span>{level.xp} XP</span>
+          <span className="tabular-nums">{xp} XP</span>
           {level.nextLevelXp != null ? (
             <span>
               {level.nextLevelXp - level.xp} XP para Nv {level.level + 1}
