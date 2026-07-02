@@ -7,7 +7,7 @@ import { useAuthStore } from '@/shared/stores/auth-store';
 import { accentList, type ThemeMode } from '@/theme/palettes';
 import { usePushNotifications } from '@/shared/hooks/use-push';
 import { apiClient } from '@/shared/lib/api-client';
-import { useUpdateUsername, useUpdateAvatar, useDeleteAccount } from '@/shared/hooks/use-auth';
+import { useUpdateUsername, useUpdateAvatar, useDeleteAccount, useLogout } from '@/shared/hooks/use-auth';
 import { useAdminProfile } from '@/shared/hooks/use-user-profile';
 import { Link } from 'react-router-dom';
 import { AvatarPicker } from '@/shared/components/ui/image-picker';
@@ -36,6 +36,7 @@ export function SettingsPage() {
   const navigate = useNavigate();
   const { mode, accent, fontScale, soundEnabled, setMode, setAccent, setFontScale, setSoundEnabled } = useThemeStore();
   const { logout } = useAuthStore();
+  const doLogout = useLogout();
   const user = useAuthStore((s) => s.user);
   const { isSubscribed, isLoading: pushLoading, subscribe, unsubscribe } = usePushNotifications();
   const updateUsername = useUpdateUsername();
@@ -404,7 +405,7 @@ export function SettingsPage() {
         </section>
 
         <button
-          onClick={() => { logout(); navigate('/login', { replace: true }); }}
+          onClick={() => { doLogout(); navigate('/login', { replace: true }); }}
           className="w-full py-3 rounded-lg border border-red-500/40 text-red-400 text-sm-s font-semibold hover:bg-red-500/10 transition-colors mt-2"
         >
           Cerrar sesión

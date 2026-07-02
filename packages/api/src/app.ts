@@ -1,5 +1,6 @@
 import express from 'express';
 import cors from 'cors';
+import helmet from 'helmet';
 import compression from 'compression';
 import morgan from 'morgan';
 import { tokenParse } from './middleware/token-parse.js';
@@ -30,6 +31,10 @@ console.log('[CORS] Allowed origins:', ALLOWED_ORIGINS);
 // del bandwidth de Render. El costo de CPU a esta escala es ruido y el browser
 // descomprime nativo — no hay cambios en el frontend.
 app.use(compression());
+
+// CSP no aplica acá — es una API JSON, no sirve HTML. Va en el frontend
+// (vercel.json). El resto de los headers de helmet (nosniff, etc.) sí aplican.
+app.use(helmet({ contentSecurityPolicy: false }));
 
 app.use(cors({
   origin: (origin, callback) => {

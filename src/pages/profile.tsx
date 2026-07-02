@@ -10,6 +10,7 @@ import { UserLevelBadge, UserLevelCard } from '@/shared/components/user-level-ba
 import { AchievementCardModal } from '@/shared/components/achievement-card-modal';
 import { HistoryRow } from '@/shared/components/prediction-history-row';
 import { computeLevel } from '@/shared/lib/levels';
+import { useLogout } from '@/shared/hooks/use-auth';
 import { staggerContainer, staggerItem, useMotionPrefs } from '@/shared/lib/motion';
 
 // Cuántos pronósticos se muestran en la vista previa del perfil antes de
@@ -90,7 +91,7 @@ export function ProfilePage() {
   const navigate = useNavigate();
   const { reduced } = useMotionPrefs();
   const user = useAuthStore((s) => s.user);
-  const logout = useAuthStore((s) => s.logout);
+  const doLogout = useLogout();
   const { data: stats, isLoading: statsLoading } = useMyStats();
   const { data: myAchievementsData } = useMyAchievements();
   const { data: allAchievementsData } = useAllAchievements();
@@ -111,7 +112,7 @@ export function ProfilePage() {
   }, [myEarned, allAchievements]);
 
   const handleLogout = () => {
-    logout();
+    doLogout();
     navigate('/login', { replace: true });
   };
 

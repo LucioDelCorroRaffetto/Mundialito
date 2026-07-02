@@ -43,6 +43,7 @@ import {
   leaguePositionHistory,
   pushSubscriptions,
 } from '../../../db/schema/index.js';
+import { revokeAllForUser } from '../../../lib/refresh-store.js';
 
 export const deleteAccountSchema = z.object({
   confirmUsername: z.string().min(1, 'Username confirmation required'),
@@ -116,6 +117,10 @@ export async function deleteAccountHandler(req: Request, res: Response) {
     await tx.delete(leagueMembers).where(eq(leagueMembers.userId, userId));
     await tx.delete(pushSubscriptions).where(eq(pushSubscriptions.userId, userId));
 
+    // refresh_tokens tiene FK cascade sobre users.id, así que borrar el user
+    // ya se lleva estas filas — este revoke explícito es solo por claridad
+    // de intención (y por si algún día la cascade se rompe/desactiva).
+    await revokeAllForUser(userId);
     await tx.delete(users).where(eq(users.id, userId));
   });
 
