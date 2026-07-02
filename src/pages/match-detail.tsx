@@ -928,8 +928,9 @@ export function MatchDetailPage() {
             }
           : undefined;
         return (
+      <div className="relative mx-4">
       <div
-        className="mx-4 p-4 rounded-xl bg-card border border-border shadow-card overflow-hidden relative"
+        className="p-4 rounded-xl bg-card border border-border shadow-card overflow-hidden relative"
         style={themedStyle}
       >
         {/* Overlay sutil que oscurece/aclara el fondo gradiente sin tapar
@@ -1087,6 +1088,35 @@ export function MatchDetailPage() {
           </div>
         )}
         </div>
+      </div>
+      {/* Celebración de acierto — montada sobre la score card (siempre
+          visible arriba, a diferencia de la card "Tu pronóstico" que puede
+          quedar debajo del timeline en vivo). Wrapper sin overflow-hidden
+          para que el confetti no se recorte contra los bordes de la card. */}
+      {celebration === 'exact' && !reduced && (
+        <ConfettiBurst onDone={clearCelebration} />
+      )}
+      {celebration === 'correct' && !reduced && (
+        <motion.div
+          aria-hidden
+          className="absolute inset-0 rounded-xl pointer-events-none"
+          initial={{ boxShadow: '0 0 0 0 rgba(16,185,129,0)' }}
+          animate={{ boxShadow: ['0 0 0 0 rgba(16,185,129,0)', '0 0 24px 4px rgba(16,185,129,0.55)', '0 0 0 0 rgba(16,185,129,0)'] }}
+          transition={{ duration: 1.2, ease: 'easeOut' }}
+          onAnimationComplete={clearCelebration}
+        />
+      )}
+      {celebration && reduced && (
+        <motion.span
+          variants={fadeVariants(true)}
+          initial="initial"
+          animate="animate"
+          exit="exit"
+          className="absolute top-2 right-2 text-[10px] font-bold text-accent bg-accent/15 border border-accent-border px-2 py-0.5 rounded-full"
+        >
+          {celebration === 'exact' ? '✨ Exacto' : '✓ Acertaste'}
+        </motion.span>
+      )}
       </div>
         );
       })()}
@@ -1294,38 +1324,12 @@ export function MatchDetailPage() {
           )}
         </div>
       ) : existingPrediction && (
-        <div className="relative">
-          <MyPredictionPanel
-            predsByLeague={predsByLeague ?? []}
-            fallbackHome={existingPrediction.homeScore}
-            fallbackAway={existingPrediction.awayScore}
-            fallbackPoints={existingPrediction.points}
-          />
-          {celebration === 'exact' && !reduced && (
-            <ConfettiBurst onDone={clearCelebration} />
-          )}
-          {celebration === 'correct' && !reduced && (
-            <motion.div
-              aria-hidden
-              className="absolute inset-0 rounded-xl pointer-events-none"
-              initial={{ boxShadow: '0 0 0 0 rgba(16,185,129,0)' }}
-              animate={{ boxShadow: ['0 0 0 0 rgba(16,185,129,0)', '0 0 24px 4px rgba(16,185,129,0.55)', '0 0 0 0 rgba(16,185,129,0)'] }}
-              transition={{ duration: 1.2, ease: 'easeOut' }}
-              onAnimationComplete={clearCelebration}
-            />
-          )}
-          {celebration && reduced && (
-            <motion.span
-              variants={fadeVariants(true)}
-              initial="initial"
-              animate="animate"
-              exit="exit"
-              className="absolute top-2 right-2 text-[10px] font-bold text-accent bg-accent/15 border border-accent-border px-2 py-0.5 rounded-full"
-            >
-              {celebration === 'exact' ? '✨ Exacto' : '✓ Acertaste'}
-            </motion.span>
-          )}
-        </div>
+        <MyPredictionPanel
+          predsByLeague={predsByLeague ?? []}
+          fallbackHome={existingPrediction.homeScore}
+          fallbackAway={existingPrediction.awayScore}
+          fallbackPoints={existingPrediction.points}
+        />
       )}
 
       {/* League picker + league-mates' predictions — surface this prominently
