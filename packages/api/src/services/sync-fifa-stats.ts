@@ -39,10 +39,12 @@
  *   del jugador (la tanda no cuenta como gol en el fantasy real) y se emite
  *   como 'penalty_goal' en el timeline. Si Period < 11 (juego / ET) sí suma.
  */
-import { eq, inArray } from 'drizzle-orm';
+import { eq, inArray, sql } from 'drizzle-orm';
 import { db } from '../db/index.js';
-import { matches, players, playerMatchStats, teams, matchEvents } from '../db/schema/index.js';
+import { matches, players, playerMatchStats, teams, matchEvents, predictions } from '../db/schema/index.js';
 import { recomputeAllFantasyPoints } from './fantasy-scoring-service.js';
+import { calculatePoints } from '../lib/scoring.js';
+import { checkAchievements } from './achievement-service.js';
 import { notifyAdmin } from '../lib/notify-admin.js';
 import {
   type FifaLocaleString,
@@ -171,6 +173,20 @@ interface FifaTimelineResponse {
   Event?: FifaTimelineEvent[];
 }
 
+// Endpoint FIFA-live (/live/football/...): trae el marcador con local/visitante
+// explícito. Es la fuente autoritativa del score para los cruces de
+// eliminación, que no tienen apiFixtureId y por lo tanto nunca reciben score
+// de football-data/ESPN.
+interface FifaLiveTeam {
+  Score?: number | null;
+  IdTeam?: string | null;
+}
+interface FifaLiveResponse {
+  MatchStatus?: number;
+  HomeTeam?: FifaLiveTeam | null;
+  AwayTeam?: FifaLiveTeam | null;
+}
+
 export interface SyncStatsResult {
   matched: number;
   unmatched: string[];
@@ -252,6 +268,10 @@ async function doSync(matchId: number): Promise<SyncStatsResult> {
       status: matches.status,
       homeTeamId: matches.homeTeamId,
       awayTeamId: matches.awayTeamId,
+      homeScore: matches.homeScore,
+      awayScore: matches.awayScore,
+      apiFixtureId: matches.apiFixtureId,
+      scoreLocked: matches.scoreLocked,
     })
     .from(matches)
     .where(eq(matches.id, matchId))
@@ -888,6 +908,47 @@ async function doSync(matchId: number): Promise<SyncStatsResult> {
     }
   }
 
+  // 6.6. Marcador desde el feed FIFA-live. Los cruces de eliminación se crean
+  // como placeholders sin apiFixtureId, así que football-data/ESPN nunca les
+  // sincronizan el score y quedan con un valor stale (o el que un feed pifió,
+  // ver comentario en update-match). FIFA es la fuente autoritativa: /live
+  // expone HomeTeam.Score/AwayTeam.Score con local/visitante explícito.
+  //
+  // Solo tocamos partidos SIN apiFixtureId (los que ningún otro feed cubre) y
+  // que no estén lockeados por un admin. El orden home/away es el de FIFA (el
+  // del fixture oficial), que coincide con la projection del bracket del front.
+  if (m.apiFixtureId == null && !m.scoreLocked) {
+    try {
+      const liveUrl = `${FIFA_BASE}/live/football/${FIFA_COMPETITION_ID}/${FIFA_SEASON_ID}/${m.fifaIdStage}/${m.fifaIdMatch}?language=en`;
+      const liveRes = await fetch(liveUrl, { headers: { 'User-Agent': 'Mozilla/5.0' } });
+      if (liveRes.ok) {
+        const live = (await liveRes.json()) as FifaLiveResponse;
+        const fh = live.HomeTeam?.Score;
+        const fa = live.AwayTeam?.Score;
+        if (typeof fh === 'number' && typeof fa === 'number') {
+          const changed = fh !== m.homeScore || fa !== m.awayScore;
+          if (changed) {
+            await db.update(matches).set({ homeScore: fh, awayScore: fa }).where(eq(matches.id, matchId));
+            console.log(
+              `[sync-fifa-stats] match ${matchId}: score FIFA ${fh}-${fa} (era ${m.homeScore}-${m.awayScore})`,
+            );
+            // Si el partido ya está finalizado, re-puntuar los pronósticos con
+            // el marcador corregido: el finalize por pitazo ya corrió con el
+            // score viejo. En vivo no hace falta — los puntos se otorgan recién
+            // al cierre.
+            if (m.status === 'finished') {
+              await rescoreMatchPredictions(matchId, fh, fa);
+            }
+          }
+        }
+      } else {
+        console.warn(`[sync-fifa-stats] match ${matchId}: FIFA live devolvió ${liveRes.status}`);
+      }
+    } catch (err) {
+      console.error(`[sync-fifa-stats] match ${matchId}: FIFA live score sync falló:`, err);
+    }
+  }
+
   // 7. Upsert player_match_stats.
   let upserted = 0;
   for (const [playerId, b] of stats) {
@@ -951,6 +1012,34 @@ async function doSync(matchId: number): Promise<SyncStatsResult> {
   }
 
   return { matched: stats.size, unmatched, upserted, finalWhistle: hasFinalWhistle(events) };
+}
+
+/**
+ * Re-puntúa todos los pronósticos de un partido con el marcador dado. Espeja
+ * la lógica de finalize-match/update-match: se usa cuando corregimos el score
+ * de un partido YA finalizado (p.ej. el score autoritativo de FIFA llegó
+ * después de que el pitazo lo cerró con un marcador equivocado).
+ */
+async function rescoreMatchPredictions(matchId: number, homeScore: number, awayScore: number): Promise<void> {
+  const matchPredictions = await db.select().from(predictions).where(eq(predictions.matchId, matchId));
+  const scoredUsers = new Map<number, number>();
+  for (const pred of matchPredictions) {
+    const pts = calculatePoints(
+      { homeScore: pred.homeScore, awayScore: pred.awayScore },
+      { homeScore, awayScore },
+    );
+    await db
+      .update(predictions)
+      .set({ points: pts, updatedAt: sql`(datetime('now'))` })
+      .where(eq(predictions.id, pred.id));
+    const prev = scoredUsers.get(pred.userId) ?? -1;
+    if (pts > prev) scoredUsers.set(pred.userId, pts);
+  }
+  for (const [uid, pts] of scoredUsers) {
+    checkAchievements(uid, { type: 'prediction_scored', matchId, points: pts }).catch(() => {});
+  }
+  // El fantasy ya se recomputa más abajo en doSync (paso 8); acá solo
+  // reparamos los puntos de pronóstico.
 }
 
 const NOTIFY_COOLDOWN_MS = 60 * 60 * 1000;
