@@ -77,6 +77,17 @@ export function useUpdateAvatar() {
   });
 }
 
+export function useLogout() {
+  const storeLogout = useAuthStore((s) => s.logout);
+  return () => {
+    const refreshToken = localStorage.getItem('mundialito_refresh');
+    // Fire-and-forget: el logout local nunca debe fallar por red.
+    apiClient.post('/auth/logout', { refreshToken }).catch(() => {});
+    localStorage.removeItem('mundialito_refresh');
+    storeLogout();
+  };
+}
+
 export function useDeleteAccount() {
   return useMutation({
     mutationFn: async (confirmUsername: string) => {

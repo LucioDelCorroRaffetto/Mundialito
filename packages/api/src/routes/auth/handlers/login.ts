@@ -3,7 +3,8 @@ import { z } from 'zod';
 import { db } from '../../../db/index.js';
 import { users } from '../../../db/schema/index.js';
 import { comparePassword } from '../../../lib/password.js';
-import { signAccess, signRefresh } from '../../../lib/jwt.js';
+import { signAccess } from '../../../lib/jwt.js';
+import { issueRefreshToken } from '../../../lib/refresh-store.js';
 import { UnauthorizedError } from '../../../lib/errors.js';
 import { eq } from 'drizzle-orm';
 
@@ -36,6 +37,6 @@ export async function loginHandler(req: Request, res: Response) {
       isAdmin: adminIds.includes(user.id),
     },
     accessToken: signAccess(payload),
-    refreshToken: signRefresh(payload),
+    refreshToken: await issueRefreshToken(payload),
   });
 }
