@@ -613,4 +613,4 @@ distinguibles · toggle de admin funciona sin redeploy.
 
 | Fecha | Sesión | Rama/commit | Resultado |
 |-------|--------|-------------|-----------|
-| — | — | — | — |
+| 2026-07-02 | Sesión 1 — Refresh tokens + headers | `feat/sesion-1-refresh-tokens` (3559c18), mergeada a main y deployada | ✅ DoD cumplido. Verificado en prod: rotación, reuso revoca familia, logout single/all, fallback legacy, headers CSP/helmet. Nota: justo tras el deploy se vieron dos 500 puntuales en `/auth/refresh` cuando se llamaba a milisegundos de `/auth/register` — antes de esta sesión `/auth/refresh` no tocaba la DB, así que fue el primer request de ese path contra Turso en el container recién levantado (cold warm-up de la conexión). No reprodujo más en los minutos siguientes (3/3 ok) ni en local contra la misma DB; el `/sync` cron cada 3 min mantiene el instance caliente en operación normal, así que no debería repetirse. No se tocó código. |
