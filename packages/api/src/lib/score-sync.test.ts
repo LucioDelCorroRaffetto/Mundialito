@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
+  isPlaceholderMatch,
+  isPlaceholderTeamCode,
   normalizeEspnCode,
   resolveCompetitors,
   resolveShootoutScore,
@@ -168,5 +170,26 @@ describe('shouldRescorePredictions', () => {
   // corrected 3-0 re-scores the 2-0 prediction down to 1 pt.
   it('re-scores a downgrade-blocked correction (feed live, match already finished)', () => {
     expect(shouldRescorePredictions({ ...base, newStatus: 'finished', homeScore: 3, awayScore: 0 })).toBe(true);
+  });
+});
+
+// Gotcha #16 — KO placeholder rows (M82 BEL-SEN: loose kickoff match
+// silently overwrote an admin-corrected 3-2 back to a stale 1-0) must never
+// be matched by the loose kickoff-only fallback.
+describe('isPlaceholderTeamCode / isPlaceholderMatch', () => {
+  it('flags TBD case-insensitively', () => {
+    expect(isPlaceholderTeamCode('TBD')).toBe(true);
+    expect(isPlaceholderTeamCode('tbd')).toBe(true);
+    expect(isPlaceholderTeamCode('ARG')).toBe(false);
+  });
+
+  it('flags a match placeholder when either side is TBD', () => {
+    expect(isPlaceholderMatch({ homeTeamCode: 'TBD', awayTeamCode: 'TBD' })).toBe(true);
+    expect(isPlaceholderMatch({ homeTeamCode: 'TBD', awayTeamCode: 'ARG' })).toBe(true);
+    expect(isPlaceholderMatch({ homeTeamCode: 'ARG', awayTeamCode: 'TBD' })).toBe(true);
+  });
+
+  it('does not flag a match with two real teams', () => {
+    expect(isPlaceholderMatch({ homeTeamCode: 'ARG', awayTeamCode: 'BRA' })).toBe(false);
   });
 });

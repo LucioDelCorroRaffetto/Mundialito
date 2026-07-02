@@ -15,6 +15,7 @@ import { db } from '../db/index.js';
 import { matches, predictions, teams } from '../db/schema/index.js';
 import { calculatePoints } from '../lib/scoring.js';
 import {
+  isPlaceholderMatch,
   normalizeEspnCode,
   resolveCompetitors,
   resolveShootoutScore,
@@ -148,9 +149,13 @@ function findMatch(ourMatches: OurMatch[], event: EspnEvent): OurMatch | undefin
   });
   if (strict) return strict;
 
-  // Loose: kickoff only, but only when a single DB match shares the slot.
+  // Loose: kickoff only, but only when a single DB match shares the slot —
+  // and never a KO placeholder row (Gotcha #16). Placeholders have no team
+  // code to disambiguate with, so kickoff-only matching would silently
+  // attach an unrelated fixture's score. Those rows are FIFA-live's
+  // responsibility exclusively (sync-fifa-stats.ts).
   const sameSlot = ourMatches.filter(
-    (m) => Math.abs(new Date(m.kickoffUtc).getTime() - espnTime) <= TEN_MIN,
+    (m) => !isPlaceholderMatch(m) && Math.abs(new Date(m.kickoffUtc).getTime() - espnTime) <= TEN_MIN,
   );
   return sameSlot.length === 1 ? sameSlot[0] : undefined;
 }

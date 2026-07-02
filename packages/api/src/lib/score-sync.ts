@@ -1,7 +1,8 @@
 // Pure scoring-sync helpers extracted from sync-espn.ts so the logic behind
-// three production incidents (Gotchas #13, #14, #15) can be unit-tested without
-// pulling in the DB client or the network. sync-espn.ts imports these; the
-// behaviour is identical to the previous inline code.
+// four production incidents (Gotchas #13, #14, #15, #16) can be unit-tested
+// without pulling in the DB client or the network. sync-espn.ts and
+// sync-scores.ts import these; the behaviour is identical to the previous
+// inline code.
 
 /**
  * ESPN's 3-letter abbreviation → our `teams.code`. Almost all are identical
@@ -122,6 +123,31 @@ export function regulationScore(
     homeScore: winnerIsHome ? homeScore - 1 : homeScore,
     awayScore: winnerIsHome ? awayScore : awayScore - 1,
   };
+}
+
+/**
+ * Gotcha #16: KO placeholder rows — both `teams.code` read 'TBD' because the
+ * bracket slot hasn't been resolved to real teams yet (sync-fifa-stats.ts
+ * derives the actual participants from the FIFA feed itself; matches.home/
+ * away_team_id stay pointed at the shared TBD row). Neither ESPN nor
+ * football-data.org can identify these rows by team code — both sides read
+ * 'TBD' — so the *loose* kickoff-only fallback in `findMatch` is the only
+ * thing that could match them, and a single WC kickoff slot regularly hosts
+ * more than one real fixture.
+ *
+ * Real incident (M82 BEL–SEN, R32): the placeholder row got loose-matched
+ * against a score that was never this match's — the feed re-wrote it back to
+ * 1-0 on the very next tick after an admin correction to the true 3-2 (AET).
+ * FIFA's live endpoint (sync-fifa-stats.ts, `apiFixtureId == null` gate) is
+ * the sole authoritative score source for these rows; ESPN/football-data must
+ * never touch them, loose match or not.
+ */
+export function isPlaceholderTeamCode(code: string): boolean {
+  return code.toUpperCase() === 'TBD';
+}
+
+export function isPlaceholderMatch(m: { homeTeamCode: string; awayTeamCode: string }): boolean {
+  return isPlaceholderTeamCode(m.homeTeamCode) || isPlaceholderTeamCode(m.awayTeamCode);
 }
 
 /**

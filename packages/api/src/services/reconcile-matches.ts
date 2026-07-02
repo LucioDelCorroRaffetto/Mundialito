@@ -126,7 +126,19 @@ export async function reconcileMatchStatuses(): Promise<ReconcileResult> {
       // player_match_stats — leaving every starter on 0 fantasy points for
       // the round. Self-dedupes by matchId; fire-and-forget so a FIFA outage
       // doesn't block the reconcile pass.
-      syncFifaStatsForMatch(m.id).catch((err) =>
+      //
+      // MUST pass force:true (Gotcha #16). The 3.5h auto-finish above stamps
+      // `finished` with whatever score happens to be sitting in the row —
+      // for a KO placeholder that's whatever FIFA-live last reported, which
+      // can be stale mid-match (M82 BEL–SEN closed 1-0, real result 3-2 AET).
+      // Without force, `syncFifaStatsForMatch`'s "already synced" guard skips
+      // the whole re-fetch (player_match_stats already has rows from the
+      // live phase) — so the FIFA-live score correction in section 6.6 of
+      // sync-fifa-stats.ts, which is the ONLY thing that can still fix a
+      // placeholder match's score once it's `finished`, never runs. Forcing
+      // here re-checks FIFA immediately at the moment we auto-finish, while
+      // the match is still fresh in the FIFA feed.
+      syncFifaStatsForMatch(m.id, { force: true }).catch((err) =>
         console.error(`[reconcile] FIFA stats sync failed for match ${m.id}:`, err),
       );
     } catch (err) {

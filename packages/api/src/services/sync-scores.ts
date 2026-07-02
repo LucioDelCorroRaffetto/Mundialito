@@ -7,6 +7,7 @@ import { eq, sql } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import { matches, predictions, teams } from '../db/schema/index.js';
 import { calculatePoints } from '../lib/scoring.js';
+import { isPlaceholderMatch } from '../lib/score-sync.js';
 import { recomputeAllFantasyPoints } from './fantasy-scoring-service.js';
 import { broadcastMatchUpdate } from '../ws/broadcast.js';
 import { checkAchievements, finalizeFantasyLegends } from './achievement-service.js';
@@ -189,8 +190,12 @@ function findMatch(
   if (strict) return strict;
 
   // Pass 2 (loose): kickoff only, but only if no other DB match shares the
-  // same slot. Falls back for cases where the FD payload has no TLA.
+  // same slot. Falls back for cases where the FD payload has no TLA. Never
+  // matches a KO placeholder row (Gotcha #16, score-sync.ts) — those have no
+  // team code to disambiguate with, so kickoff-only matching would silently
+  // attach an unrelated fixture's score. FIFA-live owns those exclusively.
   const sameSlot = ourMatches.filter((m) => {
+    if (isPlaceholderMatch(m)) return false;
     const diff = Math.abs(new Date(m.kickoffUtc).getTime() - fdTime);
     return diff <= TEN_MINUTES_MS;
   });
