@@ -5,8 +5,11 @@ import { ArrowLeft, Clock, MapPin, CheckCircle2, Share2, Users, Plus, Minus, Loc
 import { IconBallFootball, IconBallFootballOff, IconShoe, IconHandStop, IconHandFinger, IconCheck } from '@tabler/icons-react';
 import { toast } from 'sonner';
 import { ROUND_LABELS } from '@/shared/data/mock';
-import { getMaxPossiblePoints, getScoreType } from '@/shared/lib/scoring';
+import { getMaxPossiblePoints, getScoreType, calculatePoints } from '@/shared/lib/scoring';
 import type { ScoreType } from '@/shared/lib/scoring';
+import { ConfettiBurst } from '@/shared/components/confetti-burst';
+import { usePredictionCelebration } from '@/shared/hooks/use-prediction-celebration';
+import { useMotionPrefs, fadeVariants } from '@/shared/lib/motion';
 import { Button } from '@/shared/components/ui/button';
 import { cn } from '@/shared/lib/cn';
 import { sharePredictionCard } from '@/shared/lib/generate-prediction-card';
@@ -681,6 +684,42 @@ export function MatchDetailPage() {
     return () => window.removeEventListener('beforeunload', handler);
   }, [hasUnsavedChanges]);
 
+  // Celebración de acierto en vivo — DEBE estar antes de los early returns
+  // de loading/!match para no violar la regla de hooks ordenados. Usamos el
+  // marcador crudo (match.homeScore/awayScore) en vez del ajustado por
+  // penales: la celebración importa en el juego en vivo, no en la tanda.
+  const { reduced } = useMotionPrefs();
+  const myOutcome: ScoreType | undefined =
+    match && (match.status === 'live' || match.status === 'finished') &&
+    existingPrediction?.homeScore != null && existingPrediction?.awayScore != null &&
+    match.homeScore != null && match.awayScore != null
+      ? getScoreType({
+          predictedHome: existingPrediction.homeScore,
+          predictedAway: existingPrediction.awayScore,
+          actualHome: match.homeScore,
+          actualAway: match.awayScore,
+        })
+      : undefined;
+  const { celebration, clear: clearCelebration } = usePredictionCelebration(matchId, myOutcome);
+
+  useEffect(() => {
+    if (!celebration || !myOutcome) return;
+    const pts = calculatePoints({
+      predictedHome: existingPrediction!.homeScore!,
+      predictedAway: existingPrediction!.awayScore!,
+      actualHome: match!.homeScore!,
+      actualAway: match!.awayScore!,
+    });
+    toast.success(celebration === 'exact' ? `¡Exacto! +${pts}` : `¡Acertaste! +${pts}`);
+    // Con reduce-motion no hay confetti/glow que limpien el estado solos —
+    // el badge estático (ver render) se retira a mano tras un rato.
+    if (reduced) {
+      const timer = setTimeout(clearCelebration, 1500);
+      return () => clearTimeout(timer);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [celebration]);
+
   const isLoading = matchLoading || teamsLoading;
 
   useEffect(() => {
@@ -1255,12 +1294,38 @@ export function MatchDetailPage() {
           )}
         </div>
       ) : existingPrediction && (
-        <MyPredictionPanel
-          predsByLeague={predsByLeague ?? []}
-          fallbackHome={existingPrediction.homeScore}
-          fallbackAway={existingPrediction.awayScore}
-          fallbackPoints={existingPrediction.points}
-        />
+        <div className="relative">
+          <MyPredictionPanel
+            predsByLeague={predsByLeague ?? []}
+            fallbackHome={existingPrediction.homeScore}
+            fallbackAway={existingPrediction.awayScore}
+            fallbackPoints={existingPrediction.points}
+          />
+          {celebration === 'exact' && !reduced && (
+            <ConfettiBurst onDone={clearCelebration} />
+          )}
+          {celebration === 'correct' && !reduced && (
+            <motion.div
+              aria-hidden
+              className="absolute inset-0 rounded-xl pointer-events-none"
+              initial={{ boxShadow: '0 0 0 0 rgba(16,185,129,0)' }}
+              animate={{ boxShadow: ['0 0 0 0 rgba(16,185,129,0)', '0 0 24px 4px rgba(16,185,129,0.55)', '0 0 0 0 rgba(16,185,129,0)'] }}
+              transition={{ duration: 1.2, ease: 'easeOut' }}
+              onAnimationComplete={clearCelebration}
+            />
+          )}
+          {celebration && reduced && (
+            <motion.span
+              variants={fadeVariants(true)}
+              initial="initial"
+              animate="animate"
+              exit="exit"
+              className="absolute top-2 right-2 text-[10px] font-bold text-accent bg-accent/15 border border-accent-border px-2 py-0.5 rounded-full"
+            >
+              {celebration === 'exact' ? '✨ Exacto' : '✓ Acertaste'}
+            </motion.span>
+          )}
+        </div>
       )}
 
       {/* League picker + league-mates' predictions — surface this prominently

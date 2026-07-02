@@ -14,7 +14,8 @@
  * Estos helpers son opt-in: las páginas y componentes PUEDEN consumirlos,
  * pero no se asume que ya lo hagan.
  */
-import { useReducedMotion, type Transition, type Variants } from 'framer-motion';
+import { useEffect, useRef, useState } from 'react';
+import { animate, useReducedMotion, type Transition, type Variants } from 'framer-motion';
 
 // ─── Curvas y duraciones base ────────────────────────────────────────────────
 
@@ -149,4 +150,33 @@ export const tapScaleStrong = { scale: 0.92 } as const;
 export function useMotionPrefs(): { reduced: boolean } {
   const reduced = useReducedMotion();
   return { reduced: reduced ?? false };
+}
+
+// ─── Count-up ────────────────────────────────────────────────────────────────
+
+/** Anima un número de 0 (o prev) a value. reduced ⇒ devuelve value directo. */
+export function useCountUp(value: number, opts?: { duration?: number }): number {
+  const { reduced } = useMotionPrefs();
+  const [display, setDisplay] = useState(value);
+  const prevRef = useRef(value);
+
+  useEffect(() => {
+    if (reduced) {
+      setDisplay(value);
+      prevRef.current = value;
+      return;
+    }
+    const from = prevRef.current;
+    prevRef.current = value;
+    if (from === value) return;
+    const controls = animate(from, value, {
+      duration: opts?.duration ?? 0.6,
+      ease: EASE.standard,
+      onUpdate: (v) => setDisplay(Math.round(v)),
+    });
+    return () => controls.stop();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value, reduced]);
+
+  return reduced ? value : display;
 }
