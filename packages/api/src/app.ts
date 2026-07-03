@@ -5,6 +5,7 @@ import compression from 'compression';
 import morgan from 'morgan';
 import { tokenParse } from './middleware/token-parse.js';
 import { errorHandler } from './middleware/error-handler.js';
+import { rateLimit } from './middleware/rate-limit.js';
 import { apiRouter } from './routes/index.js';
 import { syncScores } from './services/sync-scores.js';
 import { syncScoresFromEspn } from './services/sync-espn.js';
@@ -81,6 +82,8 @@ app.get('/health', async (_req, res) => {
 // production we therefore REFUSE to serve it unless SYNC_SECRET is set, and
 // always require the header to match — there is no "secret missing → open"
 // fallback anymore.
+let syncInProgress = false;
+
 app.post('/sync', async (req, res) => {
   const secret = process.env.SYNC_SECRET;
   // In production a missing secret means the endpoint would be wide open —
@@ -95,6 +98,24 @@ app.post('/sync', async (req, res) => {
     return res.status(401).json({ error: 'Unauthorized' });
   }
 
+  // cron-job.org llama cada 3min, pero un tick lento (feeds caídos, Wikipedia
+  // lenta) puede seguir corriendo cuando llega el próximo — dos syncs en
+  // paralelo duplican requests a football-data (10/min) y pueden pisarse
+  // entre sí en updates no atómicos. Un solo flag in-memory alcanza (single
+  // instance, igual que rate-limit.ts).
+  if (syncInProgress) {
+    return res.status(429).json({ error: 'sync already running' });
+  }
+  syncInProgress = true;
+
+  try {
+    return await runSync(req, res);
+  } finally {
+    syncInProgress = false;
+  }
+});
+
+async function runSync(req: express.Request, res: express.Response) {
   const today = new Date().toISOString().slice(0, 10);
   // Ventana del feed adaptativa: normalmente "ayer" (matches que arrancaron
   // cerca de medianoche UTC y terminaron pasadas las 00:00), pero si hay algún
@@ -190,7 +211,7 @@ app.post('/sync', async (req, res) => {
     fixtureTimes.updated > 0;
   if (shouldInvalidate) invalidateForecastCache();
   return res.json({ data: { ...result, liveFifa: fifaResults, reconcile, fixtureTimes, squads: squadStatus } });
-});
+}
 
 let lastSquadReconcileAt = 0;
 const SQUAD_RECONCILE_COOLDOWN_MS = 12 * 60 * 60 * 1000;
@@ -227,6 +248,10 @@ function maybeRunSquadReconcile(): { triggered: boolean; lastRunAt: string | nul
     });
   return { triggered: true, lastRunAt: new Date(now).toISOString() };
 }
+// 300/min por IP no molesta a un usuario real (polling más agresivo es 45s en
+// match-detail) pero acota scraping/abuso; login/register/refresh ya tienen
+// su propio límite más estricto (middleware/rate-limit.ts, 10/5min).
+app.use('/api/v1', rateLimit({ windowMs: 60_000, max: 300, routeKey: 'api-general' }));
 app.use('/api/v1', apiRouter);
 
 app.use(errorHandler);

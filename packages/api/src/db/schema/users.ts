@@ -19,6 +19,9 @@ export const users = sqliteTable('users', {
   // because the column needs to allow temporary inconsistency during
   // achievement renames).
   selectedTitleSlug: text('selected_title_slug'),
+  // Admin toggleable en DB (Sesión 8 de PLAN-MEJORAS.md). ADMIN_USER_IDS
+  // sigue siendo el fallback/bootstrap — ver require-admin.ts.
+  isAdmin: integer('is_admin').notNull().default(0),
   createdAt: text('created_at').notNull().default(sql`(datetime('now'))`),
 });
 

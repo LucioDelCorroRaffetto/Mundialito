@@ -65,7 +65,11 @@ export type ResolvedMode = 'dark' | 'light';
 
 export const modeVars: Record<ResolvedMode, Record<string, string>> = {
   dark: {
-    '--bg-deep':     '#0a0e1a',
+    // Tinte sutil del acento sobre el fondo base (probado 2026-07-03,
+    // Sesión 8 del plan de mejoras) — 4% mantiene el margen de los ratios
+    // auditados arriba (todos ≥5.67 UI/bg-deep, sobra para absorber el
+    // shift de luminancia de un color-mix al 4%).
+    '--bg-deep':     'color-mix(in srgb, #0a0e1a 96%, var(--accent))',
     '--bg-card':     '#1a1f2e',
     '--bg-elevated': 'rgba(255,255,255,0.04)',
     '--border-color':'rgba(255,255,255,0.08)',
@@ -76,7 +80,7 @@ export const modeVars: Record<ResolvedMode, Record<string, string>> = {
   light: {
     '--bg-deep':     '#f5f7fb',
     '--bg-card':     '#ffffff',
-    '--bg-elevated': 'rgba(0,0,0,0.02)',
+    '--bg-elevated': 'rgba(0,0,0,0.04)',
     // Borde un pelín más marcado en claro: 0.08 sobre blanco casi no se veía.
     '--border-color':'rgba(0,0,0,0.10)',
     '--text':        '#0a0e1a',

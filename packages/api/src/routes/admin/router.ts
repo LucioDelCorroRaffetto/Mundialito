@@ -10,6 +10,7 @@ import { syncPlayerStatsHandler } from './handlers/sync-player-stats.js';
 import { diagnoseFifaHandler } from './handlers/diagnose-fifa.js';
 import { finalizeFantasyHandler } from './handlers/finalize-fantasy.js';
 import { syncAllFinishedStatsHandler } from './handlers/sync-all-finished-stats.js';
+import { updateUserAdminHandler } from './handlers/update-user-admin.js';
 
 export const adminRouter = Router();
 
@@ -48,3 +49,6 @@ adminRouter.post('/finalize-fantasy', (req, res, next) =>
 adminRouter.post('/sync-all-finished-stats', (req, res, next) =>
   syncAllFinishedStatsHandler(req, res).catch(next),
 );
+
+// Toggle de admin en DB sin redeploy (ADMIN_USER_IDS sigue como fallback/bootstrap).
+adminRouter.patch('/users/:id', (req, res, next) => updateUserAdminHandler(req, res).catch(next));

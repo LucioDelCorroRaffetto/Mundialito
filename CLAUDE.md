@@ -287,6 +287,36 @@ FIFA.com no necesita key.
 > Orden cronológico inverso (lo nuevo arriba). Cada entrada: **qué cambió y por qué**.
 > Agregá una entrada cada vez que cambies un comportamiento por una razón.
 
+### 2026-07-03 — Backlog técnico menor (Sesión 8 de `PLAN-MEJORAS.md`, última del plan)
+
+Detalle completo de los 6 ítems en la tabla "Registro de sesiones" de
+`PLAN-MEJORAS.md` (no repetido acá). Resumen: lock in-memory de `/sync`
+(429 si ya hay un tick corriendo), rate limit genérico 300/min en
+`/api/v1`, ajuste de contraste de `--bg-elevated` en modo claro, tinte
+sutil del acento en `--bg-deep` (dark) vía `color-mix`, y `users.isAdmin`
+en DB + `PATCH /admin/users/:id` para promover admins sin redeploy
+(`ADMIN_USER_IDS` sigue como fallback). Ítem 7 (compactar reacciones)
+quedó fuera de alcance, era explícitamente opcional.
+
+**⚠️ Gotcha nuevo — `drizzle-kit push` y columnas NOT NULL con default**:
+al agregar `users.isAdmin` (NOT NULL, default 0) sobre una tabla con 91
+filas, `drizzle-kit push` propuso **truncar la tabla `users`** pese al
+`.default(0)` declarado en el schema Drizzle — mismo tipo de fricción de
+tooling ya visto en Sesión 4 (`Cannot find module './users.js'`). Se
+abortó y se aplicó `ALTER TABLE users ADD COLUMN is_admin INTEGER NOT
+NULL DEFAULT 0` a mano vía script descartable con `@libsql/client`
+(SQLite soporta esto nativamente sin reescribir filas). **Antes de
+aceptar cualquier prompt de `drizzle-kit push` que mencione pérdida de
+datos o truncar tablas, parar y aplicar el ALTER a mano** — no confiar en
+que el default declarado en el schema evite el prompt.
+
+**⚠️ Pendiente**: el tinte de `--bg-deep` (ítem 4) se validó con el
+cálculo de luminancia WCAG contra la tabla de ratios auditada (Sesión
+2026-06-21), no visualmente — el puerto 5174 del frontend estaba tomado
+por el dev server de otra sesión concurrente en este mismo repo. Pedirle
+al usuario que lo mire en pantalla (los 12 acentos, sobre todo magenta/
+coral que tenían el margen más chico).
+
 ### 2026-07-03 — Wrapped frontend + share (Sesión 6 de `PLAN-MEJORAS.md`)
 
 Detalle completo en la tabla "Registro de sesiones" de `PLAN-MEJORAS.md`
