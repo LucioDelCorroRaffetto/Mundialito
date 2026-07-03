@@ -28,6 +28,9 @@ import { useBracketProjection } from '@/shared/hooks/use-bracket-projection';
 import { resolveBracketSlot, resolveAdvancingSlot } from '@/shared/lib/bracket-projection';
 import { useMyLeagues } from '@/shared/hooks/use-leagues';
 import { getTeamColors, hexToRgba } from '@/shared/data/team-colors';
+import { useMatchReactions, useToggleReaction } from '@/shared/hooks/use-reactions';
+import type { AllowedReaction } from '@/shared/hooks/use-reactions';
+import { ReactionRow } from '@/shared/components/reaction-row';
 
 /** Short display label for a team — hides internal 'TBD' code */
 function teamDisplayCode(code: string): string {
@@ -276,6 +279,11 @@ function LeaguePredictionsSection({
   matchFinished: boolean;
 }) {
   const { data, isLoading, isError } = useLeagueMatchPredictions(matchId, leagueId);
+  const { data: reactionsData } = useMatchReactions(matchId, leagueId);
+  const toggleReaction = useToggleReaction(matchId, leagueId);
+  const handleToggleReaction = (predictionId: number, emoji: AllowedReaction) => {
+    toggleReaction.mutate({ predictionId, emoji });
+  };
 
   // Solo coloreamos por resultado cuando el partido terminó y tenemos el
   // marcador real. En vivo / programado dejamos la fila neutra para no
@@ -331,7 +339,7 @@ function LeaguePredictionsSection({
               <div
                 key={pred.predictionId}
                 className={cn(
-                  'flex items-center gap-3 px-3 py-2.5 rounded-md border',
+                  'flex flex-col px-3 py-2.5 rounded-md border',
                   style ? style.row : 'bg-elevated border-border',
                   // Resaltar la fila del propio usuario. Usamos un ring NEUTRO
                   // con offset (no el accent): el accent es configurable y puede
@@ -341,42 +349,50 @@ function LeaguePredictionsSection({
                   isMe && 'ring-2 ring-text/30 ring-offset-1 ring-offset-card',
                 )}
               >
-                <div className={cn('flex items-center gap-3 flex-1 min-w-0', type === 'miss' && 'opacity-60')}>
-                  <MemberAvatar username={pred.username} avatarUrl={pred.avatarUrl} />
-                  <span className="text-sm-s font-medium text-text flex-1 truncate flex items-center gap-1.5 min-w-0">
-                    <span className="truncate">{pred.username}</span>
-                    {isMe && (
-                      <span className="flex-shrink-0 text-[10px] font-bold text-accent bg-accent/10 px-1.5 py-0.5 rounded-full uppercase tracking-wide">
-                        Vos
-                      </span>
-                    )}
-                  </span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className={cn(
-                    'text-base-s font-display font-bold text-text tabular-nums',
-                    type === 'exact' && 'legendary-rainbow-text font-black',
-                  )}>
-                    {pred.homeScore} – {pred.awayScore}
-                  </span>
-                  {style ? (
-                    <span
-                      className={cn(
-                        'text-xs-s font-semibold px-1.5 py-0.5 rounded whitespace-nowrap',
-                        style.badge,
+                <div className="flex items-center gap-3">
+                  <div className={cn('flex items-center gap-3 flex-1 min-w-0', type === 'miss' && 'opacity-60')}>
+                    <MemberAvatar username={pred.username} avatarUrl={pred.avatarUrl} />
+                    <span className="text-sm-s font-medium text-text flex-1 truncate flex items-center gap-1.5 min-w-0">
+                      <span className="truncate">{pred.username}</span>
+                      {isMe && (
+                        <span className="flex-shrink-0 text-[10px] font-bold text-accent bg-accent/10 px-1.5 py-0.5 rounded-full uppercase tracking-wide">
+                          Vos
+                        </span>
                       )}
-                    >
-                      {style.label}
-                      {pred.points !== null && ` · +${pred.points}`}
                     </span>
-                  ) : (
-                    pred.points !== null && (
-                      <span className="text-xs-s font-semibold text-accent bg-accent/10 px-1.5 py-0.5 rounded">
-                        +{pred.points} pts
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className={cn(
+                      'text-base-s font-display font-bold text-text tabular-nums',
+                      type === 'exact' && 'legendary-rainbow-text font-black',
+                    )}>
+                      {pred.homeScore} – {pred.awayScore}
+                    </span>
+                    {style ? (
+                      <span
+                        className={cn(
+                          'text-xs-s font-semibold px-1.5 py-0.5 rounded whitespace-nowrap',
+                          style.badge,
+                        )}
+                      >
+                        {style.label}
+                        {pred.points !== null && ` · +${pred.points}`}
                       </span>
-                    )
-                  )}
+                    ) : (
+                      pred.points !== null && (
+                        <span className="text-xs-s font-semibold text-accent bg-accent/10 px-1.5 py-0.5 rounded">
+                          +{pred.points} pts
+                        </span>
+                      )
+                    )}
+                  </div>
                 </div>
+                <ReactionRow
+                  predictionId={pred.predictionId}
+                  reactions={reactionsData ?? []}
+                  readOnly={isMe}
+                  onToggle={(emoji) => handleToggleReaction(pred.predictionId, emoji)}
+                />
               </div>
             );
           })}

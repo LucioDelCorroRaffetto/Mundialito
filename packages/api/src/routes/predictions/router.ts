@@ -10,6 +10,8 @@ import { matchPredictionsHandler } from './handlers/match-predictions.js';
 import { userPredictionHistoryHandler } from './handlers/user-prediction-history.js';
 import { deletePredictionHandler } from './handlers/delete-prediction.js';
 import { markPredictionSharedHandler } from './handlers/mark-shared.js';
+import { toggleReactionHandler, toggleReactionSchema } from './handlers/toggle-reaction.js';
+import { matchReactionsHandler } from './handlers/match-reactions.js';
 
 export const predictionsRouter = Router();
 
@@ -37,4 +39,10 @@ predictionsRouter.get('/user/:userId/history', (req, res, next) =>
   userPredictionHistoryHandler(req, res).catch(next)
 );
 predictionsRouter.post('/shared', (req, res, next) => markPredictionSharedHandler(req, res).catch(next));
+predictionsRouter.get('/match/:matchId/reactions', (req, res, next) =>
+  matchReactionsHandler(req, res).catch(next)
+);
+predictionsRouter.post('/:id/reactions', validate(toggleReactionSchema), (req, res, next) =>
+  toggleReactionHandler(req, res).catch(next)
+);
 predictionsRouter.delete('/:id', (req, res, next) => deletePredictionHandler(req, res).catch(next));
