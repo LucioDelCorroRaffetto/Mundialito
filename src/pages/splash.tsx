@@ -62,7 +62,7 @@ export function SplashPage() {
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 0.7, y: 0 }}
         transition={{ delay: 0.75, duration: 0.4 }}
-        className="font-tagline font-bold text-sm-s tracking-[0.3em] uppercase wc26-gradient-text"
+        className="font-display font-bold text-sm-s tracking-[0.3em] uppercase wc26-gradient-text"
       >
         El prode de tus amigos
       </motion.p>

@@ -21,7 +21,6 @@ export default {
         sans: ['Inter', 'system-ui', 'sans-serif'],
         display: ['"Space Grotesk"', 'Inter', 'sans-serif'],
         logo: ['"Russo One"', 'sans-serif'],
-        tagline: ['Oswald', 'Inter', 'sans-serif'],
       },
       fontSize: {
         'xs-s': 'calc(0.6875rem * var(--font-scale, 1))',
