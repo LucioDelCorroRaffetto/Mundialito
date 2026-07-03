@@ -186,6 +186,76 @@ export interface FantasyPlayerBreakdown {
   totalPoints: number;
 }
 
+// ─── Wrapped ─────────────────────────────────────────────────────────────────
+
+export interface WrappedBestHit {
+  matchId: number;
+  homeScore: number;
+  awayScore: number;
+  rarity: number | null;
+  homeTeam: { id: number; name: string; flag: string } | null;
+  awayTeam: { id: number; name: string; flag: string } | null;
+}
+
+export interface WrappedPerLeague {
+  leagueId: number;
+  name: string;
+  position: number;
+  points: number;
+}
+
+export interface WrappedNearestRival {
+  userId: number;
+  points: number;
+  position: number;
+}
+
+export interface WrappedTeamRef {
+  id: number;
+  name: string;
+  flag: string;
+}
+
+export interface WrappedChampionPick {
+  teamId: number;
+  name: string;
+  flag: string;
+  correct: boolean;
+  points: number;
+}
+
+export interface WrappedFantasy {
+  points: number;
+  rank: number;
+}
+
+export interface WrappedAchievement {
+  slug: string;
+  name: string;
+  icon: string;
+  xpReward: number;
+  earnedAt: string;
+}
+
+export interface Wrapped {
+  totalPoints: number;
+  exactCount: number;
+  correctCount: number;
+  totalPredictions: number;
+  accuracy: number;
+  globalRank: number | null;
+  perLeague: WrappedPerLeague[];
+  longestStreak: number;
+  bestHit: WrappedBestHit | null;
+  nearestRival: WrappedNearestRival | null;
+  mostPredictedTeam: WrappedTeamRef | null;
+  championPick: WrappedChampionPick | null;
+  fantasy: WrappedFantasy | null;
+  topAchievements: WrappedAchievement[];
+  xp: number;
+  level: number;
+}
+
 /** Una fila de la tabla de posiciones fantasy. */
 export interface FantasyStandingEntry {
   rank: number;

@@ -27,6 +27,7 @@ import {
 } from '@/shared/lib/bracket-projection';
 import { R32_LABELS } from '@/shared/data/bracket';
 import { KnockoutPhaseBanner } from '@/shared/components/knockout-phase-banner';
+import { WrappedBanner } from '@/shared/components/wrapped-banner';
 
 /** Un equipo "real" es uno ya definido en la DB — no el placeholder TBD/??? que
  *  se muestra mientras un cruce de eliminación todavía no tiene rivales. */
@@ -620,6 +621,11 @@ export function HomePage() {
                 navigate('/matches');
               }}
             />
+          )}
+
+          {/* Torneo terminado: CTA al Wrapped */}
+          {phase.kind === 'completed' && (
+            <WrappedBanner onOpen={() => navigate('/wrapped')} />
           )}
 
           {/* Pending predictions call-to-action */}

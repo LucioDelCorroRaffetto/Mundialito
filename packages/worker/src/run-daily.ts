@@ -12,6 +12,7 @@
  */
 import 'dotenv/config';
 import { sendDailyPredictionReminder } from './jobs/send-daily-prediction-reminder.js';
+import { sendWrappedReady } from './jobs/send-wrapped-ready.js';
 
 async function main() {
   console.log('[run-daily] starting at', new Date().toISOString());
@@ -19,6 +20,11 @@ async function main() {
     await sendDailyPredictionReminder();
   } catch (err) {
     console.error('[run-daily] daily-reminder error:', err);
+  }
+  try {
+    await sendWrappedReady();
+  } catch (err) {
+    console.error('[run-daily] wrapped-ready error:', err);
   }
   console.log('[run-daily] done');
   process.exit(0);

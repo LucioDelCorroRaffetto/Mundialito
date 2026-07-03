@@ -41,6 +41,7 @@ const UserProfilePage = lazyWithReload(() => import('@/pages/user-profile').then
 const HelpPage = lazyWithReload(() => import('@/pages/help').then((m) => ({ default: m.HelpPage })));
 const StatsPage = lazyWithReload(() => import('@/pages/stats').then((m) => ({ default: m.StatsPage })));
 const HeadToHeadPage = lazyWithReload(() => import('@/pages/head-to-head').then((m) => ({ default: m.HeadToHeadPage })));
+const WrappedPage = lazyWithReload(() => import('@/pages/wrapped').then((m) => ({ default: m.WrappedPage })));
 
 /**
  * Minimal full-bleed fallback shown while a lazy page chunk is downloading.
@@ -84,6 +85,9 @@ export const router = createBrowserRouter([
   // Guía de onboarding — pública a propósito, para compartirla por WhatsApp
   // con amigos que todavía no tienen cuenta.
   { path: '/ayuda', element: <Page><HelpPage /></Page> },
+  // Fuera del grupo de AppShell a propósito: es full-bleed (stories), sin
+  // tab-bar/sidebar/wc26-stripe. Lleva su propio RequireAuth.
+  { path: '/wrapped', element: <RequireAuth><Page><WrappedPage /></Page></RequireAuth> },
   {
     element: <RequireAuth><AppShell /></RequireAuth>,
     children: [
