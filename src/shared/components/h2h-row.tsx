@@ -2,20 +2,17 @@ import { cn } from '@/shared/lib/cn';
 import { TeamFlag } from '@/shared/components/ui/team-flag';
 import type { UserPredictionHistoryItem } from '@/shared/hooks/use-user-profile';
 
-/** Clases de color por outcome — mismo lenguaje cromático que `HistoryRow`:
- *  acierto parcial ⇒ verde, fallo ⇒ rojo. El exacto no usa texto rainbow acá:
- *  en la fila compacta del H2H no hay borde de card que dé contexto, y como
- *  `legendary-rainbow-text` es una animación infinita, una captura del H2H
- *  puede caer en cualquier color del degradé (incluido un azul que no dice
- *  nada) — confunde en vez de destacar. Se usa una píldora de fondo sólido
- *  en su lugar (misma clase `legendary-rainbow` que el badge de HistoryRow).
- */
+/** Clases de color por outcome. El exacto no usa el efecto rainbow de
+ *  `HistoryRow` acá: en un espacio tan chico (fila de comparación, sin el
+ *  borde de card que le da contexto) el degradé completo se ve comprimido y
+ *  raro, ya sea como texto animado o como píldora — reportado en prod. Se
+ *  usa dorado sólido en su lugar: mismo lenguaje "legendario" sin el ruido. */
 function outcomeClasses(outcome: UserPredictionHistoryItem['outcome']): string {
   switch (outcome) {
+    case 'exact':   return 'text-amber-600 dark:text-yellow-400 font-black';
     case 'correct': return 'text-green-600 dark:text-green-400 font-bold';
     case 'missed':  return 'text-red-500/80 font-semibold';
     case 'pending': return 'text-muted font-semibold';
-    case 'exact':   return 'font-black';
   }
 }
 
@@ -47,16 +44,8 @@ export function H2hRow({ match }: { match: H2hMatch }) {
         {formatMatchDate(match.kickoffUtc)}
       </div>
       <div className="grid grid-cols-3 items-center gap-2">
-        <div className="text-center">
-          <span
-            className={cn(
-              'text-sm-s',
-              match.outcomeA === 'exact' && 'inline-block px-1.5 py-0.5 rounded legendary-rainbow',
-              outcomeClasses(match.outcomeA),
-            )}
-          >
-            {match.predictionA.homeScore} - {match.predictionA.awayScore}
-          </span>
+        <div className={cn('text-center text-sm-s', outcomeClasses(match.outcomeA))}>
+          {match.predictionA.homeScore} - {match.predictionA.awayScore}
         </div>
         <div className="flex flex-col items-center gap-1">
           <div className="flex items-center gap-1">
@@ -70,16 +59,8 @@ export function H2hRow({ match }: { match: H2hMatch }) {
             {match.homeTeam.code ?? match.homeTeam.name} · {match.awayTeam.code ?? match.awayTeam.name}
           </span>
         </div>
-        <div className="text-center">
-          <span
-            className={cn(
-              'text-sm-s',
-              match.outcomeB === 'exact' && 'inline-block px-1.5 py-0.5 rounded legendary-rainbow',
-              outcomeClasses(match.outcomeB),
-            )}
-          >
-            {match.predictionB.homeScore} - {match.predictionB.awayScore}
-          </span>
+        <div className={cn('text-center text-sm-s', outcomeClasses(match.outcomeB))}>
+          {match.predictionB.homeScore} - {match.predictionB.awayScore}
         </div>
       </div>
     </div>
