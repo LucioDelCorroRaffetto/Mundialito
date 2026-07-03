@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Navigate, useNavigate, useParams, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Star, ChevronRight, History } from 'lucide-react';
+import { ArrowLeft, Star, ChevronRight, History, Swords } from 'lucide-react';
 import { useAuthStore } from '@/shared/stores/auth-store';
 import { useUserProfile } from '@/shared/hooks/use-user-profile';
 import { useEnrichedUserPredictionHistory } from '@/shared/hooks/use-enriched-history';
@@ -113,6 +113,8 @@ export function UserProfilePage() {
     </button>
   );
 
+  const compareHref = currentUser ? `/h2h/${currentUser.id}/${userId}` : null;
+
   if (isNaN(userId)) {
     return (
       <div className="flex flex-col min-h-full animate-fade-in">
@@ -191,6 +193,15 @@ export function UserProfilePage() {
             </p>
           )}
         </div>
+        {!isAdmin && compareHref && (
+          <Link
+            to={compareHref}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-md bg-card border border-border text-xs-s font-semibold text-accent hover:border-accent-border transition-colors flex-shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+          >
+            <Swords size={14} />
+            Comparar
+          </Link>
+        )}
       </div>
 
       {!isAdmin && (

@@ -54,6 +54,32 @@ export function useLeagueByCode(code: string | undefined) {
   });
 }
 
+export interface LeagueStandingsHistorySeries {
+  userId: number;
+  username: string;
+  avatarUrl: string | null;
+  cumulativePoints: number[];
+}
+
+export interface LeagueStandingsHistory {
+  days: string[];
+  series: LeagueStandingsHistorySeries[];
+}
+
+export function useLeagueStandingsHistory(id: number | undefined) {
+  return useQuery({
+    queryKey: ['league', id, 'standings', 'history'],
+    queryFn: async () => {
+      const { data } = await apiClient.get<{ data: LeagueStandingsHistory }>(
+        `/leagues/${id}/standings/history`,
+      );
+      return data.data;
+    },
+    enabled: id !== undefined && Number.isInteger(id),
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
 export function useLeagueStandings(id: number | undefined) {
   return useQuery({
     queryKey: ['league', id, 'standings'],

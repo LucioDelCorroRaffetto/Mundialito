@@ -1,16 +1,24 @@
 import { useState, useEffect, memo } from 'react';
 import { useParams, useNavigate, Navigate, Link } from 'react-router-dom';
-import { motion, LayoutGroup } from 'framer-motion';
-import { ArrowLeft, Share2, Users, Trophy, ChevronRight, Pencil, X, Check } from 'lucide-react';
+import { motion, LayoutGroup, AnimatePresence } from 'framer-motion';
+import { ArrowLeft, Share2, Users, Trophy, ChevronRight, ChevronDown, Pencil, X, Check, Swords } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/shared/lib/cn';
 import { ShareSheet } from '@/shared/components/share-sheet';
 import { SkeletonList } from '@/shared/components/skeleton';
 import { LeagueBannerPicker } from '@/shared/components/ui/image-picker';
-import { useLeague, useLeagueStandings, useLeaveLeague, useUpdateLeague, type StandingRow } from '@/shared/hooks/use-leagues';
+import { LeagueHistoryChart } from '@/shared/components/league-history-chart';
+import {
+  useLeague,
+  useLeagueStandings,
+  useLeagueStandingsHistory,
+  useLeaveLeague,
+  useUpdateLeague,
+  type StandingRow,
+} from '@/shared/hooks/use-leagues';
 import { useAuthStore } from '@/shared/stores/auth-store';
 import { podiumStyle } from '@/shared/components/logros-gate-banner';
-import { staggerContainer, staggerItem, useMotionPrefs, springSnappy, useCountUp } from '@/shared/lib/motion';
+import { staggerContainer, staggerItem, useMotionPrefs, springSnappy, useCountUp, slideUpVariants } from '@/shared/lib/motion';
 
 const TABS = ['Tabla', 'Info'] as const;
 type Tab = (typeof TABS)[number];
@@ -110,7 +118,18 @@ function LeagueDescriptionBlock({
   );
 }
 
-const Row = memo(function Row({ row, isMe, reduced }: { row: StandingRow; isMe: boolean; reduced: boolean }) {
+const Row = memo(function Row({
+  row,
+  isMe,
+  reduced,
+  myUserId,
+}: {
+  row: StandingRow;
+  isMe: boolean;
+  reduced: boolean;
+  myUserId: number | undefined;
+}) {
+  const navigate = useNavigate();
   const initials = row.username.slice(0, 1).toUpperCase();
   // Podium spots get medal styling. The "me" highlight wins when it overlaps —
   // people care more about finding themselves than seeing a medal anyway.
@@ -179,12 +198,69 @@ const Row = memo(function Row({ row, isMe, reduced }: { row: StandingRow; isMe: 
           >
             {points}
           </span>
+          {!isMe && myUserId != null && (
+            <button
+              type="button"
+              aria-label={`Comparar con ${row.username}`}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                navigate(`/h2h/${myUserId}/${row.userId}`);
+              }}
+              className="flex items-center justify-center w-7 h-7 rounded-md text-muted hover:text-accent hover:bg-accent-soft transition-colors flex-shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+            >
+              <Swords size={14} />
+            </button>
+          )}
           <ChevronRight size={16} className="text-muted flex-shrink-0" />
         </div>
       </Link>
     </motion.div>
   );
 });
+
+/** Sección colapsable con la evolución de puntos acumulados por día. Solo se
+ *  renderiza si hay al menos 2 días con datos (si no, el gráfico no dice nada). */
+function LeagueHistorySection({
+  leagueId,
+  currentUserId,
+}: {
+  leagueId: number | undefined;
+  currentUserId: number | undefined;
+}) {
+  const { reduced } = useMotionPrefs();
+  const [open, setOpen] = useState(false);
+  const { data: history } = useLeagueStandingsHistory(leagueId);
+
+  if (!history || history.days.length < 2) return null;
+
+  return (
+    <div className="border-t border-border">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        className="w-full flex items-center justify-between px-4 py-3 text-sm-s font-semibold text-text"
+      >
+        Evolución
+        <ChevronDown size={16} className={cn('text-muted transition-transform', open && 'rotate-180')} />
+      </button>
+      <AnimatePresence initial={false}>
+        {open && (
+          <motion.div
+            variants={slideUpVariants(reduced, 10)}
+            initial="initial"
+            animate="animate"
+            exit="exit"
+            className="px-4 pb-4"
+          >
+            <LeagueHistoryChart history={history} currentUserId={currentUserId} />
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
 
 export function LeagueDetailPage() {
   const { id } = useParams();
@@ -320,11 +396,19 @@ export function LeagueDetailPage() {
                 animate="animate"
               >
                 {standings.map((row) => (
-                  <Row key={row.userId} row={row} isMe={row.userId === currentUser?.id} reduced={reduced} />
+                  <Row
+                    key={row.userId}
+                    row={row}
+                    isMe={row.userId === currentUser?.id}
+                    reduced={reduced}
+                    myUserId={currentUser?.id}
+                  />
                 ))}
               </motion.div>
             </LayoutGroup>
           )}
+
+          <LeagueHistorySection leagueId={validLeagueId ? leagueId : undefined} currentUserId={currentUser?.id} />
         </div>
       )}
 
