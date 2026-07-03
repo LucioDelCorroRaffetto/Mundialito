@@ -137,19 +137,27 @@ const Row = memo(function Row({
   const points = useCountUp(row.points);
 
   return (
-    <motion.div layout={!reduced} transition={springSnappy} variants={staggerItem(reduced)}>
+    <motion.div
+      layout={!reduced}
+      transition={springSnappy}
+      variants={staggerItem(reduced)}
+      className={cn(
+        'flex items-center gap-3 px-4 border-b last:border-0 transition-colors',
+        isMe
+          ? 'bg-accent-soft hover:bg-accent-soft/80 border-border'
+          : podium
+            ? `${podium.rowBg} ${podium.rowBorder}`
+            : 'border-border hover:bg-elevated',
+      )}
+    >
+      {/* Link y botón de comparar van como HERMANOS, no anidados: un <button>
+          dentro de un <a> es HTML inválido y en mobile a veces el tap del
+          botón también dispara la navegación del Link padre (bug reportado
+          en prod — "a veces me redirecciona al perfil"). */}
       <Link
         to={`/u/${row.userId}`}
         aria-current={isMe ? 'true' : undefined}
-        className={cn(
-          'flex items-center gap-3 px-4 py-3 border-b last:border-0 cursor-pointer transition-colors',
-          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent',
-          isMe
-            ? 'bg-accent-soft hover:bg-accent-soft/80 border-border'
-            : podium
-              ? `${podium.rowBg} ${podium.rowBorder}`
-              : 'border-border hover:bg-elevated',
-        )}
+        className="flex items-center gap-3 flex-1 min-w-0 py-3 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent"
       >
         {podium ? (
           <span
@@ -198,23 +206,19 @@ const Row = memo(function Row({
           >
             {points}
           </span>
-          {!isMe && myUserId != null && (
-            <button
-              type="button"
-              aria-label={`Comparar con ${row.username}`}
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                navigate(`/h2h/${myUserId}/${row.userId}`);
-              }}
-              className="flex items-center justify-center w-7 h-7 rounded-md text-muted hover:text-accent hover:bg-accent-soft transition-colors flex-shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-            >
-              <Swords size={14} />
-            </button>
-          )}
           <ChevronRight size={16} className="text-muted flex-shrink-0" />
         </div>
       </Link>
+      {!isMe && myUserId != null && (
+        <button
+          type="button"
+          aria-label={`Comparar con ${row.username}`}
+          onClick={() => navigate(`/h2h/${myUserId}/${row.userId}`)}
+          className="flex items-center justify-center w-9 h-9 rounded-md text-muted hover:text-accent hover:bg-accent-soft transition-colors flex-shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+        >
+          <Swords size={14} />
+        </button>
+      )}
     </motion.div>
   );
 });

@@ -87,14 +87,18 @@ export function HeadToHeadPage() {
         </div>
       ) : (
         <>
-          <div className="mx-4 mb-4 p-4 rounded-lg bg-card border border-border flex items-center justify-between gap-3">
-            <div className="flex flex-col items-center gap-1.5">
+          {/* grid en vez de flex justify-between: con usernames de largo
+              distinto, justify-between ubica la columna del medio según el
+              ancho natural de cada lado, corriéndola hacia el lado más
+              angosto. Grid de 3 columnas iguales la deja siempre centrada. */}
+          <div className="mx-4 mb-4 p-4 rounded-lg bg-card border border-border grid grid-cols-[1fr_auto_1fr] items-center gap-3">
+            <div className="flex flex-col items-center gap-1.5 min-w-0">
               <Avatar username={profileA.username} avatarUrl={profileA.avatarUrl} />
-              <span className="text-sm-s font-semibold text-text truncate max-w-[90px] text-center">{profileA.username}</span>
+              <span className="text-sm-s font-semibold text-text truncate max-w-full text-center">{profileA.username}</span>
               <span className="text-xl-s font-display font-black text-accent tabular-nums">{totalA}</span>
             </div>
             <div className="flex flex-col items-center gap-1">
-              <span className="text-xs-s text-muted">{matches.length} en común</span>
+              <span className="text-xs-s text-muted whitespace-nowrap">{matches.length} en común</span>
               <span
                 className={
                   'text-sm-s font-bold ' +
@@ -104,9 +108,9 @@ export function HeadToHeadPage() {
                 {totalA === totalB ? 'Empate' : totalA > totalB ? `+${totalA - totalB}` : `${totalA - totalB}`}
               </span>
             </div>
-            <div className="flex flex-col items-center gap-1.5">
+            <div className="flex flex-col items-center gap-1.5 min-w-0">
               <Avatar username={profileB.username} avatarUrl={profileB.avatarUrl} />
-              <span className="text-sm-s font-semibold text-text truncate max-w-[90px] text-center">{profileB.username}</span>
+              <span className="text-sm-s font-semibold text-text truncate max-w-full text-center">{profileB.username}</span>
               <span className="text-xl-s font-display font-black text-accent tabular-nums">{totalB}</span>
             </div>
           </div>
