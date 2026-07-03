@@ -85,7 +85,7 @@ export async function wrappedHandler(req: Request, res: Response) {
   return res.json({ data });
 }
 
-async function buildWrapped(userId: number) {
+export async function buildWrapped(userId: number) {
   // ── Predicciones partido-a-partido del usuario (matches finished) ─────────
   const rawRows = await db
     .select({
