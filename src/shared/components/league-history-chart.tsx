@@ -61,9 +61,14 @@ export function LeagueHistoryChart({
   const toPoints = (values: number[]) =>
     values.map((v, i) => `${xAt(i)},${yAt(v)}`).join(' ');
 
-  // Labels: primero, último, y cada ~5 días en el medio.
-  const labelIdxs = new Set<number>([0, days.length - 1]);
-  for (let i = 5; i < days.length - 1; i += 5) labelIdxs.add(i);
+  // Labels: primero, último, y cada ~5 días en el medio — salteando
+  // candidatos demasiado cerca de un borde ya incluido para que las
+  // etiquetas ("DD/MM", ~26px) no se superpongan.
+  const lastIdx = days.length - 1;
+  const pxPerDay = lastIdx > 0 ? plotW / lastIdx : plotW;
+  const minGapDays = Math.max(1, Math.ceil(26 / Math.max(pxPerDay, 1)));
+  const labelIdxs = new Set<number>([0, lastIdx]);
+  for (let i = 5; i < lastIdx - minGapDays; i += 5) labelIdxs.add(i);
 
   return (
     <div>
