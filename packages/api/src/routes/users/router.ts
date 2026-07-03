@@ -5,6 +5,7 @@ import { globalLeaderboardHandler } from './handlers/global-leaderboard.js';
 import { updateMeHandler } from './handlers/update-me.js';
 import { getPublicProfileHandler } from './handlers/get-public-profile.js';
 import { getAdminProfileHandler } from './handlers/get-admin-profile.js';
+import { wrappedHandler } from './handlers/wrapped.js';
 
 export const usersRouter = Router();
 
@@ -14,6 +15,7 @@ usersRouter.get('/admin', (req, res, next) => getAdminProfileHandler(req, res).c
 
 // Protected /me/* routes — registered before /:userId so they match first
 usersRouter.get('/me/stats', authGuard, (req, res, next) => myStatsHandler(req, res).catch(next));
+usersRouter.get('/me/wrapped', authGuard, (req, res, next) => wrappedHandler(req, res).catch(next));
 usersRouter.patch('/me', authGuard, (req, res, next) => updateMeHandler(req, res).catch(next));
 
 // Dynamic public profile — catches all remaining /:userId patterns
