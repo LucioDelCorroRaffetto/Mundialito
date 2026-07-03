@@ -13,3 +13,21 @@ export function isLocked(predictionLockUtc: string): boolean {
   if (!Number.isFinite(t)) return true;
   return t <= Date.now();
 }
+
+/**
+ * Whether a league's members can see each other's predictions for a match:
+ * 'always' visibility leagues reveal immediately; otherwise it needs the
+ * match to be live/finished, with a kickoff-time fallback so predictions
+ * reveal even before the score sync flips `status` (see match-predictions.ts).
+ */
+export function isPredictionRevealed(
+  predictionsVisibility: 'after_kickoff' | 'always',
+  match: { status: string; kickoffUtc: string },
+): boolean {
+  if (predictionsVisibility === 'always') return true;
+  const matchStarted =
+    match.status === 'live' ||
+    match.status === 'finished' ||
+    new Date(match.kickoffUtc).getTime() <= Date.now();
+  return matchStarted;
+}
