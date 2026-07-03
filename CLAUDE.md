@@ -287,6 +287,21 @@ FIFA.com no necesita key.
 > Orden cronológico inverso (lo nuevo arriba). Cada entrada: **qué cambió y por qué**.
 > Agregá una entrada cada vez que cambies un comportamiento por una razón.
 
+### 2026-07-03 — Wrapped frontend + share (Sesión 6 de `PLAN-MEJORAS.md`)
+
+Detalle completo en la tabla "Registro de sesiones" de `PLAN-MEJORAS.md`
+(sesiones 1-6, no repetido acá para no duplicar). Resumen: página `/wrapped`
+(stories tap/swipe + imagen compartible client-side vía canvas), banner en
+home cuando el torneo termina, tabla `worker_flags` nueva + job de worker
+`send-wrapped-ready` (push post-final, idempotente). Deploy confirmado en
+prod (Vercel sirve el chunk, `/health` OK).
+
+**⚠️ Lo malo / pendiente:** no se pudo hacer el walkthrough real en
+navegador (banner → stories → compartir) — mismo límite conocido de
+sesiones anteriores, el login requiere Google OAuth y no hay credenciales
+en este entorno. Falta que el usuario lo valide con `?preview=1` siendo
+admin antes del 19/7 (deadline duro del Wrapped).
+
 ### 2026-06-29 — Auditoría stats (goleadores/asistidores/amarillas/rojas) + mapeo de fifa_id
 
 Disparado por un reporte de usuario ("le falta un gol a Mbappé"). Se corrió
