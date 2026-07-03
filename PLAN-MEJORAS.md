@@ -602,6 +602,17 @@ Barrido corto; ítems independientes, commitear de a uno.
    `ADMIN_USER_IDS` queda como fallback/bootstrap.
 6. **Descartado documentado** — cookie httpOnly para refresh: NO se hace
    (decidido en Sesión 1; CSP + rotación cubren el riesgo a esta escala).
+7. **Reacciones: compactar + más emojis** *(a criterio, solo si sobra
+   tiempo)* — feedback del usuario tras ver `ReactionRow` en mobile: la fila
+   de reacciones (`src/shared/components/reaction-row.tsx`) suma ~30px fijos
+   a cada card de `match-detail.tsx` aunque nadie haya reaccionado todavía.
+   Investigar: (a) mostrar la fila solo si hay reacciones o al tocar la card
+   (en vez del botón "+" siempre visible), y (b) ampliar
+   `ALLOWED_REACTIONS` (hoy `😂🔥💀🎯🤡⚽`, 6 fijos) a 8-10 emojis curados.
+   Emoji **libre** (picker nativo) queda descartado por ahora — requiere
+   cambiar la validación del backend (hoy enum fijo en el schema de
+   `POST /predictions/:id/reactions`) y sumar moderación/spam; no vale la
+   pena para una app de amigos a esta escala salvo que cambie el contexto.
 
 **DoD:** dos curls concurrentes a `/sync` ⇒ uno 200 y otro 429 · burst de
 >300 req/min a la API ⇒ 429 con Retry-After · modo claro se ve con las cards
