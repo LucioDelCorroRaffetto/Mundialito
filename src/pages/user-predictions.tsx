@@ -4,8 +4,9 @@ import { ArrowLeft } from 'lucide-react';
 import { useAuthStore } from '@/shared/stores/auth-store';
 import { useUserProfile } from '@/shared/hooks/use-user-profile';
 import { useEnrichedUserPredictionHistory } from '@/shared/hooks/use-enriched-history';
-import { UserPredictionHistoryRow } from '@/shared/components/user-prediction-history-row';
-import { staggerContainer, useMotionPrefs } from '@/shared/lib/motion';
+import { HistoryRow } from '@/shared/components/prediction-history-row';
+import { toHistoryEntry } from '@/shared/lib/adapt-user-history';
+import { staggerContainer, staggerItem, useMotionPrefs } from '@/shared/lib/motion';
 
 /**
  * Página dedicada con el historial COMPLETO de pronósticos de OTRO usuario.
@@ -86,7 +87,9 @@ export function UserPredictionsPage() {
             animate="animate"
           >
             {items.map((item) => (
-              <UserPredictionHistoryRow key={item.predictionId} item={item} reduced={reduced} />
+              <motion.div key={item.predictionId} variants={staggerItem(reduced)}>
+                <HistoryRow entry={toHistoryEntry(item)} />
+              </motion.div>
             ))}
           </motion.div>
         )}

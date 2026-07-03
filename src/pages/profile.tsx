@@ -1,4 +1,4 @@
-import { useState, useMemo, memo } from 'react';
+import { useState, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Settings, ChevronRight, Star, LogOut, History } from 'lucide-react';
@@ -9,6 +9,7 @@ import { useEnrichedPredictionHistory } from '@/shared/hooks/use-enriched-histor
 import { UserLevelBadge, UserLevelCard } from '@/shared/components/user-level-badge';
 import { AchievementCardModal } from '@/shared/components/achievement-card-modal';
 import { HistoryRow } from '@/shared/components/prediction-history-row';
+import { StatCard } from '@/shared/components/stat-card';
 import { computeLevel } from '@/shared/lib/levels';
 import { useLogout } from '@/shared/hooks/use-auth';
 import { staggerContainer, staggerItem, useMotionPrefs } from '@/shared/lib/motion';
@@ -16,15 +17,6 @@ import { staggerContainer, staggerItem, useMotionPrefs } from '@/shared/lib/moti
 // Cuántos pronósticos se muestran en la vista previa del perfil antes de
 // ofrecer "Ver todas" hacia la página dedicada con el historial completo.
 const HISTORY_PREVIEW_COUNT = 5;
-
-const StatCard = memo(function StatCard({ label, value }: { label: string; value: string | number }) {
-  return (
-    <div className="flex flex-col items-center gap-0.5 p-3 rounded-lg bg-card border border-border">
-      <span className="text-2xl-s font-display font-bold text-accent">{value}</span>
-      <span className="text-xs-s text-muted text-center leading-tight">{label}</span>
-    </div>
-  );
-});
 
 function PredictionHistorySection() {
   const { reduced } = useMotionPrefs();
