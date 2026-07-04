@@ -1,10 +1,14 @@
 // Recordatorio DIARIO temprano: "hoy hay partidos, entrá a pronosticar".
 //
 // A diferencia de send-deadline-reminders (que dispara ~30 min antes de CADA
-// partido, para todos), este job corre UNA vez por día bien temprano y le
-// avisa a cada usuario cuántos pronósticos le faltan para los partidos de HOY.
-// Es personalizado: quien ya pronosticó todo lo de hoy NO recibe nada (cero
-// spam). Si no hay partidos hoy, no manda nada.
+// partido), este job corre UNA vez por día bien temprano y le avisa a TODOS los
+// suscriptos qué partidos se juegan hoy y contra quién, para que la gente se
+// acuerde de entrar a la app. Es un broadcast: le llega a todos los que tienen
+// push activado, hayan pronosticado o no. Si no hay partidos hoy, no manda nada.
+//
+// No incluye fecha a propósito: el aviso es "hoy", y la app la usan desde
+// varios países — la hora ya se muestra por zona (ver latamTimes) para no
+// confundir. La fecha calendario sería redundante y ambigua entre husos.
 //
 // Pensado para el cron `mundialito-daily-reminder` de Render (una vez al día,
 // 12:00 UTC ≈ 09:00 AR). Ver render.yaml.
@@ -63,7 +67,12 @@ function latamTimes(isoUtc: string): string {
 }
 
 interface MatchRow { id: number; kickoff_utc: string; home: string; away: string }
-interface SubRow { id: number; user_id: number; endpoint: string; p256dh: string; auth: string }
+interface SubRow { endpoint: string; p256dh: string; auth: string }
+
+// En fase eliminatoria los rivales pueden estar sin definir (placeholder
+// "Por determinar"). En ese caso no mostramos nombres — quedaría feo un
+// "Por determinar vs Por determinar" — y los contamos como "por definir".
+const isTbd = (name: string) => /por determinar|tbd/i.test(name);
 
 export async function sendDailyPredictionReminder(): Promise<void> {
   const now = new Date();
@@ -88,75 +97,51 @@ export async function sendDailyPredictionReminder(): Promise<void> {
     return;
   }
 
-  const matchIds = matches.map((m) => Number(m.id));
-  const first = matches[0];
-  // En fase eliminatoria los rivales pueden estar sin definir (placeholder
-  // "Por determinar"). En ese caso no mostramos nombres — quedaría feo un
-  // "Por determinar vs Por determinar" — y usamos una frase genérica.
-  const isTbd = (name: string) => /por determinar|tbd/i.test(name);
-  const firstNamed = !isTbd(first.home) && !isTbd(first.away);
-  const firstLabel = `${first.home} vs ${first.away}`;
-  const firstTime = latamTimes(first.kickoff_utc);
-  console.log(`[daily-reminder] ${matches.length} partido(s) hoy — primero ${firstLabel} @ ${firstTime}`);
+  // Hora del primer partido del día, mostrada por zona LATAM (country-aware).
+  const firstTime = latamTimes(matches[0].kickoff_utc);
 
-  // Suscripciones agrupadas por usuario.
+  // Rivales del día: los definidos se listan por nombre; los TBD se cuentan.
+  const namedLabels = matches
+    .filter((m) => !isTbd(m.home) && !isTbd(m.away))
+    .map((m) => `${m.home} vs ${m.away}`);
+  const tbdCount = matches.length - namedLabels.length;
+
+  let body: string;
+  if (matches.length === 1) {
+    body = namedLabels.length
+      ? `Hoy juega ${namedLabels[0]} a las ${firstTime}. ¡Entrá y pronosticá!`
+      : `Hoy hay un partido a las ${firstTime}. ¡Entrá y pronosticá!`;
+  } else {
+    const pieces: string[] = [];
+    if (namedLabels.length) pieces.push(namedLabels.join(', '));
+    if (tbdCount) pieces.push(`${tbdCount} partido${tbdCount > 1 ? 's' : ''} por definir`);
+    const list = pieces.join(' y ');
+    body = `Hoy juegan ${matches.length} partidos: ${list}. El primero a las ${firstTime}. ¡Entrá y pronosticá!`;
+  }
+
+  const payload = { title: '⚽ ¡Hoy hay partidos!', body, url: '/matches' };
+  console.log(`[daily-reminder] ${matches.length} partido(s) hoy — mensaje: ${body}`);
+
+  // Broadcast: todas las suscripciones push, sin filtrar por usuario.
   const subsRes = await db.$client.execute(
-    'SELECT id, user_id, endpoint, p256dh, auth FROM push_subscriptions',
+    'SELECT endpoint, p256dh, auth FROM push_subscriptions',
   );
   const subs = subsRes.rows as unknown as SubRow[];
-  const subsByUser = new Map<number, SubRow[]>();
-  for (const s of subs) {
-    const list = subsByUser.get(Number(s.user_id)) ?? [];
-    list.push(s);
-    subsByUser.set(Number(s.user_id), list);
-  }
-  console.log(`[daily-reminder] ${subsByUser.size} usuario(s) con suscripción push`);
+  console.log(`[daily-reminder] ${subs.length} suscripción(es) push${DRY_RUN ? ' [DRY]' : ''}`);
 
-  const placeholders = matchIds.map(() => '?').join(',');
-  let sent = 0, skippedReady = 0, failed = 0;
+  if (DRY_RUN) return;
 
-  for (const [userId, userSubs] of subsByUser) {
-    // Un match cuenta como "pronosticado" si el usuario tiene CUALQUIER
-    // predicción para él (en cualquier liga): la primera predicción se
-    // propaga a todas sus ligas, así que DISTINCT match_id alcanza.
-    const predRes = await db.$client.execute({
-      sql: `SELECT COUNT(DISTINCT match_id) AS c FROM predictions
-            WHERE user_id = ? AND match_id IN (${placeholders})`,
-      args: [userId, ...matchIds],
-    });
-    const done = Number(predRes.rows[0]?.c ?? 0);
-    const pending = matchIds.length - done;
-
-    if (pending <= 0) { skippedReady++; continue; }
-
-    const plural = pending > 1;
-    let body: string;
-    if (matches.length > 1) {
-      const tail = firstNamed
-        ? `El primero: ${firstLabel} a las ${firstTime}.`
-        : `El primero arranca a las ${firstTime}.`;
-      body = `Te falta${plural ? 'n' : ''} ${pending} pronóstico${plural ? 's' : ''} para hoy. ${tail} ¡Entrá y jugá!`;
-    } else {
-      body = firstNamed
-        ? `${firstLabel} juega hoy a las ${firstTime} y todavía no lo pronosticaste. ¡Entrá y jugá!`
-        : `Hoy hay un partido a las ${firstTime} y todavía no lo pronosticaste. ¡Entrá y jugá!`;
+  let sent = 0, failed = 0;
+  for (const sub of subs) {
+    try {
+      await sendPushNotification(sub, payload);
+      sent++;
+    } catch {
+      failed++;
     }
-
-    const payload = { title: '⚽ ¡Hoy hay partidos!', body, url: '/matches' };
-    console.log(`  user ${userId} (${pending} pendiente${plural ? 's' : ''})${DRY_RUN ? ' [DRY]' : ''}: ${body}`);
-    if (DRY_RUN) continue;
-
-    for (const sub of userSubs) {
-      try {
-        await sendPushNotification(sub, payload);
-        sent++;
-      } catch {
-        failed++;
-      }
-      // Rate limit suave entre envíos, igual que los scripts one-off.
-      await new Promise((r) => setTimeout(r, 80));
-    }
+    // Rate limit suave entre envíos, igual que los scripts one-off.
+    await new Promise((r) => setTimeout(r, 80));
   }
 
-  console.log(`[daily-reminder] sent=${sent} alDia(skip)=${skippedReady} failed=${failed}`);
+  console.log(`[daily-reminder] sent=${sent} failed=${failed}`);
 }
