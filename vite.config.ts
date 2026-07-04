@@ -7,7 +7,14 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
-      registerType: 'autoUpdate',
+      // 'prompt' (no 'autoUpdate'): cuando hay una versión nueva NO recargamos
+      // sola la página — mostramos un toast "Actualizar" (ver use-pwa-update.ts)
+      // y el usuario decide cuándo. Clave porque el ruteo es client-side: la PWA
+      // puede quedar abierta días sin re-pedir index.html, así que sin este
+      // aviso el usuario se queda con chunks viejos (bug de octavos bloqueados).
+      // Además evita que una recarga automática le borre un marcador a medio
+      // tipear.
+      registerType: 'prompt',
       includeAssets: [
         'favicon.svg',
         'apple-touch-icon.png',
@@ -72,10 +79,13 @@ export default defineConfig({
         globPatterns: ['**/*.{js,css,svg,png,woff2}'],
         globIgnores: ['**/index.html'],
         navigateFallback: null,
-        // Take over open tabs immediately when a new SW activates, so the
-        // tab right after a deploy starts using the fresh cache without
-        // requiring a manual reload.
-        skipWaiting: true,
+        // skipWaiting FALSE a propósito: con registerType 'prompt' el SW nuevo
+        // debe quedarse en "waiting" hasta que el usuario toque "Actualizar" en
+        // el toast (updateServiceWorker(true) dispara el skip waiting + reload).
+        // Si lo dejáramos en true, el SW se activaría solo y perderíamos el
+        // control del momento de recarga. clientsClaim sigue en true para que,
+        // una vez activado, tome el control de la pestaña sin pasos extra.
+        skipWaiting: false,
         clientsClaim: true,
         // Don't serve precached responses for navigations — let the
         // network return the latest index.html every time.

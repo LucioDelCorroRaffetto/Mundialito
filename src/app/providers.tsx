@@ -8,6 +8,7 @@ import { ThemeProvider } from '@/theme/theme-provider';
 import { router } from './router';
 import { useApiWakeup } from '@/shared/hooks/use-api-wakeup';
 import { ApiWakeupScreen } from '@/shared/components/api-wakeup-screen';
+import { usePwaUpdate } from '@/shared/hooks/use-pwa-update';
 import { useAuthStore } from '@/shared/stores/auth-store';
 
 const queryClient = new QueryClient({
@@ -77,6 +78,9 @@ function useEagerTokenRefresh() {
 
 function AppWithWakeup() {
   const wakeup = useApiWakeup();
+  // Avisa (toast, no invasivo) cuando hay un deploy nuevo para no quedar
+  // pegado en un bundle viejo cacheado por el service worker.
+  usePwaUpdate();
   return (
     <>
       <RouterProvider router={router} />
