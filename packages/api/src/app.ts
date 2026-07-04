@@ -60,15 +60,22 @@ app.use(tokenParse);
 // Health check that actually touches the DB. A bare {status:'ok'} reports
 // healthy even when Turso is down, which defeats alerting. Short timeout so a
 // hung DB doesn't hang the probe (and trips a 503 the host can act on).
+//
+// `commit` expone el SHA corto del deploy vivo (Render inyecta
+// RENDER_GIT_COMMIT en el runtime). Sin esto no había forma externa de
+// confirmar qué build está sirviendo — Render hace swap sin downtime, así que
+// /health responde 200 igual con el código viejo. Ahora se puede pollear
+// /health hasta ver el SHA esperado tras un push.
+const DEPLOYED_COMMIT = process.env.RENDER_GIT_COMMIT?.slice(0, 7) ?? 'unknown';
 app.get('/health', async (_req, res) => {
   try {
     await Promise.race([
       libsqlClient.execute('SELECT 1'),
       new Promise((_, reject) => setTimeout(() => reject(new Error('db timeout')), 2500)),
     ]);
-    return res.json({ status: 'ok', db: 'up' });
+    return res.json({ status: 'ok', db: 'up', commit: DEPLOYED_COMMIT });
   } catch {
-    return res.status(503).json({ status: 'degraded', db: 'down' });
+    return res.status(503).json({ status: 'degraded', db: 'down', commit: DEPLOYED_COMMIT });
   }
 });
 
