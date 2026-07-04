@@ -4,7 +4,7 @@ import { db } from '../../../db/index.js';
 import { leagues, leagueMembers, predictions, tournamentPredictions, matches } from '../../../db/schema/index.js';
 import { NotFoundError, ConflictError, AppError } from '../../../lib/errors.js';
 import { and, eq, inArray } from 'drizzle-orm';
-import { calculatePoints } from '../../../lib/scoring.js';
+import { calculatePoints, scoringResult } from '../../../lib/scoring.js';
 import { checkAchievements } from '../../../services/achievement-service.js';
 
 export const joinLeagueSchema = z.object({
@@ -75,6 +75,7 @@ export async function joinLeagueHandler(req: Request, res: Response) {
           status: matches.status,
           homeScore: matches.homeScore,
           awayScore: matches.awayScore,
+          decidedByPenalties: matches.decidedByPenalties,
         })
         .from(matches)
         .where(inArray(matches.id, [...byMatch.keys()]));
@@ -87,7 +88,7 @@ export async function joinLeagueHandler(req: Request, res: Response) {
             const m = matchById.get(matchId);
             const points =
               m && m.status === 'finished' && m.homeScore !== null && m.awayScore !== null
-                ? calculatePoints(p, { homeScore: m.homeScore, awayScore: m.awayScore })
+                ? calculatePoints(p, scoringResult(m))
                 : null;
             return {
               userId,

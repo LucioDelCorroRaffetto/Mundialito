@@ -39,6 +39,30 @@ export function calculatePoints(r: PredictionResult): number {
   }
 }
 
+/**
+ * Marcador que cuenta para PUNTUAR PRONÓSTICOS: el de los 90'/120'.
+ *
+ * Espeja al helper del backend (packages/api/src/lib/scoring.ts). Un cruce por
+ * PENALES se puntúa como el EMPATE de reglamento: el +1 al ganador que guarda
+ * el sync vive en el score sólo para que el cuadro sepa quién avanzó, no para
+ * la puntuación (la tanda no cambia que el partido terminó empatado). Un
+ * ganador en el ALARGUE no lleva `decidedByPenalties`, así que su marcador real
+ * cuenta como victoria. No-op para cualquier partido que no sea por penales, y
+ * también cuando el marcador ya está empatado (modelo sin bump).
+ */
+export function scoringResult(m: {
+  homeScore: number | null;
+  awayScore: number | null;
+  decidedByPenalties?: number | boolean | null;
+}): { home: number | null; away: number | null } {
+  const pen = m.decidedByPenalties === 1 || m.decidedByPenalties === true;
+  if (pen && m.homeScore != null && m.awayScore != null && m.homeScore !== m.awayScore) {
+    const reg = Math.min(m.homeScore, m.awayScore);
+    return { home: reg, away: reg };
+  }
+  return { home: m.homeScore, away: m.awayScore };
+}
+
 export function getPointsLabel(type: ScoreType): string {
   switch (type) {
     case 'exact':       return 'Resultado exacto';

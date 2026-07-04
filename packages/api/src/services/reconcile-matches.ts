@@ -12,7 +12,7 @@
 import { eq, sql } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import { matches, predictions } from '../db/schema/index.js';
-import { calculatePoints } from '../lib/scoring.js';
+import { calculatePoints, scoringResult } from '../lib/scoring.js';
 import { checkAchievements } from './achievement-service.js';
 import { recomputeAllFantasyPoints } from './fantasy-scoring-service.js';
 import { syncFifaStatsForMatch } from './sync-fifa-stats.js';
@@ -96,6 +96,7 @@ export async function reconcileMatchStatuses(): Promise<ReconcileResult> {
       kickoffUtc: matches.kickoffUtc,
       homeScore: matches.homeScore,
       awayScore: matches.awayScore,
+      decidedByPenalties: matches.decidedByPenalties,
       status: matches.status,
     })
     .from(matches)
@@ -118,7 +119,7 @@ export async function reconcileMatchStatuses(): Promise<ReconcileResult> {
       result.finishedAuto++;
       anyFinished = true;
       console.log(`[reconcile] match ${m.id} auto live→finished (kickoff ${(age / 3600000).toFixed(1)}h ago, ${m.homeScore}-${m.awayScore})`);
-      await scoreMatchPredictions(m.id, m.homeScore, m.awayScore);
+      await scoreMatchPredictions(m.id, m.homeScore, m.awayScore, m.decidedByPenalties === 1);
       // Pull FIFA player stats for this match too. The score+ESPN feeds
       // trigger this on their own finish transitions, but when reconcile is
       // the path that closes the match (both feeds dropped FINISHED and FIFA
@@ -169,16 +170,20 @@ async function scoreMatchPredictions(
   matchId: number,
   homeScore: number,
   awayScore: number,
+  decidedByPenalties = false,
 ): Promise<void> {
   const matchPredictions = await db
     .select()
     .from(predictions)
     .where(eq(predictions.matchId, matchId));
+  // Penales → empate de reglamento para la puntuación (el bump del score solo
+  // define quién avanza en el cuadro). No-op si no fue por penales.
+  const scored = scoringResult({ homeScore, awayScore, decidedByPenalties });
   const scoredUsers = new Map<number, number>();
   for (const pred of matchPredictions) {
     const pts = calculatePoints(
       { homeScore: pred.homeScore, awayScore: pred.awayScore },
-      { homeScore, awayScore },
+      scored,
     );
     await db
       .update(predictions)

@@ -13,7 +13,7 @@
 import { eq, sql } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import { matches, predictions, teams } from '../db/schema/index.js';
-import { calculatePoints } from '../lib/scoring.js';
+import { calculatePoints, scoringResult } from '../lib/scoring.js';
 import {
   isPlaceholderMatch,
   normalizeEspnCode,
@@ -356,11 +356,18 @@ export async function syncScoresFromEspn(date: string): Promise<SyncScoresResult
       })) {
         anyMatchFinished = true;
         const matchPredictions = await db.select().from(predictions).where(eq(predictions.matchId, ourMatch.id));
+        // Penales → empate de reglamento para la puntuación (el bump del score
+        // solo define quién avanza en el cuadro). No-op si no fue por penales.
+        // shouldRescorePredictions guarantees both scores are non-null here.
+        const scored = scoringResult({
+          homeScore: newHomeScore!,
+          awayScore: newAwayScore!,
+          decidedByPenalties: shootout.decidedByPenalties,
+        });
         for (const pred of matchPredictions) {
           const pts = calculatePoints(
             { homeScore: pred.homeScore, awayScore: pred.awayScore },
-            // shouldRescorePredictions guarantees both are non-null here.
-            { homeScore: newHomeScore!, awayScore: newAwayScore! },
+            scored,
           );
           await db.update(predictions).set({ points: pts, updatedAt: sql`(datetime('now'))` }).where(eq(predictions.id, pred.id));
           // Fire the same prediction_scored event the football-data.org

@@ -13,7 +13,7 @@
 import { eq, sql } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import { matches, predictions } from '../db/schema/index.js';
-import { calculatePoints } from '../lib/scoring.js';
+import { calculatePoints, scoringResult } from '../lib/scoring.js';
 import { recomputeAllFantasyPoints } from './fantasy-scoring-service.js';
 import { broadcastMatchUpdate } from '../ws/broadcast.js';
 import { checkAchievements } from './achievement-service.js';
@@ -33,6 +33,7 @@ export async function finalizeMatchFromFinalWhistle(matchId: number): Promise<Fi
       round: matches.round,
       homeScore: matches.homeScore,
       awayScore: matches.awayScore,
+      decidedByPenalties: matches.decidedByPenalties,
     })
     .from(matches)
     .where(eq(matches.id, matchId))
@@ -58,11 +59,15 @@ export async function finalizeMatchFromFinalWhistle(matchId: number): Promise<Fi
   // Puntuar pronósticos — misma lógica que los syncs de score. Trackeamos
   // un disparo de achievement por usuario (puede tener N filas, una por liga).
   const matchPredictions = await db.select().from(predictions).where(eq(predictions.matchId, matchId));
+  // Los penales cuentan como empate de reglamento para la puntuación (el bump
+  // solo define quién avanza en el cuadro). scoringResult es no-op si no fue por
+  // penales.
+  const scored = scoringResult(m);
   const scoredUsers = new Map<number, number>();
   for (const pred of matchPredictions) {
     const pts = calculatePoints(
       { homeScore: pred.homeScore, awayScore: pred.awayScore },
-      { homeScore: m.homeScore, awayScore: m.awayScore },
+      scored,
     );
     await db
       .update(predictions)

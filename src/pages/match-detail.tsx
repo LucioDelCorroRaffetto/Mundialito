@@ -5,7 +5,7 @@ import { ArrowLeft, Clock, MapPin, CheckCircle2, Share2, Users, Plus, Minus, Loc
 import { IconBallFootball, IconBallFootballOff, IconShoe, IconHandStop, IconHandFinger, IconCheck } from '@tabler/icons-react';
 import { toast } from 'sonner';
 import { ROUND_LABELS } from '@/shared/data/mock';
-import { getMaxPossiblePoints, getScoreType, calculatePoints } from '@/shared/lib/scoring';
+import { getMaxPossiblePoints, getScoreType, calculatePoints, scoringResult } from '@/shared/lib/scoring';
 import type { ScoreType } from '@/shared/lib/scoring';
 import { ConfettiBurst } from '@/shared/components/confetti-burst';
 import { usePredictionCelebration } from '@/shared/hooks/use-prediction-celebration';
@@ -701,19 +701,20 @@ export function MatchDetailPage() {
   }, [hasUnsavedChanges]);
 
   // Celebración de acierto en vivo — DEBE estar antes de los early returns
-  // de loading/!match para no violar la regla de hooks ordenados. Usamos el
-  // marcador crudo (match.homeScore/awayScore) en vez del ajustado por
-  // penales: la celebración importa en el juego en vivo, no en la tanda.
+  // de loading/!match para no violar la regla de hooks ordenados. Puntuamos
+  // contra el marcador de 90'/120' (scoringResult de-bumpea los penales): un
+  // cruce que se definió por penales cuenta como empate, igual que el backend.
   const { reduced } = useMotionPrefs();
+  const myScoring = match ? scoringResult(match) : { home: null, away: null };
   const myOutcome: ScoreType | undefined =
     match && (match.status === 'live' || match.status === 'finished') &&
     existingPrediction?.homeScore != null && existingPrediction?.awayScore != null &&
-    match.homeScore != null && match.awayScore != null
+    myScoring.home != null && myScoring.away != null
       ? getScoreType({
           predictedHome: existingPrediction.homeScore,
           predictedAway: existingPrediction.awayScore,
-          actualHome: match.homeScore,
-          actualAway: match.awayScore,
+          actualHome: myScoring.home,
+          actualAway: myScoring.away,
         })
       : undefined;
   const { celebration, clear: clearCelebration } = usePredictionCelebration(matchId, myOutcome);
@@ -723,8 +724,8 @@ export function MatchDetailPage() {
     const pts = calculatePoints({
       predictedHome: existingPrediction!.homeScore!,
       predictedAway: existingPrediction!.awayScore!,
-      actualHome: match!.homeScore!,
-      actualAway: match!.awayScore!,
+      actualHome: myScoring.home!,
+      actualAway: myScoring.away!,
     });
     toast.success(celebration === 'exact' ? `¡Exacto! +${pts}` : `¡Acertaste! +${pts}`);
     // Con reduce-motion no hay confetti/glow que limpien el estado solos —
@@ -1378,16 +1379,12 @@ export function MatchDetailPage() {
               matchId={match.id}
               leagueId={selectedLeagueId}
               currentUserId={currentUserId}
-              // Referencia de puntuación: SIEMPRE el marcador crudo de la DB
-              // (con el +1 al ganador de penales), nunca el de reglamento.
-              // El backend puntúa `pred.points` contra este mismo marcador, así
-              // que si acá usáramos regHome/regAway (el empate previo a la tanda)
-              // la etiqueta (Exacto/Acertado/Falló) contradiría los puntos:
-              // quien predijo 1-1 salía "Exacto · +0" y quien predijo 1-2
-              // (el ganador) salía "Falló · +5". La etiqueta debe derivar del
-              // mismo marcador que los puntos.
-              actualHome={match.homeScore}
-              actualAway={match.awayScore}
+              // Referencia de puntuación = marcador de 90'/120'. scoringResult
+              // de-bumpea los penales (cuentan como empate), que es exactamente
+              // contra lo que el backend calcula `pred.points`. Así la etiqueta
+              // (Exacto/Acertado/Falló) y los +N coinciden siempre.
+              actualHome={scoringResult(match).home}
+              actualAway={scoringResult(match).away}
               matchFinished={match.status === 'finished'}
             />
           )}

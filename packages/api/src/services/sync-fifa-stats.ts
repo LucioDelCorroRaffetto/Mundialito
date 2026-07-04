@@ -43,7 +43,7 @@ import { eq, inArray, sql } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import { matches, players, playerMatchStats, teams, matchEvents, predictions } from '../db/schema/index.js';
 import { recomputeAllFantasyPoints } from './fantasy-scoring-service.js';
-import { calculatePoints } from '../lib/scoring.js';
+import { calculatePoints, scoringResult } from '../lib/scoring.js';
 import { checkAchievements } from './achievement-service.js';
 import { notifyAdmin } from '../lib/notify-admin.js';
 import {
@@ -997,7 +997,7 @@ async function doSync(matchId: number): Promise<SyncStatsResult> {
             // score viejo. En vivo no hace falta — los puntos se otorgan recién
             // al cierre.
             if (m.status === 'finished') {
-              await rescoreMatchPredictions(matchId, homeScore, awayScore);
+              await rescoreMatchPredictions(matchId, homeScore, awayScore, decidedByPenalties);
             }
           }
         }
@@ -1080,13 +1080,21 @@ async function doSync(matchId: number): Promise<SyncStatsResult> {
  * de un partido YA finalizado (p.ej. el score autoritativo de FIFA llegó
  * después de que el pitazo lo cerró con un marcador equivocado).
  */
-async function rescoreMatchPredictions(matchId: number, homeScore: number, awayScore: number): Promise<void> {
+async function rescoreMatchPredictions(
+  matchId: number,
+  homeScore: number,
+  awayScore: number,
+  decidedByPenalties = false,
+): Promise<void> {
   const matchPredictions = await db.select().from(predictions).where(eq(predictions.matchId, matchId));
+  // Penales → empate de reglamento para la puntuación (el bump del score solo
+  // define quién avanza en el cuadro). No-op si no fue por penales.
+  const scored = scoringResult({ homeScore, awayScore, decidedByPenalties });
   const scoredUsers = new Map<number, number>();
   for (const pred of matchPredictions) {
     const pts = calculatePoints(
       { homeScore: pred.homeScore, awayScore: pred.awayScore },
-      { homeScore, awayScore },
+      scored,
     );
     await db
       .update(predictions)

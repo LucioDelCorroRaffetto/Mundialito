@@ -49,3 +49,32 @@ export function calculatePoints(
   if (predDiff === resultDiff) return 3; // ganador + diferencia exacta
   return 1; // solo ganador correcto
 }
+
+/**
+ * Marcador que cuenta para PUNTUAR PRONÓSTICOS: el de los 90'/120'.
+ *
+ * Un cruce definido por PENALES se puntúa como el EMPATE de reglamento — el +1
+ * que los syncs le suman al ganador vive en el score sólo para que el CUADRO
+ * sepa quién avanzó, NO para la puntuación: la tanda no cambia que el partido
+ * terminó empatado (criterio de casas de apuestas). Un ganador en el ALARGUE no
+ * lleva `decidedByPenalties`, así que su marcador real (p.ej. 2-1) cuenta como
+ * victoria, que es lo correcto.
+ *
+ * Es un no-op para todo partido que no sea penales, así que envolver cualquier
+ * sitio de puntuación con este helper es seguro.
+ */
+export function scoringResult<
+  T extends { homeScore: number | null; awayScore: number | null; decidedByPenalties?: number | boolean | null },
+>(match: T): MatchResult {
+  const pen = match.decidedByPenalties === 1 || match.decidedByPenalties === true;
+  if (
+    pen &&
+    match.homeScore != null &&
+    match.awayScore != null &&
+    match.homeScore !== match.awayScore
+  ) {
+    const reg = Math.min(match.homeScore, match.awayScore);
+    return { homeScore: reg, awayScore: reg };
+  }
+  return { homeScore: match.homeScore as number, awayScore: match.awayScore as number };
+}

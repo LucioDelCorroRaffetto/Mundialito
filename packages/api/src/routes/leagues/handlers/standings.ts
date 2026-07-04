@@ -3,7 +3,7 @@ import { db } from '../../../db/index.js';
 import { predictions, leagueMembers, users, matches, userAchievements, achievements, tournamentPredictions } from '../../../db/schema/index.js';
 import { NotFoundError, AppError } from '../../../lib/errors.js';
 import { and, eq, inArray } from 'drizzle-orm';
-import { calculatePoints } from '../../../lib/scoring.js';
+import { calculatePoints, scoringResult } from '../../../lib/scoring.js';
 import { computeLevel } from '../../../lib/levels.js';
 import { computeUserXpBulk } from '../../../lib/user-xp.js';
 
@@ -53,6 +53,7 @@ export async function standingsHandler(req: Request, res: Response) {
       predAway: predictions.awayScore,
       matchHome: matches.homeScore,
       matchAway: matches.awayScore,
+      matchDecidedByPenalties: matches.decidedByPenalties,
       matchStatus: matches.status,
     })
     .from(predictions)
@@ -67,7 +68,8 @@ export async function standingsHandler(req: Request, res: Response) {
     if (pts === null && p.matchStatus === 'finished' && p.matchHome !== null && p.matchAway !== null) {
       pts = calculatePoints(
         { homeScore: p.predHome, awayScore: p.predAway },
-        { homeScore: p.matchHome, awayScore: p.matchAway }
+        // Penales → empate de reglamento (el bump solo define el avance).
+        scoringResult({ homeScore: p.matchHome, awayScore: p.matchAway, decidedByPenalties: p.matchDecidedByPenalties })
       );
     }
     if (pts !== null) {

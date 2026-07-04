@@ -4,7 +4,7 @@ import { eq, sql } from 'drizzle-orm';
 import { db } from '../../../db/index.js';
 import { matches, predictions } from '../../../db/schema/index.js';
 import { NotFoundError } from '../../../lib/errors.js';
-import { calculatePoints } from '../../../lib/scoring.js';
+import { calculatePoints, scoringResult } from '../../../lib/scoring.js';
 import { recomputeAllFantasyPoints } from '../../../services/fantasy-scoring-service.js';
 import { broadcastMatchUpdate } from '../../../ws/broadcast.js';
 import { checkAchievements, finalizeFantasyLegends } from '../../../services/achievement-service.js';
@@ -61,6 +61,9 @@ export async function updateMatchHandler(req: Request, res: Response) {
   const finalHomeScore = homeScore ?? match.homeScore;
   const finalAwayScore = awayScore ?? match.awayScore;
   const finalStatus = status ?? match.status;
+  const finalDecidedByPenalties = decidedByPenalties !== undefined
+    ? decidedByPenalties
+    : match.decidedByPenalties === 1;
 
   if (finalStatus === 'finished' && finalHomeScore !== null && finalHomeScore !== undefined && finalAwayScore !== null && finalAwayScore !== undefined) {
     const matchPredictions = await db
@@ -68,11 +71,18 @@ export async function updateMatchHandler(req: Request, res: Response) {
       .from(predictions)
       .where(eq(predictions.matchId, matchId));
 
+    // Penales → empate de reglamento para la puntuación (el bump solo define el
+    // avance en el cuadro). No-op si no fue por penales.
+    const scored = scoringResult({
+      homeScore: finalHomeScore,
+      awayScore: finalAwayScore,
+      decidedByPenalties: finalDecidedByPenalties,
+    });
     const scoredUsers = new Map<number, number>();
     for (const pred of matchPredictions) {
       const pts = calculatePoints(
         { homeScore: pred.homeScore, awayScore: pred.awayScore },
-        { homeScore: finalHomeScore, awayScore: finalAwayScore }
+        scored
       );
       await db
         .update(predictions)
