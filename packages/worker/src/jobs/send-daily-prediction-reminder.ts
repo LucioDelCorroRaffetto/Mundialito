@@ -111,12 +111,13 @@ export async function sendDailyPredictionReminder(): Promise<void> {
     body = namedLabels.length
       ? `Hoy juega ${namedLabels[0]} a las ${firstTime}. ¡Entrá y pronosticá!`
       : `Hoy hay un partido a las ${firstTime}. ¡Entrá y pronosticá!`;
+  } else if (namedLabels.length === 0) {
+    // Todos los cruces todavía sin definir (eliminatorias sin resolver).
+    body = `Hoy juegan ${matches.length} partidos, con los rivales por definir. El primero a las ${firstTime}. ¡Entrá y pronosticá!`;
   } else {
-    const pieces: string[] = [];
-    if (namedLabels.length) pieces.push(namedLabels.join(', '));
+    const pieces: string[] = [namedLabels.join(', ')];
     if (tbdCount) pieces.push(`${tbdCount} partido${tbdCount > 1 ? 's' : ''} por definir`);
-    const list = pieces.join(' y ');
-    body = `Hoy juegan ${matches.length} partidos: ${list}. El primero a las ${firstTime}. ¡Entrá y pronosticá!`;
+    body = `Hoy juegan ${matches.length} partidos: ${pieces.join(' y ')}. El primero a las ${firstTime}. ¡Entrá y pronosticá!`;
   }
 
   const payload = { title: '⚽ ¡Hoy hay partidos!', body, url: '/matches' };
