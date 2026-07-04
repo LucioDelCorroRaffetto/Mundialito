@@ -21,9 +21,8 @@ import { Button } from '@/shared/components/ui/button';
 import { TeamFlag } from '@/shared/components/ui/team-flag';
 import { useBracketProjection } from '@/shared/hooks/use-bracket-projection';
 import {
-  resolveBracketSlot,
   resolveAdvancingSlot,
-  type BracketProjection,
+  type SlotContext,
 } from '@/shared/lib/bracket-projection';
 import { R32_LABELS } from '@/shared/data/bracket';
 import { KnockoutPhaseBanner } from '@/shared/components/knockout-phase-banner';
@@ -41,17 +40,21 @@ function slotLabelFor(matchNumber: number, side: 'home' | 'away'): string {
 
 /**
  * Resuelve qué mostrar de un lado de un partido: el equipo real de la DB si ya
- * está definido, o el proyectado por el cuadro (1°/2° de grupo o mejor 3ro) para
- * los cruces de eliminación que siguen como TBD. `team` null ⇒ solo hay label.
+ * está definido, o el proyectado por el cuadro para los cruces de eliminación
+ * que siguen como TBD. Usa `resolveAdvancingSlot` (no solo `resolveBracketSlot`)
+ * para que en octavos+ también se muestre el GANADOR del cruce anterior ya
+ * jugado — igual que la lista "Próximos partidos" y la página Partidos. Sin
+ * esto, el hero mostraba "Por definir vs Por definir" en un cruce que la lista
+ * de al lado ya resolvía. `team` null ⇒ solo hay label.
  */
 function resolveSide(
   team: Pick<Team, 'id' | 'code' | 'flag' | 'name'> | undefined,
   matchNumber: number,
   side: 'home' | 'away',
-  projection: BracketProjection,
+  ctx: SlotContext,
 ): { team: Pick<Team, 'code' | 'flag'> | null; label: string; real: boolean } {
   const real = !!team && isRealTeam(team);
-  const display = real ? team! : resolveBracketSlot(matchNumber, side, projection)?.team ?? null;
+  const display = real ? team! : resolveAdvancingSlot(matchNumber, side, ctx) ?? null;
   return { team: display, label: display?.code ?? slotLabelFor(matchNumber, side), real };
 }
 
@@ -182,6 +185,18 @@ function CountdownHero({
   // siguen como TBD (mismo criterio que la página Partidos). Reusa queries
   // cacheados de matches/teams, así que no agrega red.
   const projection = useBracketProjection();
+  // Para octavos en adelante necesitamos, además del 1°/2° de grupo, el GANADOR
+  // del cruce anterior ya jugado (resolveAdvancingSlot lo deriva del marcador).
+  // Mismo contexto que arma la lista "Próximos partidos".
+  const { data: allMatches } = useMatches({ limit: 200 });
+  const matchByNum = useMemo(
+    () => new Map((allMatches?.data ?? []).map((m) => [m.matchNumber, m])),
+    [allMatches],
+  );
+  const slotCtx = useMemo<SlotContext>(
+    () => ({ matchByNum, teamMap, projection }),
+    [matchByNum, teamMap, projection],
+  );
   // Triggered when the countdown reaches 0 — invalidates the matches
   // query so the home auto-advances to the next match without needing the
   // user to refresh. Also kicks the standings / predictions caches because
@@ -250,8 +265,8 @@ function CountdownHero({
         </div>
         <div className="grid grid-cols-2 gap-3">
           {liveMatches.map((m) => {
-            const home = resolveSide(teamMap?.get(m.homeTeamId), m.matchNumber, 'home', projection);
-            const away = resolveSide(teamMap?.get(m.awayTeamId), m.matchNumber, 'away', projection);
+            const home = resolveSide(teamMap?.get(m.homeTeamId), m.matchNumber, 'home', slotCtx);
+            const away = resolveSide(teamMap?.get(m.awayTeamId), m.matchNumber, 'away', slotCtx);
             return (
               <Link
                 key={m.id}
@@ -302,8 +317,8 @@ function CountdownHero({
     );
   }
 
-  const homeTeam = resolveSide(teamMap?.get(nextMatch.homeTeamId), nextMatch.matchNumber, 'home', projection);
-  const awayTeam = resolveSide(teamMap?.get(nextMatch.awayTeamId), nextMatch.matchNumber, 'away', projection);
+  const homeTeam = resolveSide(teamMap?.get(nextMatch.homeTeamId), nextMatch.matchNumber, 'home', slotCtx);
+  const awayTeam = resolveSide(teamMap?.get(nextMatch.awayTeamId), nextMatch.matchNumber, 'away', slotCtx);
   // Mostrar los equipos cuando ya hay algo concreto (real o proyectado), o
   // cuando es un cruce de eliminación (ahí el label del slot ya es útil). Para
   // partidos de grupo todavía cargando, no mostramos nada en vez de "Por definir".
