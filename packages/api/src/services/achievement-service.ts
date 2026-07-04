@@ -14,6 +14,7 @@ import {
 } from '../db/schema/index.js';
 import { eq, and, count, inArray, sql } from 'drizzle-orm';
 import { isHiddenUser } from '../lib/hidden-users.js';
+import { scoringResult } from '../lib/scoring.js';
 
 /**
  * Checks and awards achievements based on an event.
@@ -352,6 +353,7 @@ async function loadScoredHistory(userId: number): Promise<ScoredRow[]> {
       predAway: predictions.awayScore,
       matchHome: matches.homeScore,
       matchAway: matches.awayScore,
+      decidedByPenalties: matches.decidedByPenalties,
       points: predictions.points,
     })
     .from(predictions)
@@ -359,12 +361,29 @@ async function loadScoredHistory(userId: number): Promise<ScoredRow[]> {
     .where(and(eq(predictions.userId, userId), eq(matches.status, 'finished')));
 
   // Dedupe by matchId — same prediction lives in N leagues but the score is
-  // identical, so any row is fine.
+  // identical, so any row is fine. El marcador que exponemos es el de
+  // reglamento (scoringResult de-bumpea los penales): bullseye_zero/goalfest
+  // miran matchHome/matchAway, y un cruce por penales cuenta como su empate.
   const byMatch = new Map<number, ScoredRow>();
   for (const r of rows) {
     if (r.points == null) continue;
     if (!byMatch.has(r.matchId)) {
-      byMatch.set(r.matchId, { ...r, points: r.points } as ScoredRow);
+      const reg = scoringResult({
+        homeScore: r.matchHome,
+        awayScore: r.matchAway,
+        decidedByPenalties: r.decidedByPenalties,
+      });
+      byMatch.set(r.matchId, {
+        matchId: r.matchId,
+        kickoffUtc: r.kickoffUtc,
+        group: r.group,
+        status: r.status,
+        predHome: r.predHome,
+        predAway: r.predAway,
+        matchHome: reg.homeScore,
+        matchAway: reg.awayScore,
+        points: r.points,
+      });
     }
   }
   return [...byMatch.values()].sort((a, b) => a.kickoffUtc.localeCompare(b.kickoffUtc));
@@ -520,6 +539,7 @@ async function evaluateUpsetHunter(userId: number, awarded: string[]): Promise<v
       awayTeamId: matches.awayTeamId,
       homeScore: matches.homeScore,
       awayScore: matches.awayScore,
+      decidedByPenalties: matches.decidedByPenalties,
       status: matches.status,
     })
     .from(matches)
@@ -538,12 +558,15 @@ async function evaluateUpsetHunter(userId: number, awarded: string[]): Promise<v
     .where(inArray(teams.id, [...teamIds]));
   const rankById = new Map<number, number | null>(teamRankRows.map((r) => [r.id, r.fifaRank]));
 
-  // Determine which finished matches were upsets (lower-ranked won).
+  // Determine which finished matches were upsets (lower-ranked won). Un cruce
+  // definido por penales terminó EMPATADO (scoringResult lo de-bumpea): no es
+  // un upset, quien avanzó lo hizo en la tanda, no ganando el partido.
   const upsetMatchIds: number[] = [];
   for (const m of finishedMatches) {
-    if (m.homeScore == null || m.awayScore == null) continue;
+    const reg = scoringResult(m);
+    if (reg.homeScore == null || reg.awayScore == null) continue;
     if (m.homeTeamId == null || m.awayTeamId == null) continue;
-    if (m.homeScore === m.awayScore) continue; // draws aren't upsets
+    if (reg.homeScore === reg.awayScore) continue; // draws (incl. penales) aren't upsets
     const homeRank = rankById.get(m.homeTeamId) ?? 999;
     const awayRank = rankById.get(m.awayTeamId) ?? 999;
     if (homeRank === awayRank) continue; // same rank, skip
