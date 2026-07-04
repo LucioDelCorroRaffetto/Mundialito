@@ -1378,8 +1378,16 @@ export function MatchDetailPage() {
               matchId={match.id}
               leagueId={selectedLeagueId}
               currentUserId={currentUserId}
-              actualHome={shootout ? shootout.regHome : match.homeScore}
-              actualAway={shootout ? shootout.regAway : match.awayScore}
+              // Referencia de puntuación: SIEMPRE el marcador crudo de la DB
+              // (con el +1 al ganador de penales), nunca el de reglamento.
+              // El backend puntúa `pred.points` contra este mismo marcador, así
+              // que si acá usáramos regHome/regAway (el empate previo a la tanda)
+              // la etiqueta (Exacto/Acertado/Falló) contradiría los puntos:
+              // quien predijo 1-1 salía "Exacto · +0" y quien predijo 1-2
+              // (el ganador) salía "Falló · +5". La etiqueta debe derivar del
+              // mismo marcador que los puntos.
+              actualHome={match.homeScore}
+              actualAway={match.awayScore}
               matchFinished={match.status === 'finished'}
             />
           )}
