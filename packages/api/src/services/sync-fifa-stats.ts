@@ -270,6 +270,7 @@ async function doSync(matchId: number): Promise<SyncStatsResult> {
       awayTeamId: matches.awayTeamId,
       homeScore: matches.homeScore,
       awayScore: matches.awayScore,
+      decidedByPenalties: matches.decidedByPenalties,
       apiFixtureId: matches.apiFixtureId,
       scoreLocked: matches.scoreLocked,
     })
@@ -926,18 +927,77 @@ async function doSync(matchId: number): Promise<SyncStatsResult> {
         const fh = live.HomeTeam?.Score;
         const fa = live.AwayTeam?.Score;
         if (typeof fh === 'number' && typeof fa === 'number') {
-          const changed = fh !== m.homeScore || fa !== m.awayScore;
+          // FIFA-live publica el marcador de REGLAMENTO (90'/120'). En un cruce
+          // definido por penales viene EMPATADO (p.ej. 1-1) y sin ninguna señal
+          // de la tanda. Si lo escribiéramos tal cual, el cuadro ve un empate
+          // finished y no puede propagar al ganador — la projection del bracket
+          // deriva quién avanzó del +1 al score (convención del sync). Por eso
+          // reconstruimos al ganador de la tanda desde los eventos Period 5
+          // (penalty_goal) que ya parseamos arriba y le aplicamos ese +1,
+          // marcando decidedByPenalties. Antes esto se corregía a mano por cada
+          // cruce (scripts/fix-match-penalty-result.ts) — caso GER–PAR M74.
+          //
+          // Solo al cierre (finished): en vivo la tanda puede estar en curso y
+          // un conteo desigual todavía no implica un resultado firme.
+          let homeScore = fh;
+          let awayScore = fa;
+          let decidedByPenalties = m.decidedByPenalties === 1;
+          if (fh === fa && m.status === 'finished') {
+            const shootoutGoalsByTeam = new Map<number, number>();
+            for (const e of timeline) {
+              if (e.type !== 'penalty_goal') continue;
+              shootoutGoalsByTeam.set(e.teamId, (shootoutGoalsByTeam.get(e.teamId) ?? 0) + 1);
+            }
+            if (shootoutGoalsByTeam.size > 0) {
+              // Ganador = el equipo con más penales convertidos en la tanda.
+              let winnerTeamId = -1;
+              let bestGoals = -1;
+              for (const [tid, cnt] of shootoutGoalsByTeam) {
+                if (cnt > bestGoals) { bestGoals = cnt; winnerTeamId = tid; }
+              }
+              // En eliminación m.home/awayTeamId son el placeholder TBD, así que
+              // el único vínculo confiable lado↔equipo son los IdTeam de FIFA-live.
+              const homeOurId = live.HomeTeam?.IdTeam ? teamIdByFifaIdTeam.get(live.HomeTeam.IdTeam) : undefined;
+              const awayOurId = live.AwayTeam?.IdTeam ? teamIdByFifaIdTeam.get(live.AwayTeam.IdTeam) : undefined;
+              if (winnerTeamId === homeOurId) { homeScore = fh + 1; decidedByPenalties = true; }
+              else if (winnerTeamId === awayOurId) { awayScore = fa + 1; decidedByPenalties = true; }
+              else {
+                console.warn(
+                  `[sync-fifa-stats] match ${matchId}: tanda detectada pero no pude mapear el ` +
+                  `ganador (teamId ${winnerTeamId}) a home/away del feed — score queda ${fh}-${fa}`,
+                );
+              }
+            } else if (
+              m.decidedByPenalties === 1 &&
+              m.homeScore != null && m.awayScore != null && m.homeScore !== m.awayScore
+            ) {
+              // No hay eventos de tanda en esta corrida pero la DB ya tiene un
+              // bump válido (admin o corrida previa): preservarlo en vez de
+              // pisarlo con el empate de reglamento.
+              homeScore = m.homeScore;
+              awayScore = m.awayScore;
+              decidedByPenalties = true;
+            }
+          }
+          const changed =
+            homeScore !== m.homeScore ||
+            awayScore !== m.awayScore ||
+            (decidedByPenalties ? 1 : 0) !== m.decidedByPenalties;
           if (changed) {
-            await db.update(matches).set({ homeScore: fh, awayScore: fa }).where(eq(matches.id, matchId));
+            await db
+              .update(matches)
+              .set({ homeScore, awayScore, decidedByPenalties: decidedByPenalties ? 1 : 0 })
+              .where(eq(matches.id, matchId));
             console.log(
-              `[sync-fifa-stats] match ${matchId}: score FIFA ${fh}-${fa} (era ${m.homeScore}-${m.awayScore})`,
+              `[sync-fifa-stats] match ${matchId}: score FIFA ${homeScore}-${awayScore}` +
+              `${decidedByPenalties ? ' (pen.)' : ''} (era ${m.homeScore}-${m.awayScore})`,
             );
             // Si el partido ya está finalizado, re-puntuar los pronósticos con
             // el marcador corregido: el finalize por pitazo ya corrió con el
             // score viejo. En vivo no hace falta — los puntos se otorgan recién
             // al cierre.
             if (m.status === 'finished') {
-              await rescoreMatchPredictions(matchId, fh, fa);
+              await rescoreMatchPredictions(matchId, homeScore, awayScore);
             }
           }
         }
