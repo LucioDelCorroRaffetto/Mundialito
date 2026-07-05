@@ -65,7 +65,7 @@ Estados: ⬜ pendiente · 🔄 en curso · ✅ hecha · ⏭️ salteada
 
 ---
 
-## ⬜ Sesión 1 — Seguridad: refresh tokens con rotación + headers
+## ✅ Sesión 1 — Seguridad: refresh tokens con rotación + headers
 
 **Objetivo:** que un refresh token robado deje de valer 30 días irrevocables.
 Hoy `POST /auth/refresh` acepta cualquier JWT firmado (stateless): logout,
@@ -191,7 +191,7 @@ emite par registrado · revokeAllForUser deja todos revocados.
 
 ---
 
-## ⬜ Sesión 2 — En vivo: celebración de acierto + leaderboard animado
+## ✅ Sesión 2 — En vivo: celebración de acierto + leaderboard animado
 
 **Objetivo:** que acertar en vivo se sienta. Hoy el badge cambia de color y
 nada más.
