@@ -1,5 +1,7 @@
 // Sends push notifications to all subscribers ~30 min before each match's predictionLockUtc.
-// Runs every 5 minutes; queries matches where predictionLockUtc is between NOW and NOW+35min.
+// Runs every 2 min (ver render.yaml). Idempotente por partido vía
+// worker_flags['deadline_reminder_sent_<matchId>'] — mismo patrón que
+// send-wrapped-ready.ts.
 
 import { db } from '../db/client.js';
 import { sendPushNotification } from '../lib/push-sender.js';
@@ -17,23 +19,42 @@ interface PushSubscriptionRow {
   auth: string;
 }
 
+function flagKey(matchId: number): string {
+  return `deadline_reminder_sent_${matchId}`;
+}
+
+async function isFlagSet(key: string): Promise<boolean> {
+  const res = await db.$client.execute({
+    sql: 'SELECT 1 FROM worker_flags WHERE key = ?',
+    args: [key],
+  });
+  return res.rows.length > 0;
+}
+
+async function setFlag(key: string): Promise<void> {
+  await db.$client.execute({
+    sql: `INSERT INTO worker_flags (key, value, updated_at) VALUES (?, ?, ?)
+          ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
+    args: [key, '1', new Date().toISOString()],
+  });
+}
+
 export async function sendDeadlineReminders(): Promise<void> {
-  // 2-min "fire zone" ending 30 min before lock. The cron (run-once) runs
-  // every 2 min (ver render.yaml: "*/2 * * * *"), así que la ventana debe ser
-  // de 2 min para que cada partido caiga en EXACTAMENTE un tick y se dispare
-  // un solo push. Con `> windowStart AND <= windowEnd`, la condición equivale
-  // a tick ∈ [lock-30, lock-28): un intervalo semiabierto de 2 min contiene
-  // siempre un único tick de la grilla de 2 min. Antes la ventana era de 5 min
-  // (asumía un cron de 5 min que en realidad es de 2) → cada partido disparaba
-  // 2-3 pushes duplicados a cada usuario.
-  const windowStartMs = Date.now() + 28 * 60 * 1000;
-  const windowEndMs   = Date.now() + 30 * 60 * 1000;
+  // Ventana ancha (20 min) con margen de sobra ante demoras del cron gratuito
+  // de Render (arranque en frío, cola, etc.). Antes usamos una ventana exacta
+  // de 2 min (= intervalo del cron) para evitar duplicados, pero eso dejaba
+  // CERO margen: un solo tick retrasado hacía que el partido nunca entrara en
+  // la ventana y el aviso no se mandaba nunca. La ventana ancha puede ver el
+  // mismo partido en varios ticks — por eso el envío es idempotente por
+  // partido vía worker_flags, no por ventana.
+  const windowStartMs = Date.now() + 15 * 60 * 1000;
+  const windowEndMs   = Date.now() + 35 * 60 * 1000;
   const windowStart = new Date(windowStartMs).toISOString();
   const windowEnd   = new Date(windowEndMs).toISOString();
 
   console.log(`[deadline-reminders] Checking matches locking between ${windowStart} and ${windowEnd}...`);
 
-  // 1. Match window: prediction_lock_utc in [now+28min, now+30min]
+  // 1. Match window: prediction_lock_utc in [now+15min, now+35min]
   const matchResult = await db.$client.execute({
     sql: `
       SELECT
@@ -51,16 +72,23 @@ export async function sendDeadlineReminders(): Promise<void> {
     args: [windowStart, windowEnd],
   });
 
-  const upcomingMatches = matchResult.rows as unknown as UpcomingMatch[];
+  const candidates = matchResult.rows as unknown as UpcomingMatch[];
+
+  // 2. Filter out matches already notified (idempotencia).
+  const upcomingMatches: UpcomingMatch[] = [];
+  for (const match of candidates) {
+    if (await isFlagSet(flagKey(match.id))) continue;
+    upcomingMatches.push(match);
+  }
 
   if (upcomingMatches.length === 0) {
-    console.log('[deadline-reminders] No matches closing soon — skipping');
+    console.log('[deadline-reminders] No matches closing soon (o ya avisados) — skipping');
     return;
   }
 
   console.log(`[deadline-reminders] ${upcomingMatches.length} match(es) closing soon`);
 
-  // 2. Get all push subscriptions from DB
+  // 3. Get all push subscriptions from DB
   const subsResult = await db.$client.execute(
     'SELECT endpoint, p256dh, auth FROM push_subscriptions'
   );
@@ -74,7 +102,7 @@ export async function sendDeadlineReminders(): Promise<void> {
 
   console.log(`[deadline-reminders] Sending to ${subscriptions.length} subscription(s)`);
 
-  // 3. For each match, send a push notification to all subscribers
+  // 4. For each match, send a push notification to all subscribers, then flag it.
   for (const match of upcomingMatches) {
     const payload = {
       title: '⚽ ¡Último momento para pronosticar!',
@@ -95,8 +123,9 @@ export async function sendDeadlineReminders(): Promise<void> {
       }),
     );
 
+    await setFlag(flagKey(match.id));
     console.log(
-      `[deadline-reminders] Match ${match.id} (${match.home_team} vs ${match.away_team}): ${sent} sent, ${failed} failed`,
+      `[deadline-reminders] Match ${match.id} (${match.home_team} vs ${match.away_team}): ${sent} sent, ${failed} failed — flag seteado`,
     );
   }
 }
