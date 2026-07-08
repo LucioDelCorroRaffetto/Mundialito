@@ -81,7 +81,9 @@ function isDecided(match: Match | undefined): match is Match {
     match.status === 'finished' &&
     match.homeScore != null &&
     match.awayScore != null &&
-    match.homeScore !== match.awayScore
+    // Definido por marcador (incluye el +1 del modelo de bump) o, cuando el
+    // resultado quedó empate, por el ganador explícito de la tanda de penales.
+    (match.homeScore !== match.awayScore || !!match.penaltyWinner)
   );
 }
 
@@ -129,9 +131,11 @@ export function resolveAdvancingSlot(
 
 /**
  * Ganador o perdedor de un partido del cuadro: resuelve las identidades de ambos
- * lados (vía proyección/recursión) y usa el marcador para elegir. null si el
- * partido no terminó o quedó empatado (los penales ya vienen con +1 al ganador,
- * así que un empate finished implica definición aún no resuelta).
+ * lados (vía proyección/recursión) y elige el lado ganador. El ganador sale de:
+ *  1) `penaltyWinner` cuando el cruce se definió por penales y quedó empate (el
+ *     marcador guardado sigue siendo el resultado real, sin bump);
+ *  2) el marcador en cualquier otro caso (incluye el +1 del modelo de bump).
+ * null si el partido no terminó o quedó empatado sin ganador de tanda.
  */
 function resolveOutcome(
   matchNumber: number,
@@ -142,7 +146,7 @@ function resolveOutcome(
   if (!isDecided(m)) return null;
   const home = resolveAdvancingSlot(matchNumber, 'home', ctx);
   const away = resolveAdvancingSlot(matchNumber, 'away', ctx);
-  const homeWon = m.homeScore! > m.awayScore!;
+  const homeWon = m.penaltyWinner ? m.penaltyWinner === 'home' : m.homeScore! > m.awayScore!;
   const advancing = which === 'winner' ? homeWon : !homeWon;
   return advancing ? home : away;
 }

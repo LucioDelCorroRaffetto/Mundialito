@@ -17,6 +17,10 @@ export const updateMatchSchema = z.object({
   // (convención del sync) y este flag deja que el cuadro/lista anoten "(pen.)".
   // Útil cuando el feed cerró un KO empatado sin reportar la tanda.
   decidedByPenalties: z.boolean().optional(),
+  // Ganador de la tanda como LADO del partido, para avanzar en el cuadro sin
+  // tocar el marcador (el score queda en el empate real ⇒ scoring intacto). Usar
+  // en vez del bump cuando querés preservar el resultado de juego. `null` limpia.
+  penaltyWinner: z.enum(['home', 'away']).nullable().optional(),
 });
 
 export async function updateMatchHandler(req: Request, res: Response) {
@@ -30,7 +34,7 @@ export async function updateMatchHandler(req: Request, res: Response) {
     return res.status(400).json({ error: { code: 'VALIDATION_ERROR', message: parsed.error.errors[0].message } });
   }
 
-  const { homeScore, awayScore, status, decidedByPenalties } = parsed.data;
+  const { homeScore, awayScore, status, decidedByPenalties, penaltyWinner } = parsed.data;
 
   // Verify match exists
   const match = await db.select().from(matches).where(eq(matches.id, matchId)).get();
@@ -44,6 +48,7 @@ export async function updateMatchHandler(req: Request, res: Response) {
   if (awayScore !== undefined) updatePayload.awayScore = awayScore;
   if (status !== undefined) updatePayload.status = status;
   if (decidedByPenalties !== undefined) updatePayload.decidedByPenalties = decidedByPenalties ? 1 : 0;
+  if (penaltyWinner !== undefined) updatePayload.penaltyWinner = penaltyWinner;
   if (homeScore !== undefined || awayScore !== undefined) updatePayload.scoreLocked = 1;
 
   if (Object.keys(updatePayload).length === 0) {

@@ -77,6 +77,20 @@ export const matches = sqliteTable('matches', {
    * (cuadro, lista) anotar "(pen.)" sin tener que cargar el timeline.
    */
   decidedByPenalties: integer('decided_by_penalties').notNull().default(0),
+  /**
+   * Ganador de la tanda de PENALES expresado como LADO del partido
+   * ('home' | 'away'), independiente del marcador. Es la señal explícita que usa
+   * el CUADRO para propagar al ganador cuando el marcador guardado quedó EMPATE
+   * (sin el +1 del modelo de bump) — caso típico: el feed cierra el KO 0-0 sin
+   * reportar la tanda. A diferencia del bump, esto NO toca home_score/away_score,
+   * así que el scoring de predicciones (que puntúa contra el marcador guardado)
+   * queda intacto. Null cuando el cruce no se definió por penales.
+   *
+   * Nota: se guarda el LADO (no el team_id) porque en eliminatoria
+   * home_team_id/away_team_id siguen apuntando al placeholder TBD; el cuadro
+   * resuelve la identidad real del lado por proyección.
+   */
+  penaltyWinner: text('penalty_winner').$type<'home' | 'away'>(),
   apiFixtureId: integer('api_fixture_id'), // nullable — API-Football fixture ID (no longer used in free tier)
   // FIFA.com API identifiers for the per-match timeline endpoint. We use
   // FIFA's public API for player stats (goals/assists/cards) because

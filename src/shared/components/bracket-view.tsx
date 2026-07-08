@@ -158,7 +158,8 @@ function MatchCard({ match, matchNumber, roundIndex, teamMap, projectedHome, pro
   const isLive     = match?.status === 'live';
   const isFinished = match?.status === 'finished';
   const showScore  = (isLive || isFinished) && match?.homeScore != null;
-  const decidedByPen = isFinished && !!match?.decidedByPenalties;
+  const penWinner  = match?.penaltyWinner ?? null;
+  const decidedByPen = isFinished && (!!match?.decidedByPenalties || !!penWinner);
 
   const homeLabel = homeTbd ? slotLabel(matchNumber, 'home', roundIndex) : homeTeam.code;
   const awayLabel = awayTbd ? slotLabel(matchNumber, 'away', roundIndex) : awayTeam.code;
@@ -172,10 +173,15 @@ function MatchCard({ match, matchNumber, roundIndex, teamMap, projectedHome, pro
   const displayAwayScore = (decidedByPen && rawHome != null && rawAway != null && rawHome !== rawAway)
     ? Math.min(rawHome, rawAway) : rawAway;
 
-  // El ganador se determina por el score original (bumpeado) o, si no hay bump,
-  // permanece indeterminado desde el match row (no tenemos el timeline aquí).
-  const homeWon = isFinished && rawHome != null && rawAway != null && rawHome > rawAway;
-  const awayWon = isFinished && rawHome != null && rawAway != null && rawAway > rawHome;
+  // El ganador sale del `penaltyWinner` explícito (empate definido por penales,
+  // sin bump) o, si no lo hay, del score original — que ya trae el +1 del bump
+  // cuando el sync lo aplicó.
+  const homeWon = isFinished && (penWinner
+    ? penWinner === 'home'
+    : rawHome != null && rawAway != null && rawHome > rawAway);
+  const awayWon = isFinished && (penWinner
+    ? penWinner === 'away'
+    : rawHome != null && rawAway != null && rawAway > rawHome);
 
   const rs = ROUND_STYLES[Math.min(roundIndex, ROUND_STYLES.length - 1)];
   const accentColor = rs.accent;

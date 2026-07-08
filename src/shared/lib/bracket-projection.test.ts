@@ -64,6 +64,19 @@ describe('resolveAdvancingSlot — identidad vía proyección, no team IDs del p
     expect(resolveAdvancingSlot(90, 'home', ctx)).toBeNull();
   });
 
+  it('propaga al ganador de PENALES con marcador empatado — el bug de Suiza', () => {
+    // M73 termina ZAF 0 - 0 CAN pero ZAF (home) ganó la tanda. Sin bump en el
+    // marcador, el cuadro avanza igual usando penaltyWinner. El scoring no se
+    // toca: el marcador guardado sigue siendo el 0-0 real.
+    const ctx = ctxWith([mkMatch(73, { homeScore: 0, awayScore: 0, penaltyWinner: 'home' })]);
+    expect(resolveAdvancingSlot(90, 'home', ctx)?.code).toBe('ZAF');
+  });
+
+  it('penaltyWinner="away" avanza el lado away aunque el marcador sea empate', () => {
+    const ctx = ctxWith([mkMatch(73, { homeScore: 0, awayScore: 0, penaltyWinner: 'away' })]);
+    expect(resolveAdvancingSlot(90, 'home', ctx)?.code).toBe('CAN');
+  });
+
   it('prioriza el equipo REAL si el feed ya lo asignó al cruce', () => {
     const ctx = ctxWith([mkMatch(90, { homeTeamId: CAN.id, awayTeamId: TBD_ID, status: 'scheduled' })]);
     expect(resolveAdvancingSlot(90, 'home', ctx)?.code).toBe('CAN');

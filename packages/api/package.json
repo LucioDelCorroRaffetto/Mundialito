@@ -31,6 +31,8 @@
     "test:fifa-e2e": "tsx src/scripts/test-fifa-e2e.ts",
     "notify:last-call": "tsx src/scripts/notify-last-call.ts",
     "notify:kickoff": "tsx src/scripts/notify-kickoff-today.ts",
+    "migrate:penalty-winner": "tsx src/scripts/add-penalty-winner-column.ts",
+    "set:penalty-winner": "tsx src/scripts/set-penalty-winner.ts",
     "test": "vitest run",
     "test:watch": "vitest"
   },

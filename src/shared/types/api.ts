@@ -53,6 +53,13 @@ export interface Match {
    * timeline. Ausente en payloads viejos ⇒ tratar como 0.
    */
   decidedByPenalties?: number;
+  /**
+   * Ganador de la tanda de penales como LADO del partido ('home' | 'away'),
+   * independiente del marcador. Señal que usa el CUADRO para avanzar al ganador
+   * cuando el resultado guardado es un empate (sin bump). No afecta el marcador
+   * ni el scoring. Ausente/null ⇒ el cruce no se definió por penales (o el
+   * ganador viene por bump en el marcador). */
+  penaltyWinner?: 'home' | 'away' | null;
   // Solo lo devuelve GET /matches/:id (no la lista). Acumulados por jugador.
   events?: MatchEvent[];
   // Timeline minuto-a-minuto: cada gol/asist/tarjeta en su instante.
