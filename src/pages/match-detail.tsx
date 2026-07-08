@@ -25,7 +25,7 @@ import type { Match } from '@/shared/types/api';
 import { play } from '@/shared/lib/sounds';
 import { useTeamMap } from '@/shared/hooks/use-teams';
 import { useBracketProjection } from '@/shared/hooks/use-bracket-projection';
-import { resolveBracketSlot, resolveAdvancingSlot } from '@/shared/lib/bracket-projection';
+import { resolveBracketSlot, resolveAdvancingSlot, isPredictionBlockedByTbd } from '@/shared/lib/bracket-projection';
 import { useMyLeagues } from '@/shared/hooks/use-leagues';
 import { getTeamColors, hexToRgba } from '@/shared/data/team-colors';
 import { useMatchReactions, useToggleReaction } from '@/shared/hooks/use-reactions';
@@ -788,9 +788,7 @@ export function MatchDetailPage() {
   // resolved) or the previous cruce already decided a winner (homeKnockout/
   // awayKnockout, octavos+), we allow predictions even if the DB record still
   // shows TBD.
-  const teamsAreTbd =
-    (homeOfficialTbd && !homeProjection?.confirmed && !homeKnockout) ||
-    (awayOfficialTbd && !awayProjection?.confirmed && !awayKnockout);
+  const teamsAreTbd = isPredictionBlockedByTbd(match, slotCtx);
 
   // Hide personal/auto-created leagues from the chip selector — the user
   // doesn't think of them as "leagues" and the chip would just confuse the

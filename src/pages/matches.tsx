@@ -16,7 +16,7 @@ import { GroupStandings } from '@/shared/components/group-standings';
 import { ThirdPlaceTable } from '@/shared/components/third-place-table';
 import { BracketView } from '@/shared/components/bracket-view';
 import { R32_LABELS } from '@/shared/data/bracket';
-import { computeBracketProjection, resolveAdvancingSlot } from '@/shared/lib/bracket-projection';
+import { computeBracketProjection, resolveAdvancingSlot, isPredictionBlockedByTbd } from '@/shared/lib/bracket-projection';
 import { cn } from '@/shared/lib/cn';
 import { SkeletonList } from '@/shared/components/skeleton';
 
@@ -386,12 +386,18 @@ export function MatchesPage() {
     ? matches.filter((m) => m.group === groupFilter)
     : matches;
 
+  // "Sin pronosticar" = programado, no pronosticado y pronosticable. Los cruces de
+  // eliminación aún en TBD no se pueden pronosticar, así que no cuentan como
+  // pendientes (mismo criterio que el bloqueo del detalle y el cartel de home).
+  const isMissingPrediction = (m: Match) =>
+    m.status === 'scheduled' && !predictedIds.has(m.id) && !isPredictionBlockedByTbd(m, slotCtx);
+
   const filtered = filteredByGroup.filter((m) => {
     if (statusFilter === 'Hoy') return localDateKey(new Date(m.kickoffUtc)) === todayKey;
     if (statusFilter === 'En vivo') return m.status === 'live';
     if (statusFilter === 'Pronosticados') return predictedIds.has(m.id);
     if (statusFilter === 'Por jugar') return m.status === 'scheduled';
-    if (statusFilter === 'Sin pronosticar') return m.status === 'scheduled' && !predictedIds.has(m.id);
+    if (statusFilter === 'Sin pronosticar') return isMissingPrediction(m);
     if (statusFilter === 'Terminados') return m.status === 'finished';
     return true;
   });
@@ -409,7 +415,7 @@ export function MatchesPage() {
       case 'Hoy': return todayCount;
       case 'En vivo': return liveCount;
       case 'Por jugar': return matches.filter((m) => m.status === 'scheduled').length;
-      case 'Sin pronosticar': return matches.filter((m) => m.status === 'scheduled' && !predictedIds.has(m.id)).length;
+      case 'Sin pronosticar': return matches.filter(isMissingPrediction).length;
       case 'Pronosticados': return matches.filter((m) => predictedIds.has(m.id)).length;
       case 'Terminados': return finishedCount;
       default: return null;

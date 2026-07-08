@@ -22,6 +22,7 @@ import { TeamFlag } from '@/shared/components/ui/team-flag';
 import { useBracketProjection } from '@/shared/hooks/use-bracket-projection';
 import {
   resolveAdvancingSlot,
+  isPredictionBlockedByTbd,
   type SlotContext,
 } from '@/shared/lib/bracket-projection';
 import { R32_LABELS } from '@/shared/data/bracket';
@@ -514,6 +515,18 @@ export function HomePage() {
 
   const apiMatches = matchesResponse?.data ?? [];
   const phase = useTournamentPhase(allMatchesResponse?.data ?? []);
+  // Proyección del cuadro para saber qué cruces de eliminación ya se pueden
+  // pronosticar aunque la DB los tenga como TBD — mismo criterio que el detalle
+  // de partido. Reusa queries cacheados, no agrega red.
+  const projection = useBracketProjection();
+  const matchByNum = useMemo(
+    () => new Map((allMatchesResponse?.data ?? []).map((m) => [m.matchNumber, m])),
+    [allMatchesResponse],
+  );
+  const slotCtx = useMemo<SlotContext>(
+    () => ({ matchByNum, teamMap, projection }),
+    [matchByNum, teamMap, projection],
+  );
   const liveMatches = apiMatches.filter((m) => m.status === 'live');
   // First match is used for the countdown; live-only matches excluded from
   // upcoming so they don't appear in "Próximos partidos" while already live.
@@ -538,9 +551,16 @@ export function HomePage() {
   }));
 
   const predictedIds = new Set((myPredictionsData?.data ?? []).map((p) => p.matchId));
-  const pendingCount = apiMatches.filter(
-    (m) => m.status !== 'finished' && !predictedIds.has(m.id)
-  ).length;
+  // Los cruces de eliminación cuyos equipos siguen sin definir (TBD) no se pueden
+  // pronosticar, así que no cuentan como "pendientes" — si no, el cartel nunca se
+  // va aunque el usuario ya pronosticó todo lo pronosticable.
+  const pendingMatches = apiMatches.filter(
+    (m) =>
+      m.status !== 'finished' &&
+      !predictedIds.has(m.id) &&
+      !isPredictionBlockedByTbd(m, slotCtx)
+  );
+  const pendingCount = pendingMatches.length;
 
   const hasLeagues = apiLeagues.length > 0;
   // Fantasy CTA: hide once the user has at least the minimum (squad

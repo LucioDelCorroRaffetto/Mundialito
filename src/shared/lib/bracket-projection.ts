@@ -150,3 +150,31 @@ function resolveOutcome(
   const advancing = which === 'winner' ? homeWon : !homeWon;
   return advancing ? home : away;
 }
+
+/**
+ * ¿El pronóstico de este partido está bloqueado porque sus equipos todavía no
+ * están definidos? Un cruce de eliminación SÍ se puede pronosticar aunque la DB
+ * siga mostrando el placeholder TBD, siempre que la proyección del cuadro ya lo
+ * haya confirmado (grupo resuelto) o el cruce anterior ya tenga ganador. Devuelve
+ * true solo cuando ninguna de esas vías resolvió alguno de los dos lados — es
+ * decir, exactamente cuando el detalle de partido muestra "Pronóstico no
+ * disponible aún".
+ *
+ * Fuente única compartida por el detalle de partido (que bloquea el formulario)
+ * y los contadores de "pronósticos sin hacer" de home y la lista de Partidos,
+ * para que ninguno cuente como pendiente un partido que no se puede pronosticar.
+ */
+export function isPredictionBlockedByTbd(match: Match, ctx: SlotContext): boolean {
+  const homeTeam = ctx.teamMap?.get(match.homeTeamId);
+  const awayTeam = ctx.teamMap?.get(match.awayTeamId);
+  const homeOfficialTbd = !homeTeam || homeTeam.code === 'TBD' || homeTeam.code === '?';
+  const awayOfficialTbd = !awayTeam || awayTeam.code === 'TBD' || awayTeam.code === '?';
+  const homeProjection = homeOfficialTbd ? resolveBracketSlot(match.matchNumber, 'home', ctx.projection) : null;
+  const awayProjection = awayOfficialTbd ? resolveBracketSlot(match.matchNumber, 'away', ctx.projection) : null;
+  const homeKnockout = homeOfficialTbd && !homeProjection ? resolveAdvancingSlot(match.matchNumber, 'home', ctx) : null;
+  const awayKnockout = awayOfficialTbd && !awayProjection ? resolveAdvancingSlot(match.matchNumber, 'away', ctx) : null;
+  return (
+    (homeOfficialTbd && !homeProjection?.confirmed && !homeKnockout) ||
+    (awayOfficialTbd && !awayProjection?.confirmed && !awayKnockout)
+  );
+}
