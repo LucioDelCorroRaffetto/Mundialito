@@ -21,3 +21,8 @@ db-dump/
 packages/api/db-dump/
 packages/api/local*.db
 packages/api/*.db
+
+# Artefacto local de drizzle-kit (out de drizzle.config.ts). El proyecto migra
+# por scripts (src/scripts/migrate*.ts) + el toolkit de MIGRATION.md, no con
+# migraciones generadas, así que esta carpeta no se versiona.
+packages/api/migrations/
