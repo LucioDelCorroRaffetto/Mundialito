@@ -48,8 +48,12 @@ async function main() {
   console.log(`  Campeón:            ${await teamLabel(outcome.championTeamId)}`);
   console.log(`  Finalista:          ${await teamLabel(outcome.runnerUpTeamId)}`);
   console.log(`  Tercer puesto:      ${await teamLabel(outcome.thirdPlaceTeamId)}`);
-  console.log(`  Ceniciento:         ${await teamLabel(outcome.revelationTeamId)}`);
-  console.log(`  Decepción:          ${await teamLabel(outcome.surpriseEliminatedTeamId)}`);
+  console.log(
+    `  Sorpresas:          ${(await Promise.all(outcome.revelationTeamIds.map(teamLabel))).join(', ') || '—'}`,
+  );
+  console.log(
+    `  Decepciones:        ${(await Promise.all(outcome.surpriseEliminatedTeamIds.map(teamLabel))).join(', ') || '—'}`,
+  );
   console.log(
     `  Valla menos vencida: ${(await Promise.all(outcome.bestDefenseTeamIds.map(teamLabel))).join(', ') || '—'}`,
   );

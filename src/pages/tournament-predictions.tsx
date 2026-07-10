@@ -800,7 +800,7 @@ export function TournamentPredictionsPage() {
         />
         <PickCard
           title="Ceniciento del torneo"
-          subtitle="El equipo modesto (bajo en el ranking) que más superó lo esperado"
+          subtitle="Una selección chica que superó por mucho lo esperado (2+ rondas de más). Puede haber varias — acertás con nombrar cualquiera"
           points={10}
           selectedTeamId={picks.revelationTeamId}
           onSelect={setField('revelationTeamId')}
@@ -811,7 +811,7 @@ export function TournamentPredictionsPage() {
         />
         <PickCard
           title="Decepción del torneo"
-          subtitle="El favorito que más lejos quedó de lo que se esperaba de él"
+          subtitle="Una selección con historia que quedó muy por debajo de lo esperado (2+ rondas de menos). Puede haber varias — acertás con nombrar cualquiera"
           points={10}
           selectedTeamId={picks.surpriseEliminatedTeamId}
           onSelect={setField('surpriseEliminatedTeamId')}

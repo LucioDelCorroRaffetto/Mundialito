@@ -19,8 +19,8 @@ import { matches, teams, playerMatchStats, tournamentPredictions } from '../db/s
 import { initialEloFor } from '../lib/elo.js';
 import {
   depthReachedFrom,
-  pickRevelation,
-  pickSurpriseEliminated,
+  pickRevelations,
+  pickDisappointments,
   scoreTournamentPrediction,
   DEPTH,
   type Round,
@@ -132,8 +132,8 @@ export async function resolveTournamentOutcome(): Promise<TournamentOutcome | nu
       depthReached: depthReachedFrom(rounds, t.id === championTeamId),
     });
   }
-  const revelationTeamId = pickRevelation(runs);
-  const surpriseEliminatedTeamId = pickSurpriseEliminated(runs);
+  const revelationTeamIds = pickRevelations(runs);
+  const surpriseEliminatedTeamIds = pickDisappointments(runs);
 
   // ── Valla menos vencida: menor promedio de goles recibidos, mínimo octavos ──
   const depthById = new Map(runs.map((r) => [r.teamId, r.depthReached]));
@@ -172,8 +172,8 @@ export async function resolveTournamentOutcome(): Promise<TournamentOutcome | nu
     runnerUpTeamId,
     thirdPlaceTeamId,
     topScorerPlayerIds,
-    revelationTeamId,
-    surpriseEliminatedTeamId,
+    revelationTeamIds,
+    surpriseEliminatedTeamIds,
     bestDefenseTeamIds,
   };
 }

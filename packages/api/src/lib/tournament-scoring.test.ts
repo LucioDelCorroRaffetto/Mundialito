@@ -4,8 +4,8 @@ import {
   DEPTH,
   depthReachedFrom,
   expectedDepthFromEloRank,
-  pickRevelation,
-  pickSurpriseEliminated,
+  pickRevelations,
+  pickDisappointments,
   scoreTournamentPrediction,
   type Round,
   type TeamRun,
@@ -28,8 +28,8 @@ const outcome: TournamentOutcome = {
   runnerUpTeamId: 2,
   thirdPlaceTeamId: 3,
   topScorerPlayerIds: [10, 11], // empate al tope
-  revelationTeamId: 7,
-  surpriseEliminatedTeamId: 8,
+  revelationTeamIds: [7, 9], // varias sorpresas
+  surpriseEliminatedTeamIds: [8, 6], // varias decepciones
   bestDefenseTeamIds: [4, 5], // empate de promedio
 };
 
@@ -66,6 +66,15 @@ describe('scoreTournamentPrediction', () => {
     expect(scoreTournamentPrediction({ ...emptyPick, bestDefenseTeamId: 4 }, outcome)).toBe(8);
     expect(scoreTournamentPrediction({ ...emptyPick, bestDefenseTeamId: 5 }, outcome)).toBe(8);
     expect(scoreTournamentPrediction({ ...emptyPick, bestDefenseTeamId: 1 }, outcome)).toBe(0);
+  });
+
+  it('sorpresa y decepción: acertar cualquiera de la lista cuenta', () => {
+    expect(scoreTournamentPrediction({ ...emptyPick, revelationTeamId: 7 }, outcome)).toBe(10);
+    expect(scoreTournamentPrediction({ ...emptyPick, revelationTeamId: 9 }, outcome)).toBe(10);
+    expect(scoreTournamentPrediction({ ...emptyPick, revelationTeamId: 99 }, outcome)).toBe(0);
+    expect(scoreTournamentPrediction({ ...emptyPick, surpriseEliminatedTeamId: 8 }, outcome)).toBe(10);
+    expect(scoreTournamentPrediction({ ...emptyPick, surpriseEliminatedTeamId: 6 }, outcome)).toBe(10);
+    expect(scoreTournamentPrediction({ ...emptyPick, surpriseEliminatedTeamId: 99 }, outcome)).toBe(0);
   });
 
   it('acierto perfecto suma todas las categorías', () => {
@@ -112,7 +121,7 @@ describe('expectedDepthFromEloRank', () => {
   });
 });
 
-describe('pickRevelation / pickSurpriseEliminated', () => {
+describe('pickRevelations / pickDisappointments', () => {
   // El rank de Elo (y por ende la expectativa) se calcula entre TODOS los
   // equipos, así que los tests usan un cuadro realista de 48. Con
   // elo = 2200 − 10·id, el rank coincide con el id (id 1 = más fuerte).
@@ -129,40 +138,69 @@ describe('pickRevelation / pickSurpriseEliminated', () => {
     t.depthReached = depthReached;
   };
 
-  it('decepción: el favorito que más quedó por debajo (Argentina afuera en grupos)', () => {
+  it('decepción: el favorito que quedó muy por debajo (Argentina afuera en grupos)', () => {
     const teams = onPar();
     set(teams, 2, DEPTH.group); // esperado final(5) → grupos(0): brecha −5
-    expect(pickSurpriseEliminated(teams)).toBe(2);
+    expect(pickDisappointments(teams)).toEqual([2]);
   });
 
-  it('ceniciento: el modesto que más superó su expectativa', () => {
+  it('decepción múltiple: entran todos los que subrinden por ≥2 rondas, mayor brecha primero', () => {
+    const teams = onPar();
+    set(teams, 3, DEPTH.r16); // esperado semis(4) → octavos(2): −2 (Brasil con Noruega)
+    set(teams, 11, DEPTH.group); // esperado octavos(2) → grupos(0): −2 (Uruguay en grupos)
+    set(teams, 2, DEPTH.group); // esperado final(5) → grupos(0): −5
+    // brecha −5 primero; los dos −2 desempatan por mayor Elo (rank 3 < rank 11)
+    expect(pickDisappointments(teams)).toEqual([2, 3, 11]);
+  });
+
+  it('decepción: subrendir por 1 sola ronda no alcanza', () => {
+    const teams = onPar();
+    set(teams, 5, DEPTH.r16); // esperado cuartos(3) → octavos(2): −1
+    expect(pickDisappointments(teams)).toEqual([]);
+  });
+
+  it('un top-16 (esperado a octavos) afuera en grupos SÍ es decepción', () => {
+    const teams = onPar();
+    set(teams, 11, DEPTH.group); // caso Uruguay: esperado octavos(2) → grupos(0)
+    expect(pickDisappointments(teams)).toEqual([11]);
+  });
+
+  it('sorpresa: el modesto que superó su expectativa por ≥2 rondas', () => {
     const teams = onPar();
     set(teams, 40, DEPTH.qf); // esperado grupos(0) → cuartos(3): +3
-    expect(pickRevelation(teams)).toBe(40);
+    expect(pickRevelations(teams)).toEqual([40]);
   });
 
-  it('un favorito que sobre-rinde no es ceniciento (no es modesto)', () => {
+  it('sorpresa múltiple: entran todos, mayor brecha primero y desempate por menor Elo', () => {
+    const teams = onPar();
+    set(teams, 40, DEPTH.r16); // esperado grupos(0) → octavos(2): +2 (caso Paraguay)
+    set(teams, 25, DEPTH.qf); // esperado R32(1) → cuartos(3): +2 (caso Noruega)
+    set(teams, 45, DEPTH.sf); // esperado grupos(0) → semis(4): +4
+    // +4 primero; los dos +2 desempatan por menor Elo (rank 40 más modesto que 25)
+    expect(pickRevelations(teams)).toEqual([45, 40, 25]);
+  });
+
+  it('sorpresa: pasar 1 sola ronda de más no alcanza', () => {
+    const teams = onPar();
+    set(teams, 30, DEPTH.r16); // esperado R32(1) → octavos(2): +1
+    expect(pickRevelations(teams)).toEqual([]);
+  });
+
+  it('un favorito que sobre-rinde no es sorpresa (no es modesto)', () => {
     const teams = onPar();
     set(teams, 1, DEPTH.champion); // favorito (esperado final) que gana: +1 pero no modesto
-    expect(pickRevelation(teams)).toBeNull();
+    expect(pickRevelations(teams)).toEqual([]);
   });
 
-  it('un modesto que falla no es decepción (no es favorito)', () => {
+  it('un modesto que falla no es decepción (no tiene historia que defraudar)', () => {
     const teams = onPar();
     set(teams, 40, DEPTH.group); // ya esperaba grupos: ni siquiera sub-rinde
-    expect(pickSurpriseEliminated(teams)).toBeNull();
+    expect(pickDisappointments(teams)).toEqual([]);
   });
 
-  it('nadie sobre/sub-rinde → null', () => {
+  it('nadie sobre/sub-rinde → listas vacías', () => {
     const teams = onPar();
-    expect(pickRevelation(teams)).toBeNull();
-    expect(pickSurpriseEliminated(teams)).toBeNull();
-  });
-
-  it('desempate de ceniciento: gana el más modesto (menor Elo) a igual sobre-rendimiento', () => {
-    const teams = onPar();
-    set(teams, 30, DEPTH.qf); // rank30 → esperado R32(1), +2
-    set(teams, 45, DEPTH.r16); // rank45 → esperado grupos(0), +2 — más modesto
-    expect(pickRevelation(teams)).toBe(45);
+    expect(pickRevelations(teams)).toEqual([]);
+    expect(pickDisappointments(teams)).toEqual([]);
   });
 });
