@@ -933,7 +933,10 @@ async function doSync(matchId: number): Promise<SyncStatsResult> {
       const liveUrl = `${FIFA_BASE}/live/football/${FIFA_COMPETITION_ID}/${FIFA_SEASON_ID}/${m.fifaIdStage}/${m.fifaIdMatch}?language=en`;
       const liveRes = await fetch(liveUrl, { headers: { 'User-Agent': 'Mozilla/5.0' } });
       if (liveRes.ok) {
-        const live = (await liveRes.json()) as FifaLiveResponse;
+        // FIFA-live devuelve literalmente `null` (200 OK) cuando el partido
+        // todavía no tiene datos — normalizamos a objeto vacío para que tanto
+        // el backfill como el score sync hagan no-op en vez de explotar.
+        const live = (((await liveRes.json()) ?? {}) as FifaLiveResponse);
 
         // Backfill de los team_id REALES: los cruces nacen con el placeholder
         // TBD, pero el resolver de predicciones de Copa (tournament-resolver)
