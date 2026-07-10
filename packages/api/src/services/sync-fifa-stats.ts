@@ -65,7 +65,7 @@ const FIFA_SEASON_ID = '285023';     // WC 2026 (verified empirically)
  * matched=0 para todos los partidos donde el nombre no era trivialmente
  * el mismo. Codes ISO van primero — son estables y FIFA los publica.
  */
-const FIFA_NAME_TO_CODE: Record<string, string> = {
+export const FIFA_NAME_TO_CODE: Record<string, string> = {
   // Asia
   'korea republic': 'KOR',
   'south korea':    'KOR',
@@ -180,6 +180,10 @@ interface FifaTimelineResponse {
 interface FifaLiveTeam {
   Score?: number | null;
   IdTeam?: string | null;
+  Abbreviation?: string | null;
+  ShortClubName?: string | null;
+  IdCountry?: string | null;
+  TeamName?: Array<{ Locale: string; Description: string }> | null;
 }
 interface FifaLiveResponse {
   MatchStatus?: number;
@@ -319,8 +323,14 @@ async function doSync(matchId: number): Promise<SyncStatsResult> {
     .select({ id: teams.id, name: teams.name, code: teams.code })
     .from(teams);
   const teamIdByCode = new Map(allTeams.map((t) => [t.code.toUpperCase(), t.id] as const));
+  // Placeholders del bracket (TBD/???): jamás son un equipo real — se usan
+  // para detectar cruces sin equipos asignados y para excluirlos del lookup.
+  const placeholderTeamIds = new Set(
+    allTeams.filter((t) => t.code === 'TBD' || t.code === '???').map((t) => t.id),
+  );
   const teamIdByNorm = new Map<string, number>();
   for (const t of allTeams) {
+    if (placeholderTeamIds.has(t.id)) continue;
     teamIdByNorm.set(normName(t.name), t.id);
     teamIdByNorm.set(t.code.toLowerCase(), t.id);
   }
@@ -924,6 +934,40 @@ async function doSync(matchId: number): Promise<SyncStatsResult> {
       const liveRes = await fetch(liveUrl, { headers: { 'User-Agent': 'Mozilla/5.0' } });
       if (liveRes.ok) {
         const live = (await liveRes.json()) as FifaLiveResponse;
+
+        // Backfill de los team_id REALES: los cruces nacen con el placeholder
+        // TBD, pero el resolver de predicciones de Copa (tournament-resolver)
+        // lee matches.home/away_team_id directo — sin esto el campeón y las
+        // profundidades saldrían como TBD al cierre del torneo. FIFA-live trae
+        // los equipos con la orientación oficial (la misma del bracket del
+        // front y del score que escribimos abajo), así que apenas FIFA los
+        // define los persistimos. Nunca pisa un id real ya asignado.
+        const isPlaceholder = (id: number | null) =>
+          id == null || placeholderTeamIds.has(id);
+        if (isPlaceholder(m.homeTeamId) || isPlaceholder(m.awayTeamId)) {
+          const resolveLiveTeamId = (t: FifaLiveTeam | null | undefined): number | undefined => {
+            const names = [t?.TeamName?.[0]?.Description, t?.ShortClubName, t?.Abbreviation, t?.IdCountry];
+            for (const n of names) {
+              if (!n) continue;
+              const id = teamIdByNorm.get(normName(n));
+              if (id != null && !placeholderTeamIds.has(id)) return id;
+            }
+            return undefined;
+          };
+          const realHome = resolveLiveTeamId(live.HomeTeam);
+          const realAway = resolveLiveTeamId(live.AwayTeam);
+          if (realHome != null && realAway != null) {
+            await db
+              .update(matches)
+              .set({ homeTeamId: realHome, awayTeamId: realAway })
+              .where(eq(matches.id, matchId));
+            console.log(
+              `[sync-fifa-stats] match ${matchId}: team_ids backfilleados desde FIFA-live ` +
+              `(home=${realHome}, away=${realAway})`,
+            );
+          }
+        }
+
         const fh = live.HomeTeam?.Score;
         const fa = live.AwayTeam?.Score;
         if (typeof fh === 'number' && typeof fa === 'number') {
