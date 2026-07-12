@@ -102,6 +102,79 @@ export function resolveShootoutScore(
   return { homeScore: home, awayScore: away, shootoutWinnerUnknown, decidedByPenalties };
 }
 
+export interface FdScoreLike {
+  fullTime: { home: number | null; away: number | null };
+  halfTime?: { home: number | null; away: number | null };
+  regularTime?: { home: number | null; away: number | null };
+  extraTime?: { home: number | null; away: number | null };
+  penalties?: { home: number | null; away: number | null };
+  duration?: 'REGULAR' | 'EXTRA_TIME' | 'PENALTY_SHOOTOUT';
+  winner?: 'HOME_TEAM' | 'AWAY_TEAM' | 'DRAW' | null;
+}
+
+/**
+ * Resolves the actual final score from a football-data.org v4 `score` object.
+ *
+ * Semántica v4 (verificada contra el feed real del WC2026, Gotcha #17):
+ *   - `fullTime` es el AGREGADO total, incluyendo prórroga Y PENALES
+ *     (GER–PAR: fullTime 4-5 = regularTime 1-1 + extraTime 0-0 + penalties 3-4).
+ *   - `regularTime` / `extraTime` / `penalties` son PARCIALES por segmento,
+ *     no acumulados (ARG–SUI 3-1 AET: fullTime 3-1, extraTime 2-0).
+ *
+ * El código anterior prefería `extraTime` cuando existía, asumiendo que era el
+ * acumulado tras 120' — así el M100 ARG–SUI (3-1) quedó guardado 2-0 (solo los
+ * goles de la prórroga) y se puntuó contra ese marcador falso.
+ *
+ * Por lo tanto:
+ *   - REGULAR / EXTRA_TIME → `fullTime` (sin penales de por medio, es el total
+ *     real de juego).
+ *   - PENALTY_SHOOTOUT → el score de juego es regularTime + extraTime (fullTime
+ *     incluiría los tiros de la tanda); si faltan los parciales, fullTime menos
+ *     penalties como fallback. Luego el bump +1 al ganador de la tanda para que
+ *     el delta home/away refleje quién avanza (convención de calculatePoints;
+ *     ver resolveShootoutScore).
+ */
+export function resolveFinalScore(
+  score: FdScoreLike,
+): { home: number | null; away: number | null; decidedByPenalties: boolean } {
+  let home: number | null;
+  let away: number | null;
+
+  const wentToShootout = score.duration === 'PENALTY_SHOOTOUT';
+  if (wentToShootout) {
+    const rt = score.regularTime;
+    const et = score.extraTime;
+    if (rt && rt.home != null && rt.away != null) {
+      home = rt.home + (et?.home ?? 0);
+      away = rt.away + (et?.away ?? 0);
+    } else if (
+      score.penalties &&
+      score.penalties.home != null &&
+      score.penalties.away != null &&
+      score.fullTime.home != null &&
+      score.fullTime.away != null
+    ) {
+      home = score.fullTime.home - score.penalties.home;
+      away = score.fullTime.away - score.penalties.away;
+    } else {
+      // Sin parciales ni tanda desglosada no podemos separar los penales del
+      // agregado; fullTime es lo mejor disponible.
+      home = score.fullTime.home;
+      away = score.fullTime.away;
+    }
+  } else {
+    home = score.fullTime.home;
+    away = score.fullTime.away;
+  }
+
+  const decidedByPenalties = wentToShootout && score.winner != null;
+  if (decidedByPenalties) {
+    if (score.winner === 'HOME_TEAM' && home != null) home = home + 1;
+    else if (score.winner === 'AWAY_TEAM' && away != null) away = away + 1;
+  }
+  return { home, away, decidedByPenalties };
+}
+
 /**
  * Inverse of the bump applied by `resolveShootoutScore`: given the stored
  * (possibly bumped) score and the `decidedByPenalties` flag, returns the

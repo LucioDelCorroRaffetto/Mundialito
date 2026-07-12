@@ -7,7 +7,7 @@ import { eq, sql } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import { matches, predictions, teams } from '../db/schema/index.js';
 import { calculatePoints, scoringResult } from '../lib/scoring.js';
-import { isPlaceholderMatch } from '../lib/score-sync.js';
+import { isPlaceholderMatch, resolveFinalScore } from '../lib/score-sync.js';
 import { recomputeAllFantasyPoints } from './fantasy-scoring-service.js';
 import { broadcastMatchUpdate } from '../ws/broadcast.js';
 import { checkAchievements, finalizeFantasyLegends } from './achievement-service.js';
@@ -50,6 +50,7 @@ interface FdMatch {
   score: {
     fullTime: FdScore;
     halfTime: FdScore;
+    regularTime?: FdScore;
     extraTime?: FdScore;
     penalties?: FdScore;
     duration?: FdDuration;
@@ -126,39 +127,6 @@ interface OurMatch {
   homeTeamCode: string;
   awayTeamCode: string;
   scoreLocked: boolean;
-}
-
-/**
- * Resolves the actual final score, including penalty shootouts and extra time.
- * Football-data.org reports `fullTime` as the 90' result; `extraTime` adds
- * +30' goals; `penalties` only carries the shootout. To keep `calculatePoints`
- * unchanged (which compares numeric scores), if the match was decided by
- * penalties we bump the winner by +1 so the home/away delta reflects the
- * actual winner instead of leaving a tied score in the DB.
- *
- * Without this, every knockout decided by shootout would be stored as a draw
- * and:
- *  - users who predicted a draw would get +5 (wrong, the predicted result
- *    wasn't really a draw),
- *  - users who predicted the actual winner would get 0 (worse: they had it
- *    right),
- *  - the bracket / champion picks would silently award everyone who
- *    predicted "draw" with `prophet` if it happened in the final.
- */
-function resolveFinalScore(score: FdMatch['score']): { home: number | null; away: number | null; decidedByPenalties: boolean } {
-  // Prefer extra-time score when present (knockouts that went to ET but
-  // didn't reach penalties). Otherwise the canonical fullTime.
-  const base = score.extraTime && (score.extraTime.home != null || score.extraTime.away != null)
-    ? score.extraTime
-    : score.fullTime;
-  let home = base.home;
-  let away = base.away;
-  const decidedByPenalties = score.duration === 'PENALTY_SHOOTOUT' && score.winner != null;
-  if (decidedByPenalties) {
-    if (score.winner === 'HOME_TEAM' && home != null) home = home + 1;
-    else if (score.winner === 'AWAY_TEAM' && away != null) away = away + 1;
-  }
-  return { home, away, decidedByPenalties };
 }
 
 /**

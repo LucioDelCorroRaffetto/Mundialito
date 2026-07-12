@@ -4,6 +4,7 @@ import {
   isPlaceholderTeamCode,
   normalizeEspnCode,
   resolveCompetitors,
+  resolveFinalScore,
   resolveShootoutScore,
   shouldRescorePredictions,
 } from './score-sync';
@@ -191,5 +192,61 @@ describe('isPlaceholderTeamCode / isPlaceholderMatch', () => {
 
   it('does not flag a match with two real teams', () => {
     expect(isPlaceholderMatch({ homeTeamCode: 'ARG', awayTeamCode: 'BRA' })).toBe(false);
+  });
+});
+
+// Gotcha #17 — semántica del score v4 de football-data: `fullTime` es el
+// agregado total (incluye prórroga y penales); `regularTime`/`extraTime`/
+// `penalties` son parciales por segmento. La versión anterior prefería
+// `extraTime` como si fuera el acumulado tras 120', y el M100 ARG–SUI (3-1
+// AET) quedó guardado 2-0 — solo los goles de la prórroga — puntuando mal
+// todos los pronósticos. Los casos de abajo son payloads REALES del WC2026.
+describe('resolveFinalScore (football-data v4)', () => {
+  it('90 minutos: usa fullTime', () => {
+    expect(resolveFinalScore({
+      duration: 'REGULAR',
+      winner: 'HOME_TEAM',
+      fullTime: { home: 2, away: 0 },
+    })).toEqual({ home: 2, away: 0, decidedByPenalties: false });
+  });
+
+  it('prórroga sin penales: fullTime ya es el total de juego (M100 ARG–SUI 3-1)', () => {
+    expect(resolveFinalScore({
+      duration: 'EXTRA_TIME',
+      winner: 'HOME_TEAM',
+      fullTime: { home: 3, away: 1 },
+      regularTime: { home: 1, away: 1 },
+      extraTime: { home: 2, away: 0 }, // parcial de la prórroga — NO el total
+    })).toEqual({ home: 3, away: 1, decidedByPenalties: false });
+  });
+
+  it('penales: regularTime + extraTime, con bump +1 al ganador (GER–PAR 1-1, 3-4 pen)', () => {
+    expect(resolveFinalScore({
+      duration: 'PENALTY_SHOOTOUT',
+      winner: 'AWAY_TEAM',
+      fullTime: { home: 4, away: 5 }, // agregado CON penales — no sirve directo
+      regularTime: { home: 1, away: 1 },
+      extraTime: { home: 0, away: 0 },
+      penalties: { home: 3, away: 4 },
+    })).toEqual({ home: 1, away: 2, decidedByPenalties: true });
+  });
+
+  it('penales sin regularTime: fullTime menos penalties como fallback', () => {
+    expect(resolveFinalScore({
+      duration: 'PENALTY_SHOOTOUT',
+      winner: 'HOME_TEAM',
+      fullTime: { home: 4, away: 3 },
+      penalties: { home: 4, away: 3 },
+    })).toEqual({ home: 1, away: 0, decidedByPenalties: true });
+  });
+
+  it('en vivo sin ganador todavía: no aplica bump ni marca penales', () => {
+    expect(resolveFinalScore({
+      duration: 'PENALTY_SHOOTOUT',
+      winner: null,
+      fullTime: { home: 1, away: 1 },
+      regularTime: { home: 1, away: 1 },
+      extraTime: { home: 0, away: 0 },
+    })).toEqual({ home: 1, away: 1, decidedByPenalties: false });
   });
 });
