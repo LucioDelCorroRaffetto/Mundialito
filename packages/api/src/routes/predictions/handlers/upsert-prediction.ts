@@ -2,7 +2,7 @@ import { Request, Response } from 'express';
 import { z } from 'zod';
 import { and, eq, sql } from 'drizzle-orm';
 import { db } from '../../../db/index.js';
-import { predictions, matches, leagueMembers } from '../../../db/schema/index.js';
+import { predictions, matches, leagueMembers, leagues } from '../../../db/schema/index.js';
 import { AppError, NotFoundError } from '../../../lib/errors.js';
 import { isLocked } from '../../../lib/match-helpers.js';
 import { checkAchievements } from '../../../services/achievement-service.js';
@@ -46,10 +46,13 @@ export async function upsertPredictionHandler(req: Request, res: Response) {
   //      both the first-ever prediction (propagation) and bulk-update intent
   //      (the user wants the same score across all their leagues).
   const memberships = await db
-    .select({ leagueId: leagueMembers.leagueId })
+    .select({ leagueId: leagueMembers.leagueId, isPersonal: leagues.isPersonal })
     .from(leagueMembers)
+    .innerJoin(leagues, eq(leagues.id, leagueMembers.leagueId))
     .where(eq(leagueMembers.userId, userId));
   let userLeagueIds = memberships.map((m) => m.leagueId);
+  let personalLeagueId =
+    memberships.find((m) => m.isPersonal)?.leagueId ?? null;
 
   // Self-heal: if the user somehow ended up with zero memberships (legacy
   // account from before personal leagues, or a backfill miss), provision
@@ -58,6 +61,7 @@ export async function upsertPredictionHandler(req: Request, res: Response) {
   if (userLeagueIds.length === 0) {
     const personalId = await ensurePersonalLeague(userId);
     userLeagueIds = [personalId];
+    personalLeagueId = personalId;
   }
 
   let targetLeagueIds: number[];
@@ -76,7 +80,18 @@ export async function upsertPredictionHandler(req: Request, res: Response) {
       .where(and(eq(predictions.userId, userId), eq(predictions.matchId, matchId)));
     const existingSet = new Set(existing.map((e) => e.leagueId));
     const missingLeagues = userLeagueIds.filter((id) => id !== leagueId && !existingSet.has(id));
-    targetLeagueIds = [leagueId, ...missingLeagues];
+    // La liga personal es el espejo canónico de "qué pronostiqué" — la lee el
+    // historial del perfil (my-prediction-history.ts) — así que TODA edición
+    // la actualiza también, aunque su predicción ya exista (last-write-wins).
+    // Sin esto, editar desde una liga dejaba el espejo congelado en el primer
+    // pronóstico y el perfil mostraba/puntuaba un marcador viejo.
+    targetLeagueIds = [
+      ...new Set([
+        leagueId,
+        ...missingLeagues,
+        ...(personalLeagueId != null ? [personalLeagueId] : []),
+      ]),
+    ];
   } else {
     targetLeagueIds = userLeagueIds;
   }
