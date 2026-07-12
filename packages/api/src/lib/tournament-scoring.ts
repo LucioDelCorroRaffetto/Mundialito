@@ -19,13 +19,15 @@
  *
  * Ceniciento y Decepción no tenían criterio objetivo: acá se definen contra la
  * "profundidad esperada" derivada del Elo pre-torneo (lib/elo.ts) vs. la
- * profundidad realmente alcanzada. Son CATEGORÍAS MÚLTIPLES: en un torneo
- * puede haber varias sorpresas (Paraguay eliminando a Alemania en R32, Noruega
- * echando a Brasil y llegando a cuartos) y varias decepciones (Uruguay afuera
- * en grupos con Cabo Verde y Arabia Saudita, Brasil cayendo en octavos), y el
- * usuario acierta con nombrar cualquiera. El umbral es una brecha de AL MENOS
- * DOS RONDAS respecto de lo esperado, para que "pasar una ronda de más/menos"
- * no diluya la categoría.
+ * profundidad realmente alcanzada, más el peso del RIVAL en las derrotas. Son
+ * CATEGORÍAS MÚLTIPLES: en un torneo puede haber varias sorpresas (Paraguay
+ * eliminando a Alemania, Cabo Verde debutante pasando de grupos, Noruega en
+ * cuartos echando a Brasil) y varias decepciones (Uruguay afuera en grupos,
+ * Brasil en octavos, Alemania eliminada por Paraguay), y el usuario acierta
+ * con nombrar cualquiera. Los umbrales son deliberadamente asimétricos: a una
+ * chica le alcanza con pasar una ronda de más (sorpresa fácil de dar), a una
+ * grande le exigimos 2 rondas de menos O un batacazo en contra (decepcionar
+ * requiere fallar de verdad, no perder ajustado con un rival digno).
  */
 
 export const TOURNAMENT_POINTS = {
@@ -101,6 +103,13 @@ export interface TeamRun {
   elo: number;
   /** Profundidad alcanzada 0–6 (ver DEPTH). */
   depthReached: number;
+  /**
+   * Mayor "batacazo recibido": máximo (elo propio − elo del rival) entre las
+   * DERROTAS del torneo. Positivo grande ⇒ perdió contra alguien muy inferior
+   * (Alemania 1928 cayendo con Paraguay 1630 ⇒ ~298). Omitido/negativo ⇒ solo
+   * perdió contra pares o superiores.
+   */
+  worstLossEloDiff?: number;
 }
 
 /** Adjunta a cada equipo su profundidad esperada según el rank de Elo. */
@@ -111,22 +120,25 @@ function withExpected(teams: TeamRun[]): Array<TeamRun & { expected: number }> {
 }
 
 /**
- * Brecha mínima (en rondas) para entrar a Sorpresa o Decepción. Con 1 sola
- * ronda de diferencia entraría media tabla; con 2 la categoría queda para los
- * casos que cualquier hincha nombraría (Paraguay de grupos a octavos, Uruguay
- * de octavos a grupos).
+ * Diferencia de Elo que consideramos "batacazo": ~250 puntos equivalen a un
+ * ~80% de probabilidad de victoria del favorito (expectedScore de lib/elo.ts).
+ * Perder un cruce así es señal de decepción aunque la brecha de rondas sea
+ * chica: distingue "Alemania eliminada por Paraguay" (batacazo, decepciona) de
+ * "Portugal eliminada por España" (rival superior, no decepciona).
  */
-export const SURPRISE_MIN_GAP = 2;
+export const ELO_UPSET_DIFF = 250;
 
 /**
  * Sorpresas/Cenicientos: TODAS las selecciones chicas (esperadas a no pasar
- * de octavos según el Elo) que superaron su expectativa por al menos
- * SURPRISE_MIN_GAP rondas. Orden: mayor brecha → más modesto (menor Elo) →
- * menor teamId, por reproducibilidad. Vacío si nadie califica.
+ * de octavos según el Elo) que superaron su expectativa. Para una chica,
+ * pasar UNA ronda de más ya es sorpresa — Cabo Verde debutante, esperada a
+ * grupos, clasificando segunda a dieciseisavos tras hacerle partido a España
+ * y Uruguay, califica con brecha +1. Orden: mayor brecha → más modesto
+ * (menor Elo) → menor teamId, por reproducibilidad. Vacío si nadie califica.
  */
 export function pickRevelations(teams: TeamRun[]): number[] {
   return withExpected(teams)
-    .filter((t) => t.expected <= DEPTH.r16 && t.depthReached - t.expected >= SURPRISE_MIN_GAP)
+    .filter((t) => t.expected <= DEPTH.r16 && t.depthReached - t.expected >= 1)
     .sort(
       (a, b) =>
         b.depthReached - b.expected - (a.depthReached - a.expected) ||
@@ -138,14 +150,25 @@ export function pickRevelations(teams: TeamRun[]): number[] {
 
 /**
  * Decepciones: TODAS las selecciones con historia (esperadas al menos a
- * octavos, top 16 del Elo) que quedaron al menos SURPRISE_MIN_GAP rondas por
- * debajo de su expectativa. Uruguay (esperado a octavos) afuera en grupos
- * califica; un top-4 cayendo en octavos también. Orden: mayor brecha → más
- * favorito (mayor Elo) → menor teamId. Vacío si nadie califica.
+ * octavos, top 16 del Elo) que defraudaron, por cualquiera de dos vías:
+ *   1. Brecha: quedaron 2+ rondas por debajo de lo esperado (Uruguay esperado
+ *      a octavos y afuera en grupos; Brasil esperado a semis y afuera en
+ *      octavos). Caer UNA sola ronda antes no alcanza por sí solo — un cruce
+ *      ajustado contra un rival digno no es decepción.
+ *   2. Batacazo: quedaron al menos 1 ronda por debajo Y perdieron contra un
+ *      rival ≥ ELO_UPSET_DIFF inferior (Alemania afuera en dieciseisavos con
+ *      Paraguay). Portugal cayendo en octavos con España NO entra: la brecha
+ *      es −1 pero perdió contra una superior.
+ * Orden: mayor brecha → más favorito (mayor Elo) → menor teamId.
  */
 export function pickDisappointments(teams: TeamRun[]): number[] {
   return withExpected(teams)
-    .filter((t) => t.expected >= DEPTH.r16 && t.expected - t.depthReached >= SURPRISE_MIN_GAP)
+    .filter((t) => {
+      if (t.expected < DEPTH.r16) return false;
+      const shortfall = t.expected - t.depthReached;
+      if (shortfall >= 2) return true;
+      return shortfall >= 1 && (t.worstLossEloDiff ?? -Infinity) >= ELO_UPSET_DIFF;
+    })
     .sort(
       (a, b) =>
         b.expected - b.depthReached - (a.expected - a.depthReached) ||

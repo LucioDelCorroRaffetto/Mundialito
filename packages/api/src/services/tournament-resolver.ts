@@ -120,16 +120,32 @@ export async function resolveTournamentOutcome(): Promise<TournamentOutcome | nu
   }
 
   const teamRows = await db.select({ id: teams.id, code: teams.code }).from(teams);
+  const eloById = new Map(teamRows.map((t) => [t.id, initialEloFor(t.code)]));
 
-  // ── Ceniciento / Decepción: brecha entre profundidad esperada (Elo) y real ──
+  // ── Batacazos en contra: peor derrota (elo propio − elo del rival) ──────────
+  // El score guardado ya trae el +1 del ganador por penales, así que un cruce
+  // perdido en la tanda también cuenta como derrota — para el hincha, quedar
+  // eliminado por una selección muy inferior es batacazo igual.
+  const worstLossById = new Map<number, number>();
+  for (const m of finished) {
+    if (m.homeTeamId == null || m.awayTeamId == null) continue;
+    if (m.homeScore == null || m.awayScore == null || m.homeScore === m.awayScore) continue;
+    const loserId = m.homeScore > m.awayScore ? m.awayTeamId : m.homeTeamId;
+    const winnerId = m.homeScore > m.awayScore ? m.homeTeamId : m.awayTeamId;
+    const diff = (eloById.get(loserId) ?? 1500) - (eloById.get(winnerId) ?? 1500);
+    if (diff > (worstLossById.get(loserId) ?? -Infinity)) worstLossById.set(loserId, diff);
+  }
+
+  // ── Ceniciento / Decepción: brecha esperado-vs-real + batacazos ─────────────
   const runs: TeamRun[] = [];
   for (const t of teamRows) {
     const rounds = roundsByTeam.get(t.id);
     if (!rounds) continue; // equipo que no jugó (placeholder TBD, etc.)
     runs.push({
       teamId: t.id,
-      elo: initialEloFor(t.code),
+      elo: eloById.get(t.id) ?? 1500,
       depthReached: depthReachedFrom(rounds, t.id === championTeamId),
+      worstLossEloDiff: worstLossById.get(t.id),
     });
   }
   const revelationTeamIds = pickRevelations(runs);

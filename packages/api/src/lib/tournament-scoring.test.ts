@@ -153,9 +153,26 @@ describe('pickRevelations / pickDisappointments', () => {
     expect(pickDisappointments(teams)).toEqual([2, 3, 11]);
   });
 
-  it('decepción: subrendir por 1 sola ronda no alcanza', () => {
+  it('decepción: subrendir por 1 ronda perdiendo con un rival superior no alcanza (caso Portugal)', () => {
     const teams = onPar();
-    set(teams, 5, DEPTH.r16); // esperado cuartos(3) → octavos(2): −1
+    const t = teams.find((x) => x.teamId === 5)!;
+    t.depthReached = DEPTH.r16; // esperado cuartos(3) → octavos(2): −1
+    t.worstLossEloDiff = -50; // perdió contra una superior (España): no es batacazo
+    expect(pickDisappointments(teams)).toEqual([]);
+  });
+
+  it('decepción por batacazo: subrendir 1 ronda perdiendo con una muy inferior SÍ entra (caso Alemania)', () => {
+    const teams = onPar();
+    const t = teams.find((x) => x.teamId === 9)!;
+    t.depthReached = DEPTH.r32; // esperado octavos(2) → R32(1): −1
+    t.worstLossEloDiff = 298; // perdió con Paraguay, ~300 pts de Elo abajo
+    expect(pickDisappointments(teams)).toEqual([9]);
+  });
+
+  it('batacazo sin subrendir no es decepción (perdió un partido suelto pero llegó a lo esperado)', () => {
+    const teams = onPar();
+    const t = teams.find((x) => x.teamId === 9)!;
+    t.worstLossEloDiff = 300; // batacazo en grupos, pero depthReached = esperado
     expect(pickDisappointments(teams)).toEqual([]);
   });
 
@@ -180,10 +197,10 @@ describe('pickRevelations / pickDisappointments', () => {
     expect(pickRevelations(teams)).toEqual([45, 40, 25]);
   });
 
-  it('sorpresa: pasar 1 sola ronda de más no alcanza', () => {
+  it('sorpresa: a una chica le alcanza con pasar 1 ronda de más (caso Cabo Verde)', () => {
     const teams = onPar();
-    set(teams, 30, DEPTH.r16); // esperado R32(1) → octavos(2): +1
-    expect(pickRevelations(teams)).toEqual([]);
+    set(teams, 40, DEPTH.r32); // debutante esperada a grupos(0) → R32(1): +1
+    expect(pickRevelations(teams)).toEqual([40]);
   });
 
   it('un favorito que sobre-rinde no es sorpresa (no es modesto)', () => {
