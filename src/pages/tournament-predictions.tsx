@@ -17,6 +17,8 @@ import {
   useTournamentPrediction,
   useUpsertTournamentPrediction,
   useMyTournamentPredictions,
+  useTournamentOutcome,
+  type OutcomeCandidate,
 } from '@/shared/hooks/use-tournament-predictions';
 import { useMyLeagues } from '@/shared/hooks/use-leagues';
 import { useTournamentForecast } from '@/shared/hooks/use-forecasts';
@@ -417,6 +419,93 @@ function ForecastTopCandidates() {
   );
 }
 
+/** Fila de candidata a sorpresa/decepción con su veredicto y porqué. */
+function OutcomeCandidateRow({ c }: { c: OutcomeCandidate }) {
+  return (
+    <div className="flex items-start gap-2">
+      <span
+        className={cn(
+          'flex-shrink-0 mt-0.5 text-xs font-bold',
+          c.included ? 'text-green-400' : 'text-muted',
+        )}
+        aria-label={c.included ? 'Entra' : 'No entra'}
+      >
+        {c.included ? '✓' : '✗'}
+      </span>
+      <div className="min-w-0">
+        <p className={cn('text-sm-s font-semibold', c.included ? 'text-text' : 'text-muted')}>
+          {c.team?.name ?? '—'}
+        </p>
+        <p className="text-xs-s text-muted leading-snug">{c.reason}</p>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Resultados del torneo con la explicación de cada decisión. Aparece recién
+ * cuando la final terminó y el back resolvió las categorías — hasta entonces
+ * el endpoint devuelve resolved:false y esto no renderiza nada.
+ */
+function TournamentOutcomeCard() {
+  const { data } = useTournamentOutcome();
+  if (!data?.resolved) return null;
+
+  const podium: Array<[string, string]> = [
+    ['Campeón', data.champion?.name ?? '—'],
+    ['Finalista', data.runnerUp?.name ?? '—'],
+    ['Tercer puesto', data.thirdPlace?.name ?? '—'],
+    ['Goleador', (data.topScorers ?? []).map((p) => p.name).join(', ') || '—'],
+    ['Valla menos vencida', (data.bestDefense ?? []).map((t) => t?.name).join(', ') || '—'],
+  ];
+
+  return (
+    <div className="mx-4 mb-4 p-4 rounded-lg bg-elevated border border-accent-border">
+      <div className="flex items-center gap-2 mb-3">
+        <Trophy size={16} className="text-accent" />
+        <p className="text-sm-s font-semibold text-text">Resultados del torneo</p>
+      </div>
+
+      <div className="flex flex-col gap-1.5 mb-4">
+        {podium.map(([label, value]) => (
+          <div key={label} className="flex items-center justify-between gap-3">
+            <span className="text-sm-s text-muted">{label}</span>
+            <span className="text-sm-s font-bold text-text text-right">{value}</span>
+          </div>
+        ))}
+      </div>
+
+      {(data.surprises?.length ?? 0) > 0 && (
+        <div className="mb-4">
+          <p className="text-sm-s font-semibold text-text mb-2">Cenicientos — quiénes y por qué</p>
+          <div className="flex flex-col gap-2.5">
+            {data.surprises!.map((c) => (
+              <OutcomeCandidateRow key={c.team?.id ?? c.reason} c={c} />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {(data.disappointments?.length ?? 0) > 0 && (
+        <div>
+          <p className="text-sm-s font-semibold text-text mb-2">Decepciones — quiénes y por qué</p>
+          <div className="flex flex-col gap-2.5">
+            {data.disappointments!.map((c) => (
+              <OutcomeCandidateRow key={c.team?.id ?? c.reason} c={c} />
+            ))}
+          </div>
+        </div>
+      )}
+
+      <p className="text-xs-s text-muted mt-3 leading-snug">
+        Acertás la categoría si tu elegida es <span className="text-text font-semibold">cualquiera</span>{' '}
+        de las marcadas con ✓. Las marcadas con ✗ estuvieron cerca pero no calificaron — el porqué está
+        en cada una.
+      </p>
+    </div>
+  );
+}
+
 export function TournamentPredictionsPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -733,6 +822,9 @@ export function TournamentPredictionsPage() {
       {/* Modelo Oloráculo — top 5 candidatos al campeonato según Monte Carlo */}
       <ForecastTopCandidates />
 
+      {/* Resultados resueltos + explicación de cada sí/no (post-final) */}
+      <TournamentOutcomeCard />
+
       {/* Lock / urgency banner */}
       {isTournamentLocked ? (
         <div className="mx-4 mb-4 flex items-center gap-2 px-3 py-2.5 rounded-lg bg-red-500/15 border border-red-500/30">
@@ -800,7 +892,7 @@ export function TournamentPredictionsPage() {
         />
         <PickCard
           title="Ceniciento del torneo"
-          subtitle="Una selección chica que superó lo esperado para ella (pasó de ronda cuando no debía). Puede haber varias — acertás con nombrar cualquiera"
+          subtitle="Una selección chica que superó lo esperado dando pelea: 2+ rondas de más, o 1 ronda habiéndole sacado puntos a una grande. Puede haber varias — acertás con nombrar cualquiera"
           points={10}
           selectedTeamId={picks.revelationTeamId}
           onSelect={setField('revelationTeamId')}
@@ -867,11 +959,17 @@ export function TournamentPredictionsPage() {
         <p className="text-xs-s text-muted mt-3 leading-relaxed">
           <span className="text-text font-semibold">Ceniciento y decepción</span> se deciden comparando
           la <span className="text-text font-semibold">ronda esperada</span> de cada equipo (según su
-          fuerza previa al torneo) con la <span className="text-text font-semibold">ronda que realmente
-          alcanzó</span>. El <span className="text-text font-semibold">ceniciento</span> es el equipo
-          modesto (no candidato) que más se pasó de lo esperado; la{' '}
-          <span className="text-text font-semibold">decepción</span> es el favorito que más lejos quedó
-          de lo suyo (ej.: un candidato eliminado en fase de grupos).
+          fuerza e historia previas al torneo) con la <span className="text-text font-semibold">ronda que
+          realmente alcanzó</span>, y pesando contra quién ganó o perdió.{' '}
+          <span className="text-text font-semibold">Ceniciento</span> es toda selección chica que superó
+          lo esperado por 2+ rondas, o por 1 ronda habiéndole ganado o empatado a una muy superior
+          (ej.: una debutante que clasifica tras empatarle a un campeón del mundo).{' '}
+          <span className="text-text font-semibold">Decepción</span> es toda selección con historia que
+          quedó 2+ rondas por debajo de lo suyo, o 1 ronda si la eliminó una muy inferior. Perder
+          ajustado contra un rival igual o mejor no cuenta: eso no es decepcionar. En ambas categorías{' '}
+          <span className="text-text font-semibold">puede haber varias</span> — sumás los puntos si tu
+          elegida es cualquiera de ellas. Al terminar el torneo vas a ver acá la lista completa con el
+          porqué de cada sí y cada no.
         </p>
 
         <p className="text-xs-s text-muted mt-3 leading-relaxed">

@@ -20,7 +20,7 @@ import { db } from '../db/index.js';
 import { teams, players } from '../db/schema/index.js';
 import { eq } from 'drizzle-orm';
 import {
-  resolveTournamentOutcome,
+  resolveTournamentOutcomeDetailed,
   resolveTournamentPredictions,
 } from '../services/tournament-resolver.js';
 
@@ -38,11 +38,12 @@ async function playerLabel(playerId: number): Promise<string> {
 }
 
 async function main() {
-  const outcome = await resolveTournamentOutcome();
-  if (!outcome) {
+  const detailed = await resolveTournamentOutcomeDetailed();
+  if (!detailed) {
     console.log('La final todavía no terminó — no hay nada que resolver.');
     return;
   }
+  const { outcome, surprises, disappointments } = detailed;
 
   console.log('Resultado resuelto del torneo:');
   console.log(`  Campeón:            ${await teamLabel(outcome.championTeamId)}`);
@@ -60,6 +61,13 @@ async function main() {
   console.log(
     `  Goleador:           ${(await Promise.all(outcome.topScorerPlayerIds.map(playerLabel))).join(', ') || '—'}`,
   );
+
+  console.log('\nCandidatas a sorpresa (✓ entra / ✗ no):');
+  for (const c of surprises)
+    console.log(`  ${c.included ? '✓' : '✗'} ${await teamLabel(c.teamId)} — brecha ${c.gap >= 0 ? '+' : ''}${c.gap}, vía ${c.via ?? 'ninguna'}`);
+  console.log('Candidatas a decepción (✓ entra / ✗ no):');
+  for (const c of disappointments)
+    console.log(`  ${c.included ? '✓' : '✗'} ${await teamLabel(c.teamId)} — brecha ${c.gap}, vía ${c.via ?? 'ninguna'}`);
 
   if (!FIX) {
     console.log('\n(dry-run) Para escribir los puntos: FIX=1 ...');

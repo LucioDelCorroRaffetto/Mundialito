@@ -110,6 +110,17 @@ export interface TeamRun {
    * perdió contra pares o superiores.
    */
   worstLossEloDiff?: number;
+  /** Rival de esa peor derrota, para poder explicarla. */
+  worstLossRivalId?: number;
+  /**
+   * Mayor "mérito conseguido": máximo (elo del rival − elo propio) entre los
+   * partidos NO perdidos (victorias y empates). Positivo grande ⇒ le sacó
+   * puntos a alguien muy superior (Cabo Verde 1540 empatando con España
+   * 2049 ⇒ ~509). Omitido/negativo ⇒ solo puntuó contra pares o inferiores.
+   */
+  bestUpsetEloDiff?: number;
+  /** Rival de ese mejor resultado, para poder explicarlo. */
+  bestUpsetRivalId?: number;
 }
 
 /** Adjunta a cada equipo su profundidad esperada según el rank de Elo. */
@@ -129,14 +140,54 @@ function withExpected(teams: TeamRun[]): Array<TeamRun & { expected: number }> {
 export const ELO_UPSET_DIFF = 250;
 
 /**
- * Sorpresas/Cenicientos: TODAS las selecciones chicas (esperadas a no pasar
- * de octavos según el Elo) que superaron su expectativa. Para una chica,
- * pasar UNA ronda de más ya es sorpresa — Cabo Verde debutante, esperada a
- * grupos, clasificando segunda a dieciseisavos tras hacerle partido a España
- * y Uruguay, califica con brecha +1. Orden: mayor brecha → más modesto
- * (menor Elo) → menor teamId, por reproducibilidad. Vacío si nadie califica.
+ * Diferencia de Elo que consideramos "mérito" para una chica: haberle ganado
+ * o empatado a un rival ≥200 puntos arriba. Es el filtro que separa a la que
+ * dio pelea de verdad (Cabo Verde empatando con España y Uruguay) de la que
+ * simplemente pasó de ronda sin cruzarse con nadie grande (Bosnia segunda de
+ * un grupo accesible).
  */
-export function pickRevelations(teams: TeamRun[]): number[] {
+export const ELO_MERIT_DIFF = 200;
+
+/**
+ * Candidata evaluada para Sorpresa o Decepción, con el porqué. Se exponen
+ * TODAS las que sobre/subrindieron (incluidas las rechazadas) para poder
+ * explicar tanto el "sí" como el "no" cuando se liberan los puntos.
+ */
+export interface CategoryCandidate {
+  teamId: number;
+  /** Profundidad esperada según Elo (0–6). */
+  expected: number;
+  /** Profundidad alcanzada (0–6). */
+  depthReached: number;
+  /** depthReached − expected (positiva sobrerrinde, negativa subrinde). */
+  gap: number;
+  /** Sorpresa: mejor resultado vs un superior (elo rival − propio, si > 0). */
+  meritEloDiff?: number;
+  meritRivalId?: number;
+  /** Decepción: peor derrota vs un inferior (elo propio − rival, si > 0). */
+  upsetLossEloDiff?: number;
+  upsetLossRivalId?: number;
+  /** ¿Quedó dentro de la categoría? */
+  included: boolean;
+  /** Por qué vía entró: brecha grande sola, o brecha chica + mérito/batacazo. */
+  via: 'gap' | 'gap_plus_merit' | 'gap_plus_upset_loss' | null;
+}
+
+/**
+ * Sorpresas/Cenicientos: selecciones chicas (esperadas a no pasar de octavos
+ * según el Elo) que superaron su expectativa, por una de dos vías:
+ *   1. Brecha grande: 2+ rondas por encima de lo esperado (Paraguay de grupos
+ *      a octavos eliminando a Alemania; Noruega de R32 a cuartos echando a
+ *      Brasil).
+ *   2. Brecha chica + mérito: 1 ronda de más Y le ganó o empató a un rival
+ *      ≥ ELO_MERIT_DIFF arriba (Cabo Verde debutante clasificando a
+ *      dieciseisavos tras empatarle a España y a Uruguay). Pasar de ronda sin
+ *      haberse cruzado con nadie grande NO alcanza: eso es cumplir, no
+ *      sorprender.
+ * Devuelve todas las candidatas (gap ≥ 1) con el veredicto; ordenadas mayor
+ * brecha → más modesta (menor Elo) → menor teamId.
+ */
+export function surpriseCandidates(teams: TeamRun[]): CategoryCandidate[] {
   return withExpected(teams)
     .filter((t) => t.expected <= DEPTH.r16 && t.depthReached - t.expected >= 1)
     .sort(
@@ -145,37 +196,75 @@ export function pickRevelations(teams: TeamRun[]): number[] {
         a.elo - b.elo ||
         a.teamId - b.teamId,
     )
-    .map((t) => t.teamId);
+    .map((t) => {
+      const gap = t.depthReached - t.expected;
+      const merit = (t.bestUpsetEloDiff ?? -Infinity) >= ELO_MERIT_DIFF;
+      const via = gap >= 2 ? 'gap' : merit ? 'gap_plus_merit' : null;
+      return {
+        teamId: t.teamId,
+        expected: t.expected,
+        depthReached: t.depthReached,
+        gap,
+        meritEloDiff: t.bestUpsetEloDiff,
+        meritRivalId: t.bestUpsetRivalId,
+        included: via != null,
+        via,
+      };
+    });
 }
 
 /**
- * Decepciones: TODAS las selecciones con historia (esperadas al menos a
- * octavos, top 16 del Elo) que defraudaron, por cualquiera de dos vías:
- *   1. Brecha: quedaron 2+ rondas por debajo de lo esperado (Uruguay esperado
- *      a octavos y afuera en grupos; Brasil esperado a semis y afuera en
+ * Decepciones: selecciones con historia (esperadas al menos a octavos, top 16
+ * del Elo) que defraudaron, por una de dos vías:
+ *   1. Brecha grande: 2+ rondas por debajo de lo esperado (Uruguay esperado a
+ *      octavos y afuera en grupos; Brasil esperado a semis y afuera en
  *      octavos). Caer UNA sola ronda antes no alcanza por sí solo — un cruce
  *      ajustado contra un rival digno no es decepción.
- *   2. Batacazo: quedaron al menos 1 ronda por debajo Y perdieron contra un
- *      rival ≥ ELO_UPSET_DIFF inferior (Alemania afuera en dieciseisavos con
- *      Paraguay). Portugal cayendo en octavos con España NO entra: la brecha
- *      es −1 pero perdió contra una superior.
- * Orden: mayor brecha → más favorito (mayor Elo) → menor teamId.
+ *   2. Brecha chica + batacazo: 1 ronda de menos Y perdió contra un rival
+ *      ≥ ELO_UPSET_DIFF inferior (Alemania afuera en dieciseisavos con
+ *      Paraguay). Portugal cayendo en octavos con España NO entra: perdió
+ *      contra una superior.
+ * Devuelve todas las candidatas (gap ≤ −1) con el veredicto; ordenadas mayor
+ * brecha → más favorita (mayor Elo) → menor teamId.
  */
-export function pickDisappointments(teams: TeamRun[]): number[] {
+export function disappointmentCandidates(teams: TeamRun[]): CategoryCandidate[] {
   return withExpected(teams)
-    .filter((t) => {
-      if (t.expected < DEPTH.r16) return false;
-      const shortfall = t.expected - t.depthReached;
-      if (shortfall >= 2) return true;
-      return shortfall >= 1 && (t.worstLossEloDiff ?? -Infinity) >= ELO_UPSET_DIFF;
-    })
+    .filter((t) => t.expected >= DEPTH.r16 && t.expected - t.depthReached >= 1)
     .sort(
       (a, b) =>
         b.expected - b.depthReached - (a.expected - a.depthReached) ||
         b.elo - a.elo ||
         a.teamId - b.teamId,
     )
-    .map((t) => t.teamId);
+    .map((t) => {
+      const shortfall = t.expected - t.depthReached;
+      const upset = (t.worstLossEloDiff ?? -Infinity) >= ELO_UPSET_DIFF;
+      const via = shortfall >= 2 ? 'gap' : upset ? 'gap_plus_upset_loss' : null;
+      return {
+        teamId: t.teamId,
+        expected: t.expected,
+        depthReached: t.depthReached,
+        gap: t.depthReached - t.expected,
+        upsetLossEloDiff: t.worstLossEloDiff,
+        upsetLossRivalId: t.worstLossRivalId,
+        included: via != null,
+        via,
+      };
+    });
+}
+
+/** Sorpresas que quedan DENTRO de la categoría (ver surpriseCandidates). */
+export function pickRevelations(teams: TeamRun[]): number[] {
+  return surpriseCandidates(teams)
+    .filter((c) => c.included)
+    .map((c) => c.teamId);
+}
+
+/** Decepciones que quedan DENTRO de la categoría (ver disappointmentCandidates). */
+export function pickDisappointments(teams: TeamRun[]): number[] {
+  return disappointmentCandidates(teams)
+    .filter((c) => c.included)
+    .map((c) => c.teamId);
 }
 
 /** Resultado resuelto del torneo contra el que se puntúa cada predicción. */

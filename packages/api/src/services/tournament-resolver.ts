@@ -19,14 +19,26 @@ import { matches, teams, playerMatchStats, tournamentPredictions } from '../db/s
 import { initialEloFor } from '../lib/elo.js';
 import {
   depthReachedFrom,
-  pickRevelations,
-  pickDisappointments,
+  surpriseCandidates,
+  disappointmentCandidates,
   scoreTournamentPrediction,
   DEPTH,
+  type CategoryCandidate,
   type Round,
   type TeamRun,
   type TournamentOutcome,
 } from '../lib/tournament-scoring.js';
+
+/**
+ * Outcome + el detalle de las candidatas a sorpresa/decepción (incluidas y
+ * rechazadas, con brechas y batacazos) para poder EXPLICAR cada decisión
+ * cuando se liberan los puntos.
+ */
+export interface DetailedOutcome {
+  outcome: TournamentOutcome;
+  surprises: CategoryCandidate[];
+  disappointments: CategoryCandidate[];
+}
 
 /**
  * Calcula el resultado resuelto del torneo a partir del estado actual de la DB.
@@ -34,6 +46,12 @@ import {
  * porque varias categorías no son firmes hasta entonces.
  */
 export async function resolveTournamentOutcome(): Promise<TournamentOutcome | null> {
+  const detailed = await resolveTournamentOutcomeDetailed();
+  return detailed?.outcome ?? null;
+}
+
+/** Igual que resolveTournamentOutcome pero con las candidatas explicadas. */
+export async function resolveTournamentOutcomeDetailed(): Promise<DetailedOutcome | null> {
   const finalMatch = await db
     .select({
       homeTeamId: matches.homeTeamId,
@@ -122,21 +140,43 @@ export async function resolveTournamentOutcome(): Promise<TournamentOutcome | nu
   const teamRows = await db.select({ id: teams.id, code: teams.code }).from(teams);
   const eloById = new Map(teamRows.map((t) => [t.id, initialEloFor(t.code)]));
 
-  // ── Batacazos en contra: peor derrota (elo propio − elo del rival) ──────────
+  // ── Batacazos y méritos: peor derrota vs inferior, mejor resultado vs superior ──
   // El score guardado ya trae el +1 del ganador por penales, así que un cruce
   // perdido en la tanda también cuenta como derrota — para el hincha, quedar
   // eliminado por una selección muy inferior es batacazo igual.
-  const worstLossById = new Map<number, number>();
+  const worstLossById = new Map<number, { diff: number; rivalId: number }>();
+  const bestUpsetById = new Map<number, { diff: number; rivalId: number }>();
+  const noteUpset = (
+    map: Map<number, { diff: number; rivalId: number }>,
+    teamId: number,
+    rivalId: number,
+  ) => {
+    const diff = (eloById.get(rivalId) ?? 1500) - (eloById.get(teamId) ?? 1500);
+    // Para bestUpset el diff se mide hacia arriba (rival − propio); para
+    // worstLoss lo llama invertido (ver call sites). Solo guardamos el máximo.
+    if (diff > (map.get(teamId)?.diff ?? -Infinity)) map.set(teamId, { diff, rivalId });
+  };
   for (const m of finished) {
     if (m.homeTeamId == null || m.awayTeamId == null) continue;
-    if (m.homeScore == null || m.awayScore == null || m.homeScore === m.awayScore) continue;
+    if (m.homeScore == null || m.awayScore == null) continue;
+    if (m.homeScore === m.awayScore) {
+      // Empate: mérito potencial para ambos lados (vs el rival superior).
+      noteUpset(bestUpsetById, m.homeTeamId, m.awayTeamId);
+      noteUpset(bestUpsetById, m.awayTeamId, m.homeTeamId);
+      continue;
+    }
     const loserId = m.homeScore > m.awayScore ? m.awayTeamId : m.homeTeamId;
     const winnerId = m.homeScore > m.awayScore ? m.homeTeamId : m.awayTeamId;
-    const diff = (eloById.get(loserId) ?? 1500) - (eloById.get(winnerId) ?? 1500);
-    if (diff > (worstLossById.get(loserId) ?? -Infinity)) worstLossById.set(loserId, diff);
+    // Ganarle a un superior es mérito del ganador…
+    noteUpset(bestUpsetById, winnerId, loserId);
+    // …y perder con un inferior es batacazo del perdedor. worstLossEloDiff se
+    // define como (propio − rival), que es exactamente −(rival − propio):
+    const lossDiff = (eloById.get(loserId) ?? 1500) - (eloById.get(winnerId) ?? 1500);
+    if (lossDiff > (worstLossById.get(loserId)?.diff ?? -Infinity))
+      worstLossById.set(loserId, { diff: lossDiff, rivalId: winnerId });
   }
 
-  // ── Ceniciento / Decepción: brecha esperado-vs-real + batacazos ─────────────
+  // ── Ceniciento / Decepción: brecha esperado-vs-real + batacazos/méritos ─────
   const runs: TeamRun[] = [];
   for (const t of teamRows) {
     const rounds = roundsByTeam.get(t.id);
@@ -145,11 +185,16 @@ export async function resolveTournamentOutcome(): Promise<TournamentOutcome | nu
       teamId: t.id,
       elo: eloById.get(t.id) ?? 1500,
       depthReached: depthReachedFrom(rounds, t.id === championTeamId),
-      worstLossEloDiff: worstLossById.get(t.id),
+      worstLossEloDiff: worstLossById.get(t.id)?.diff,
+      worstLossRivalId: worstLossById.get(t.id)?.rivalId,
+      bestUpsetEloDiff: bestUpsetById.get(t.id)?.diff,
+      bestUpsetRivalId: bestUpsetById.get(t.id)?.rivalId,
     });
   }
-  const revelationTeamIds = pickRevelations(runs);
-  const surpriseEliminatedTeamIds = pickDisappointments(runs);
+  const surprises = surpriseCandidates(runs);
+  const disappointments = disappointmentCandidates(runs);
+  const revelationTeamIds = surprises.filter((c) => c.included).map((c) => c.teamId);
+  const surpriseEliminatedTeamIds = disappointments.filter((c) => c.included).map((c) => c.teamId);
 
   // ── Valla menos vencida: menor promedio de goles recibidos, mínimo octavos ──
   const depthById = new Map(runs.map((r) => [r.teamId, r.depthReached]));
@@ -184,13 +229,17 @@ export async function resolveTournamentOutcome(): Promise<TournamentOutcome | nu
       : [];
 
   return {
-    championTeamId,
-    runnerUpTeamId,
-    thirdPlaceTeamId,
-    topScorerPlayerIds,
-    revelationTeamIds,
-    surpriseEliminatedTeamIds,
-    bestDefenseTeamIds,
+    outcome: {
+      championTeamId,
+      runnerUpTeamId,
+      thirdPlaceTeamId,
+      topScorerPlayerIds,
+      revelationTeamIds,
+      surpriseEliminatedTeamIds,
+      bestDefenseTeamIds,
+    },
+    surprises,
+    disappointments,
   };
 }
 

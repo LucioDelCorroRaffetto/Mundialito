@@ -6,6 +6,7 @@ import {
   expectedDepthFromEloRank,
   pickRevelations,
   pickDisappointments,
+  surpriseCandidates,
   scoreTournamentPrediction,
   type Round,
   type TeamRun,
@@ -197,10 +198,36 @@ describe('pickRevelations / pickDisappointments', () => {
     expect(pickRevelations(teams)).toEqual([45, 40, 25]);
   });
 
-  it('sorpresa: a una chica le alcanza con pasar 1 ronda de más (caso Cabo Verde)', () => {
+  it('sorpresa con +1 y mérito: chica que le empató a una gigante entra (caso Cabo Verde)', () => {
     const teams = onPar();
-    set(teams, 40, DEPTH.r32); // debutante esperada a grupos(0) → R32(1): +1
+    const t = teams.find((x) => x.teamId === 40)!;
+    t.depthReached = DEPTH.r32; // debutante esperada a grupos(0) → R32(1): +1
+    t.bestUpsetEloDiff = 509; // empató con España, 509 pts de Elo arriba
     expect(pickRevelations(teams)).toEqual([40]);
+  });
+
+  it('sorpresa con +1 sin mérito NO entra: pasar de ronda sin cruzar a nadie grande es cumplir (caso Bosnia)', () => {
+    const teams = onPar();
+    const t = teams.find((x) => x.teamId === 36)!;
+    t.depthReached = DEPTH.r32; // esperada a grupos(0) → R32(1): +1
+    t.bestUpsetEloDiff = 80; // su mejor resultado fue contra un par
+    expect(pickRevelations(teams)).toEqual([]);
+  });
+
+  it('candidatas explicadas: las rechazadas aparecen con included=false y via=null', () => {
+    const teams = onPar();
+    const cpv = teams.find((x) => x.teamId === 40)!;
+    cpv.depthReached = DEPTH.r32;
+    cpv.bestUpsetEloDiff = 509;
+    const bih = teams.find((x) => x.teamId === 36)!;
+    bih.depthReached = DEPTH.r32;
+    const cands = surpriseCandidates(teams);
+    // misma brecha +1 ⇒ ordena por menor Elo primero (40 es más modesta que 36);
+    // la rechazada aparece igual, con included=false, para poder explicar el "no".
+    expect(cands.map((c) => [c.teamId, c.included, c.via])).toEqual([
+      [40, true, 'gap_plus_merit'],
+      [36, false, null],
+    ]);
   });
 
   it('un favorito que sobre-rinde no es sorpresa (no es modesto)', () => {

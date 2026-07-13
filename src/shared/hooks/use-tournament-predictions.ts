@@ -41,6 +41,46 @@ export function useMyTournamentPredictions() {
   });
 }
 
+interface OutcomeTeamRef {
+  id: number;
+  code: string;
+  name: string;
+}
+
+export interface OutcomeCandidate {
+  team: OutcomeTeamRef | null;
+  included: boolean;
+  gap: number;
+  reason: string;
+}
+
+export interface TournamentOutcomeData {
+  resolved: boolean;
+  champion?: OutcomeTeamRef | null;
+  runnerUp?: OutcomeTeamRef | null;
+  thirdPlace?: OutcomeTeamRef | null;
+  topScorers?: Array<{ id: number; name: string }>;
+  bestDefense?: OutcomeTeamRef[];
+  surprises?: OutcomeCandidate[];
+  disappointments?: OutcomeCandidate[];
+}
+
+/**
+ * Resultado resuelto del torneo con las explicaciones de sorpresa/decepción.
+ * `resolved` queda false hasta que se juegue la final; recién ahí el back
+ * libera los puntos y este endpoint devuelve el porqué de cada sí y cada no.
+ */
+export function useTournamentOutcome() {
+  return useQuery({
+    queryKey: ['tournament-outcome'],
+    queryFn: async () => {
+      const { data } = await apiClient.get<TournamentOutcomeData>('/tournament-predictions/outcome');
+      return data;
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
 export interface UpsertTournamentPredictionInput {
   championTeamId: number | null;
   runnerUpTeamId: number | null;
