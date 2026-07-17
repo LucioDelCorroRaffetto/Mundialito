@@ -4,6 +4,7 @@ import { eq, sql, and, inArray } from 'drizzle-orm';
 import { db } from '../../../db/index.js';
 import { tournamentPredictions, leagueMembers, teams, players } from '../../../db/schema/index.js';
 import { AppError } from '../../../lib/errors.js';
+import { isTournamentPredictionsLocked } from '../../../lib/tournament-lock.js';
 
 const FIELDS = [
   'championTeamId',
@@ -36,15 +37,8 @@ export async function upsertTournamentPredictionHandler(req: Request, res: Respo
   const { leagueId, ...payloadFields } = body;
   const userId = req.user!.id;
 
-  // ── Tournament lock ───────────────────────────────────────────────────────
-  // Originalmente este lock cerraba 5 min antes del partido inaugural. Se
-  // extendió primero 24h y luego una semana adicional: los pronósticos de
-  // torneo (campeón, top scorer, etc.) no afectan partidos ya jugados — el
-  // scoring se evalúa al final de la fase de grupos / del torneo — así que
-  // tiene sentido aceptar entradas tardías mientras siga abierta la fase
-  // de grupos. Cierra el 2026-06-19 18:55 UTC.
-  const TOURNAMENT_LOCK_UTC = '2026-06-19T18:55:00Z';
-  if (new Date(TOURNAMENT_LOCK_UTC) <= new Date()) {
+  // ── Tournament lock (ver lib/tournament-lock.ts) ─────────────────────────
+  if (isTournamentPredictionsLocked()) {
     throw new AppError(
       'TOURNAMENT_LOCKED',
       'Los pronósticos del torneo están cerrados',

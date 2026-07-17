@@ -54,6 +54,21 @@ export interface OutcomeCandidate {
   reason: string;
 }
 
+export interface DefenseTableRow {
+  team: OutcomeTeamRef | null;
+  played: number;
+  goalsAgainst: number;
+  avg: number;
+}
+
+/** Estado provisional pre-final: mismas categorías "de tabla", sin podio. */
+export interface ProvisionalOutcomeData {
+  surprises: OutcomeCandidate[];
+  disappointments: OutcomeCandidate[];
+  defenseTable: DefenseTableRow[];
+  topScorers: Array<{ id: number; name: string; goals: number }>;
+}
+
 export interface TournamentOutcomeData {
   resolved: boolean;
   champion?: OutcomeTeamRef | null;
@@ -61,8 +76,11 @@ export interface TournamentOutcomeData {
   thirdPlace?: OutcomeTeamRef | null;
   topScorers?: Array<{ id: number; name: string }>;
   bestDefense?: OutcomeTeamRef[];
+  defenseTable?: DefenseTableRow[];
   surprises?: OutcomeCandidate[];
   disappointments?: OutcomeCandidate[];
+  /** Presente solo cuando resolved es false y el torneo ya está en marcha. */
+  provisional?: ProvisionalOutcomeData;
 }
 
 /**
@@ -77,6 +95,40 @@ export function useTournamentOutcome() {
       const { data } = await apiClient.get<TournamentOutcomeData>('/tournament-predictions/outcome');
       return data;
     },
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+/** Picks de Copa de un miembro de la liga (GET /leagues/:id/tournament-predictions). */
+export interface LeagueTournamentPick {
+  userId: number;
+  username: string;
+  avatarUrl: string | null;
+  championTeamId: number | null;
+  runnerUpTeamId: number | null;
+  thirdPlaceTeamId: number | null;
+  topScorerPlayerId: number | null;
+  topScorerName: string | null;
+  revelationTeamId: number | null;
+  surpriseEliminatedTeamId: number | null;
+  bestDefenseTeamId: number | null;
+  points: number | null;
+}
+
+/**
+ * Picks de Copa de TODOS los miembros de una liga. El server solo devuelve
+ * los ajenos después del lock (anti-copia); `meta.locked` lo indica.
+ */
+export function useLeagueTournamentPicks(leagueId: number | undefined) {
+  return useQuery({
+    queryKey: ['league-tournament-picks', leagueId],
+    queryFn: async () => {
+      const { data } = await apiClient.get<{ data: LeagueTournamentPick[]; meta: { total: number; locked: boolean } }>(
+        `/leagues/${leagueId}/tournament-predictions`,
+      );
+      return data;
+    },
+    enabled: leagueId !== undefined,
     staleTime: 5 * 60 * 1000,
   });
 }

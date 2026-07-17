@@ -16,6 +16,9 @@ import {
   useUpdateLeague,
   type StandingRow,
 } from '@/shared/hooks/use-leagues';
+import { useLeagueTournamentPicks, type LeagueTournamentPick } from '@/shared/hooks/use-tournament-predictions';
+import { useTeamMap } from '@/shared/hooks/use-teams';
+import { TeamFlag } from '@/shared/components/ui/team-flag';
 import { useAuthStore } from '@/shared/stores/auth-store';
 import { podiumStyle } from '@/shared/components/logros-gate-banner';
 import { staggerContainer, staggerItem, useMotionPrefs, springSnappy, useCountUp, slideUpVariants } from '@/shared/lib/motion';
@@ -266,6 +269,127 @@ function LeagueHistorySection({
   );
 }
 
+/** Un pick de equipo como chip bandera+código; '—' si no eligió. */
+function PickChip({
+  label,
+  teamId,
+  teamMap,
+  text,
+}: {
+  label: string;
+  teamId?: number | null;
+  teamMap: ReturnType<typeof useTeamMap>['data'];
+  text?: string | null;
+}) {
+  const team = teamId != null ? teamMap?.get(teamId) : undefined;
+  return (
+    <span className="inline-flex items-center gap-1 text-xs-s text-muted whitespace-nowrap">
+      <span aria-hidden>{label}</span>
+      {team ? (
+        <>
+          <TeamFlag code={team.code} emoji={team.flag} size={16} />
+          <span className="font-semibold text-text">{team.code}</span>
+        </>
+      ) : text ? (
+        <span className="font-semibold text-text truncate max-w-[9rem]">{text}</span>
+      ) : (
+        <span>—</span>
+      )}
+    </span>
+  );
+}
+
+/**
+ * Picks de Copa (campeón, goleador, sorpresa…) de cada miembro de la liga.
+ * Las predicciones de Copa son POR LIGA, por eso viven acá y no en el perfil.
+ * El server solo entrega los picks ajenos después del lock (anti-copia), y
+ * `points` llega con los puntos de Copa una vez resuelta la final.
+ */
+function LeagueCopaPicksSection({
+  leagueId,
+  currentUserId,
+}: {
+  leagueId: number | undefined;
+  currentUserId: number | undefined;
+}) {
+  const { reduced } = useMotionPrefs();
+  const [open, setOpen] = useState(false);
+  const { data } = useLeagueTournamentPicks(leagueId);
+  const { data: teamMap } = useTeamMap();
+
+  const picks = data?.data ?? [];
+  if (picks.length === 0) return null;
+
+  const anyScored = picks.some((p) => p.points != null);
+
+  const row = (p: LeagueTournamentPick) => (
+    <div
+      key={p.userId}
+      className={cn(
+        'px-4 py-2.5 border-t border-border first:border-t-0',
+        p.userId === currentUserId && 'bg-accent-soft/40',
+      )}
+    >
+      <div className="flex items-center gap-2 mb-1">
+        {p.avatarUrl ? (
+          <img src={p.avatarUrl} alt="" loading="lazy" className="w-5 h-5 rounded-full object-cover flex-shrink-0" />
+        ) : (
+          <span className="w-5 h-5 rounded-full bg-elevated border border-border flex-shrink-0" />
+        )}
+        <span className="text-sm-s font-semibold text-text truncate">{p.username}</span>
+        {anyScored && (
+          <span className="ml-auto text-sm-s font-bold text-accent tabular-nums">
+            {p.points != null ? `+${p.points}` : '—'}
+          </span>
+        )}
+      </div>
+      <div className="flex flex-wrap gap-x-3 gap-y-1 pl-7">
+        <PickChip label="🏆" teamId={p.championTeamId} teamMap={teamMap} />
+        <PickChip label="🥈" teamId={p.runnerUpTeamId} teamMap={teamMap} />
+        <PickChip label="🥉" teamId={p.thirdPlaceTeamId} teamMap={teamMap} />
+        <PickChip label="⚽" teamMap={teamMap} text={p.topScorerName} />
+        <PickChip label="✨" teamId={p.revelationTeamId} teamMap={teamMap} />
+        <PickChip label="📉" teamId={p.surpriseEliminatedTeamId} teamMap={teamMap} />
+        <PickChip label="🧤" teamId={p.bestDefenseTeamId} teamMap={teamMap} />
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="border-t border-border">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        className="w-full flex items-center justify-between px-4 py-3 text-sm-s font-semibold text-text"
+      >
+        Picks de Copa
+        <ChevronDown size={16} className={cn('text-muted transition-transform', open && 'rotate-180')} />
+      </button>
+      <AnimatePresence initial={false}>
+        {open && (
+          <motion.div
+            variants={slideUpVariants(reduced, 10)}
+            initial="initial"
+            animate="animate"
+            exit="exit"
+            className="pb-2"
+          >
+            <p className="px-4 pb-2 text-xs-s text-muted leading-snug">
+              🏆 campeón · 🥈 finalista · 🥉 tercero · ⚽ goleador · ✨ ceniciento · 📉 decepción ·
+              🧤 valla menos vencida.{' '}
+              {anyScored
+                ? 'Los puntos de Copa ya están liberados y suman a la tabla.'
+                : 'Los puntos se liberan cuando termine la final.'}
+            </p>
+            {picks.map(row)}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
 export function LeagueDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -413,6 +537,8 @@ export function LeagueDetailPage() {
           )}
 
           <LeagueHistorySection leagueId={validLeagueId ? leagueId : undefined} currentUserId={currentUser?.id} />
+
+          <LeagueCopaPicksSection leagueId={validLeagueId ? leagueId : undefined} currentUserId={currentUser?.id} />
         </div>
       )}
 

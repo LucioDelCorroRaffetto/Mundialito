@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { ArrowLeft, Clock, CheckCircle2, Search, X, Trophy, Users, Lock } from 'lucide-react';
@@ -19,6 +19,7 @@ import {
   useMyTournamentPredictions,
   useTournamentOutcome,
   type OutcomeCandidate,
+  type DefenseTableRow,
 } from '@/shared/hooks/use-tournament-predictions';
 import { useMyLeagues } from '@/shared/hooks/use-leagues';
 import { useTournamentForecast } from '@/shared/hooks/use-forecasts';
@@ -442,55 +443,134 @@ function OutcomeCandidateRow({ c }: { c: OutcomeCandidate }) {
   );
 }
 
+/** Tabla de la valla menos vencida: PJ / goles en contra / promedio. */
+function DefenseTableBlock({ rows, provisional }: { rows: DefenseTableRow[]; provisional: boolean }) {
+  if (rows.length === 0) return null;
+  const best = rows[0]?.avg;
+  return (
+    <div className="mb-4">
+      <p className="text-sm-s font-semibold text-text mb-2">
+        Valla menos vencida — cómo viene{provisional ? '' : ' (final)'}
+      </p>
+      <div
+        className="grid items-center gap-y-1 text-xs-s"
+        style={{ gridTemplateColumns: '1fr 2.4rem 2.4rem 3.2rem' }}
+      >
+        <span className="text-muted">Equipo (llegó a octavos)</span>
+        <span className="text-muted text-center">PJ</span>
+        <span className="text-muted text-center">GC</span>
+        <span className="text-muted text-right">Prom.</span>
+        {rows.map((d) => {
+          const leads = d.avg === best;
+          return (
+            <Fragment key={d.team?.id ?? `${d.played}-${d.goalsAgainst}`}>
+              <span className={cn('truncate pr-1 font-semibold', leads ? 'text-text' : 'text-muted')}>
+                {d.team?.name ?? '—'}
+              </span>
+              <span className={cn('text-center tabular-nums', leads ? 'text-text' : 'text-muted')}>{d.played}</span>
+              <span className={cn('text-center tabular-nums', leads ? 'text-text' : 'text-muted')}>{d.goalsAgainst}</span>
+              <span className={cn('text-right tabular-nums font-semibold', leads ? 'text-green-400' : 'text-muted')}>
+                {d.avg.toFixed(2)}
+              </span>
+            </Fragment>
+          );
+        })}
+      </div>
+      <p className="text-xs-s text-muted mt-1.5 leading-snug">
+        Menor promedio de goles en contra, entre los que llegaron al menos a octavos. Los penales de
+        una tanda no cuentan como goles.
+      </p>
+    </div>
+  );
+}
+
 /**
- * Resultados del torneo con la explicación de cada decisión. Aparece recién
- * cuando la final terminó y el back resolvió las categorías — hasta entonces
- * el endpoint devuelve resolved:false y esto no renderiza nada.
+ * Resultados del torneo con la explicación de cada decisión. Con la final ya
+ * jugada muestra el resultado firme; antes, el estado PROVISIONAL (sorpresas/
+ * decepciones al día de hoy, tabla de valla y goleador parcial) para que la
+ * definición de cada categoría sea transparente antes de liberar los puntos.
  */
 function TournamentOutcomeCard() {
   const { data } = useTournamentOutcome();
-  if (!data?.resolved) return null;
+  if (!data) return null;
 
-  const podium: Array<[string, string]> = [
-    ['Campeón', data.champion?.name ?? '—'],
-    ['Finalista', data.runnerUp?.name ?? '—'],
-    ['Tercer puesto', data.thirdPlace?.name ?? '—'],
-    ['Goleador', (data.topScorers ?? []).map((p) => p.name).join(', ') || '—'],
-    ['Valla menos vencida', (data.bestDefense ?? []).map((t) => t?.name).join(', ') || '—'],
-  ];
+  const provisional = !data.resolved ? data.provisional : undefined;
+  if (!data.resolved && !provisional) return null;
+
+  const surprises = data.resolved ? data.surprises : provisional?.surprises;
+  const disappointments = data.resolved ? data.disappointments : provisional?.disappointments;
+  const defenseTable = (data.resolved ? data.defenseTable : provisional?.defenseTable) ?? [];
+
+  const podium: Array<[string, string]> | null = data.resolved
+    ? [
+        ['Campeón', data.champion?.name ?? '—'],
+        ['Finalista', data.runnerUp?.name ?? '—'],
+        ['Tercer puesto', data.thirdPlace?.name ?? '—'],
+        ['Goleador', (data.topScorers ?? []).map((p) => p.name).join(', ') || '—'],
+        ['Valla menos vencida', (data.bestDefense ?? []).map((t) => t?.name).join(', ') || '—'],
+      ]
+    : null;
 
   return (
     <div className="mx-4 mb-4 p-4 rounded-lg bg-elevated border border-accent-border">
       <div className="flex items-center gap-2 mb-3">
         <Trophy size={16} className="text-accent" />
-        <p className="text-sm-s font-semibold text-text">Resultados del torneo</p>
+        <p className="text-sm-s font-semibold text-text">
+          {data.resolved ? 'Resultados del torneo' : 'Así viene la Copa'}
+        </p>
+        {!data.resolved && (
+          <span className="text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded bg-accent-soft text-accent">
+            Provisional
+          </span>
+        )}
       </div>
 
-      <div className="flex flex-col gap-1.5 mb-4">
-        {podium.map(([label, value]) => (
-          <div key={label} className="flex items-center justify-between gap-3">
-            <span className="text-sm-s text-muted">{label}</span>
-            <span className="text-sm-s font-bold text-text text-right">{value}</span>
-          </div>
-        ))}
-      </div>
+      {!data.resolved && (
+        <p className="text-xs-s text-muted mb-3 leading-snug">
+          Los puntos se liberan cuando termine la final. Las sorpresas y decepciones de los equipos ya
+          eliminados no cambian más; la valla y el goleador todavía pueden moverse con los partidos
+          que faltan.
+        </p>
+      )}
 
-      {(data.surprises?.length ?? 0) > 0 && (
+      {podium && (
+        <div className="flex flex-col gap-1.5 mb-4">
+          {podium.map(([label, value]) => (
+            <div key={label} className="flex items-center justify-between gap-3">
+              <span className="text-sm-s text-muted">{label}</span>
+              <span className="text-sm-s font-bold text-text text-right">{value}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {!data.resolved && (provisional?.topScorers?.length ?? 0) > 0 && (
+        <div className="flex items-center justify-between gap-3 mb-4">
+          <span className="text-sm-s text-muted">Goleador parcial</span>
+          <span className="text-sm-s font-bold text-text text-right">
+            {provisional!.topScorers.map((p) => `${p.name} (${p.goals})`).join(', ')}
+          </span>
+        </div>
+      )}
+
+      <DefenseTableBlock rows={defenseTable} provisional={!data.resolved} />
+
+      {(surprises?.length ?? 0) > 0 && (
         <div className="mb-4">
           <p className="text-sm-s font-semibold text-text mb-2">Cenicientos — quiénes y por qué</p>
           <div className="flex flex-col gap-2.5">
-            {data.surprises!.map((c) => (
+            {surprises!.map((c) => (
               <OutcomeCandidateRow key={c.team?.id ?? c.reason} c={c} />
             ))}
           </div>
         </div>
       )}
 
-      {(data.disappointments?.length ?? 0) > 0 && (
+      {(disappointments?.length ?? 0) > 0 && (
         <div>
           <p className="text-sm-s font-semibold text-text mb-2">Decepciones — quiénes y por qué</p>
           <div className="flex flex-col gap-2.5">
-            {data.disappointments!.map((c) => (
+            {disappointments!.map((c) => (
               <OutcomeCandidateRow key={c.team?.id ?? c.reason} c={c} />
             ))}
           </div>

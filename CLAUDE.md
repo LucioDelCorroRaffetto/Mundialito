@@ -287,6 +287,40 @@ FIFA.com no necesita key.
 > Orden cronológico inverso (lo nuevo arriba). Cada entrada: **qué cambió y por qué**.
 > Agregá una entrada cada vez que cambies un comportamiento por una razón.
 
+### 2026-07-16 (2) — Picks de Copa visibles por liga + outcome provisional + fix valla con penales
+
+Pedido del dueño: transparencia de las predicciones de Copa antes de la final.
+Decisión de diseño: los picks se muestran **en la liga** (no en el perfil)
+porque `tournament_predictions` es por (user, league) — un user puede elegir
+distinto en cada liga. Verificado: `tsc` API+front = 0, 130+50 tests, build OK.
+
+- **Nuevo `GET /leagues/:id/tournament-predictions`** (`handlers/tournament-picks.ts`):
+  picks de todos los miembros + `topScorerName` resuelto server-side + `points`.
+  Anti-copia: antes del lock solo devuelve la fila propia (`meta.locked`). El
+  lock se extrajo a `lib/tournament-lock.ts` (compartido con el upsert — antes
+  estaba inline). Front: sección colapsable "Picks de Copa" en `league-detail`
+  (tab Tabla), chips 🏆🥈🥉⚽✨📉🧤 con bandera, puntos cuando se liberan.
+- **`/tournament-predictions/outcome` ahora devuelve un bloque `provisional`**
+  cuando la final no terminó: sorpresas/decepciones al día (excluyendo equipos
+  con partidos pendientes — sin el filtro, Argentina figuraba "candidata a
+  decepción ✗" con la final por jugarse), **tabla de valla (PJ/GC/promedio)** y
+  goleador parcial. El resolver ganó `resolveProvisionalOutcome()` +
+  `computeInsights()` (núcleo compartido, champion nullable). La card del front
+  muestra "Así viene la Copa · PROVISIONAL" y pasa sola al modo resuelto.
+- **🐛 Fix valla menos vencida**: el resolver computaba goles en contra con el
+  score BUMPEADO (+1 de penales) — perder una tanda le sumaba al perdedor un
+  gol fantasma en contra. Con ESP 1 GC / COL 0.200 de promedio, una final
+  perdida por penales 0-0 le costaba la valla a España incorrectamente. Ahora
+  la valla usa goles DE JUEGO (resta el bump); depth/batacazos siguen con el
+  score guardado (intencional, documentado inline).
+- **Estado provisional verificado contra prod** (2026-07-16): valla ESP 0.143
+  (1 GC en 7 PJ) > COL 0.200 — si ESP recibe 1 gol en la final la pierde;
+  cenicientos ✓ PAR/NOR/SWE/ALG/COD/CPV/MAR; decepciones ✓ BRA/NED/URU/GER;
+  goleador parcial Messi y Mbappé (8).
+- ⚠️ Nota: el token de `.env.ro` no puede ejecutar el `PRAGMA foreign_keys`
+  que `db/client.ts` antepone a todo — scripts que importen el db del API
+  necesitan el `.env` RW; el `.env.ro` sirve solo para `@libsql/client` crudo.
+
 ### 2026-07-16 — Auditoría de cierre de torneo: backfill final/3er puesto + gaps del resolver de Copa y fantasy_legend
 
 Revisión pedida por el dueño: "que al terminar el Mundial todo se actualice

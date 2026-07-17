@@ -12,6 +12,7 @@ import { leaveLeagueHandler } from './handlers/leave-league.js';
 import { listMembersHandler } from './handlers/list-members.js';
 import { kickMemberHandler } from './handlers/kick-member.js';
 import { standingsHandler } from './handlers/standings.js';
+import { leagueTournamentPicksHandler } from './handlers/tournament-picks.js';
 import { standingsHistoryHandler } from './handlers/standings-history.js';
 import { searchPublicHandler } from './handlers/search-public.js';
 
@@ -44,6 +45,9 @@ leaguesRouter.delete('/:id/members/:userId', (req, res, next) =>
   kickMemberHandler(req, res).catch(next)
 );
 leaguesRouter.get('/:id/standings', (req, res, next) => standingsHandler(req, res).catch(next));
+leaguesRouter.get('/:id/tournament-predictions', (req, res, next) =>
+  leagueTournamentPicksHandler(req, res).catch(next)
+);
 leaguesRouter.get('/:id/standings/history', (req, res, next) =>
   standingsHistoryHandler(req, res).catch(next)
 );

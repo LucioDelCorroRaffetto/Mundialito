@@ -6,9 +6,15 @@
  * final. Por eso `resolveTournamentOutcome` devuelve null hasta que la final
  * esté finished con un ganador, y el resolver no toca nada hasta ese momento.
  *
+ * Además expone `resolveProvisionalOutcome()`: el mismo cómputo SIN exigir la
+ * final, para mostrar sorpresas/decepciones y la tabla de valla mientras el
+ * torneo sigue. Con la final y el 3er puesto ya definidos, las candidatas de
+ * sorpresa/decepción de los eliminados son firmes (su profundidad no cambia);
+ * la valla y el goleador siguen provisionales hasta el último partido.
+ *
  * Es idempotente: sólo reescribe `points` cuando cambió. Se dispara desde el
- * cierre de la final (finalize-match / sync-scores) y se puede correr a mano
- * con `scripts/resolve-tournament-predictions.ts`.
+ * cierre de la final (finalize-match / sync-scores / sync-espn / update-match)
+ * y se puede correr a mano con `scripts/resolve-tournament-predictions.ts`.
  *
  * Los puntos resultantes se suman a la tabla de cada liga en
  * `routes/leagues/handlers/standings.ts`.
@@ -29,6 +35,19 @@ import {
   type TournamentOutcome,
 } from '../lib/tournament-scoring.js';
 
+/** Fila de la tabla de valla menos vencida (transparencia de la categoría). */
+export interface DefenseRow {
+  teamId: number;
+  /** Partidos finished jugados. */
+  played: number;
+  /** Goles en contra DE JUEGO (sin el +1 del bump de penales). */
+  ga: number;
+  /** ga / played. */
+  avg: number;
+  /** Cumple el requisito de haber llegado al menos a octavos. */
+  qualifies: boolean;
+}
+
 /**
  * Outcome + el detalle de las candidatas a sorpresa/decepción (incluidas y
  * rechazadas, con brechas y batacazos) para poder EXPLICAR cada decisión
@@ -38,86 +57,54 @@ export interface DetailedOutcome {
   outcome: TournamentOutcome;
   surprises: CategoryCandidate[];
   disappointments: CategoryCandidate[];
+  defenseTable: DefenseRow[];
+}
+
+/** Mismo detalle pero SIN exigir la final: para mostrar el estado en curso. */
+export interface ProvisionalOutcome {
+  surprises: CategoryCandidate[];
+  disappointments: CategoryCandidate[];
+  defenseTable: DefenseRow[];
+  /** Goleador(es) parcial(es) al día de hoy. */
+  topScorerPlayerIds: number[];
+  maxGoals: number;
 }
 
 /**
- * Calcula el resultado resuelto del torneo a partir del estado actual de la DB.
- * Devuelve null si el torneo todavía no terminó (final no finished o empatada),
- * porque varias categorías no son firmes hasta entonces.
+ * Lado ganador de un KO cerrado. Un empate puede estar resuelto igual si el
+ * admin cargó el lado ganador de la tanda vía `penalty_winner` (sin bump del
+ * score — el mecanismo usado en el match 96 de octavos). Sin esto, una final
+ * cerrada así jamás resolvería las predicciones de Copa.
  */
-export async function resolveTournamentOutcome(): Promise<TournamentOutcome | null> {
-  const detailed = await resolveTournamentOutcomeDetailed();
-  return detailed?.outcome ?? null;
+function winnerSide(m: {
+  homeScore: number | null;
+  awayScore: number | null;
+  penaltyWinner: 'home' | 'away' | null;
+}): 'home' | 'away' | null {
+  if (m.homeScore == null || m.awayScore == null) return null;
+  if (m.homeScore > m.awayScore) return 'home';
+  if (m.homeScore < m.awayScore) return 'away';
+  return m.penaltyWinner ?? null; // empate ⇒ shootout aún sin resolver
 }
 
-/** Igual que resolveTournamentOutcome pero con las candidatas explicadas. */
-export async function resolveTournamentOutcomeDetailed(): Promise<DetailedOutcome | null> {
-  const finalMatch = await db
-    .select({
-      homeTeamId: matches.homeTeamId,
-      awayTeamId: matches.awayTeamId,
-      homeScore: matches.homeScore,
-      awayScore: matches.awayScore,
-      status: matches.status,
-      penaltyWinner: matches.penaltyWinner,
-    })
-    .from(matches)
-    .where(eq(matches.round, 'final'))
-    .get();
+interface Insights {
+  surprises: CategoryCandidate[];
+  disappointments: CategoryCandidate[];
+  revelationTeamIds: number[];
+  surpriseEliminatedTeamIds: number[];
+  bestDefenseTeamIds: number[];
+  defenseTable: DefenseRow[];
+  topScorerPlayerIds: number[];
+  maxGoals: number;
+}
 
-  // Un KO cerrado en empate puede estar resuelto igual si el admin cargó el
-  // lado ganador de la tanda vía `penalty_winner` (sin bump del score — el
-  // mecanismo usado en el match 96 de octavos). Sin esto, una final cerrada
-  // así jamás resolvería las predicciones de Copa.
-  const winnerSide = (m: {
-    homeScore: number | null;
-    awayScore: number | null;
-    penaltyWinner: 'home' | 'away' | null;
-  }): 'home' | 'away' | null => {
-    if (m.homeScore == null || m.awayScore == null) return null;
-    if (m.homeScore > m.awayScore) return 'home';
-    if (m.homeScore < m.awayScore) return 'away';
-    return m.penaltyWinner ?? null; // empate ⇒ shootout aún sin resolver
-  };
-
-  const finalWinner = finalMatch ? winnerSide(finalMatch) : null;
-  if (
-    !finalMatch ||
-    finalMatch.status !== 'finished' ||
-    finalWinner == null ||
-    finalMatch.homeTeamId == null ||
-    finalMatch.awayTeamId == null
-  ) {
-    return null;
-  }
-
-  const championTeamId =
-    finalWinner === 'home' ? finalMatch.homeTeamId : finalMatch.awayTeamId;
-  const runnerUpTeamId =
-    finalWinner === 'home' ? finalMatch.awayTeamId : finalMatch.homeTeamId;
-
-  // ── Tercer puesto: ganador del partido por el bronce, si ya se jugó ──────────
-  const thirdMatch = await db
-    .select({
-      homeTeamId: matches.homeTeamId,
-      awayTeamId: matches.awayTeamId,
-      homeScore: matches.homeScore,
-      awayScore: matches.awayScore,
-      status: matches.status,
-      penaltyWinner: matches.penaltyWinner,
-    })
-    .from(matches)
-    .where(eq(matches.round, 'third'))
-    .get();
-
-  let thirdPlaceTeamId: number | null = null;
-  if (thirdMatch && thirdMatch.status === 'finished') {
-    const side = winnerSide(thirdMatch);
-    if (side != null) {
-      thirdPlaceTeamId = side === 'home' ? thirdMatch.homeTeamId : thirdMatch.awayTeamId;
-    }
-  }
-
+/**
+ * Núcleo compartido entre el resolver final y el provisional: profundidades,
+ * batacazos/méritos, sorpresas/decepciones, valla y goleador, a partir de los
+ * partidos finished al momento de la llamada. `championTeamId` null ⇒ nadie
+ * recibe el bump de profundidad de campeón (modo provisional).
+ */
+async function computeInsights(championTeamId: number | null): Promise<Insights> {
   // ── Profundidad alcanzada + goles recibidos por equipo ──────────────────────
   const finished = await db
     .select({
@@ -126,6 +113,7 @@ export async function resolveTournamentOutcomeDetailed(): Promise<DetailedOutcom
       homeScore: matches.homeScore,
       awayScore: matches.awayScore,
       round: matches.round,
+      decidedByPenalties: matches.decidedByPenalties,
     })
     .from(matches)
     .where(eq(matches.status, 'finished'));
@@ -145,8 +133,18 @@ export async function resolveTournamentOutcomeDetailed(): Promise<DetailedOutcom
     if (m.homeTeamId == null || m.awayTeamId == null) continue;
     if (m.homeScore == null || m.awayScore == null) continue;
     const round = m.round as Round;
-    note(m.homeTeamId, round, m.awayScore);
-    note(m.awayTeamId, round, m.homeScore);
+    // Valla: goles DE JUEGO. El bump de penales (+1 al ganador de la tanda)
+    // define quién avanza, pero no es un gol recibido de verdad — sin esta
+    // resta, perder una tanda 0-0 le computaba al perdedor un gol fantasma
+    // en contra y podía costarle la valla menos vencida.
+    let gameHome = m.homeScore;
+    let gameAway = m.awayScore;
+    if (m.decidedByPenalties === 1 && gameHome !== gameAway) {
+      if (gameHome > gameAway) gameHome -= 1;
+      else gameAway -= 1;
+    }
+    note(m.homeTeamId, round, gameAway);
+    note(m.awayTeamId, round, gameHome);
   }
 
   const teamRows = await db.select({ id: teams.id, code: teams.code }).from(teams);
@@ -211,17 +209,18 @@ export async function resolveTournamentOutcomeDetailed(): Promise<DetailedOutcom
   // ── Valla menos vencida: menor promedio de goles recibidos, mínimo octavos ──
   const depthById = new Map(runs.map((r) => [r.teamId, r.depthReached]));
   let bestAvg = Infinity;
-  const avgByTeam: Array<{ teamId: number; avg: number }> = [];
+  const defenseTable: DefenseRow[] = [];
   for (const [teamId, c] of concededByTeam) {
-    if ((depthById.get(teamId) ?? 0) < DEPTH.r16) continue; // tiene que llegar a octavos
     if (c.played === 0) continue;
+    const qualifies = (depthById.get(teamId) ?? 0) >= DEPTH.r16;
     const avg = c.ga / c.played;
-    avgByTeam.push({ teamId, avg });
-    if (avg < bestAvg) bestAvg = avg;
+    defenseTable.push({ teamId, played: c.played, ga: c.ga, avg, qualifies });
+    if (qualifies && avg < bestAvg) bestAvg = avg;
   }
+  defenseTable.sort((a, b) => a.avg - b.avg || a.ga - b.ga || a.teamId - b.teamId);
   const EPS = 1e-9;
-  const bestDefenseTeamIds = avgByTeam
-    .filter((t) => Math.abs(t.avg - bestAvg) < EPS)
+  const bestDefenseTeamIds = defenseTable
+    .filter((t) => t.qualifies && Math.abs(t.avg - bestAvg) < EPS)
     .map((t) => t.teamId);
 
   // ── Goleador: máximo de goles sumando partidos finished (empate ⇒ todos) ────
@@ -241,17 +240,128 @@ export async function resolveTournamentOutcomeDetailed(): Promise<DetailedOutcom
       : [];
 
   return {
+    surprises,
+    disappointments,
+    revelationTeamIds,
+    surpriseEliminatedTeamIds,
+    bestDefenseTeamIds,
+    defenseTable,
+    topScorerPlayerIds,
+    maxGoals,
+  };
+}
+
+/**
+ * Calcula el resultado resuelto del torneo a partir del estado actual de la DB.
+ * Devuelve null si el torneo todavía no terminó (final no finished o empatada
+ * sin penalty_winner), porque varias categorías no son firmes hasta entonces.
+ */
+export async function resolveTournamentOutcome(): Promise<TournamentOutcome | null> {
+  const detailed = await resolveTournamentOutcomeDetailed();
+  return detailed?.outcome ?? null;
+}
+
+/** Igual que resolveTournamentOutcome pero con las candidatas explicadas. */
+export async function resolveTournamentOutcomeDetailed(): Promise<DetailedOutcome | null> {
+  const finalMatch = await db
+    .select({
+      homeTeamId: matches.homeTeamId,
+      awayTeamId: matches.awayTeamId,
+      homeScore: matches.homeScore,
+      awayScore: matches.awayScore,
+      status: matches.status,
+      penaltyWinner: matches.penaltyWinner,
+    })
+    .from(matches)
+    .where(eq(matches.round, 'final'))
+    .get();
+
+  const finalWinner = finalMatch ? winnerSide(finalMatch) : null;
+  if (
+    !finalMatch ||
+    finalMatch.status !== 'finished' ||
+    finalWinner == null ||
+    finalMatch.homeTeamId == null ||
+    finalMatch.awayTeamId == null
+  ) {
+    return null;
+  }
+
+  const championTeamId =
+    finalWinner === 'home' ? finalMatch.homeTeamId : finalMatch.awayTeamId;
+  const runnerUpTeamId =
+    finalWinner === 'home' ? finalMatch.awayTeamId : finalMatch.homeTeamId;
+
+  // ── Tercer puesto: ganador del partido por el bronce, si ya se jugó ──────────
+  const thirdMatch = await db
+    .select({
+      homeTeamId: matches.homeTeamId,
+      awayTeamId: matches.awayTeamId,
+      homeScore: matches.homeScore,
+      awayScore: matches.awayScore,
+      status: matches.status,
+      penaltyWinner: matches.penaltyWinner,
+    })
+    .from(matches)
+    .where(eq(matches.round, 'third'))
+    .get();
+
+  let thirdPlaceTeamId: number | null = null;
+  if (thirdMatch && thirdMatch.status === 'finished') {
+    const side = winnerSide(thirdMatch);
+    if (side != null) {
+      thirdPlaceTeamId = side === 'home' ? thirdMatch.homeTeamId : thirdMatch.awayTeamId;
+    }
+  }
+
+  const insights = await computeInsights(championTeamId);
+
+  return {
     outcome: {
       championTeamId,
       runnerUpTeamId,
       thirdPlaceTeamId,
-      topScorerPlayerIds,
-      revelationTeamIds,
-      surpriseEliminatedTeamIds,
-      bestDefenseTeamIds,
+      topScorerPlayerIds: insights.topScorerPlayerIds,
+      revelationTeamIds: insights.revelationTeamIds,
+      surpriseEliminatedTeamIds: insights.surpriseEliminatedTeamIds,
+      bestDefenseTeamIds: insights.bestDefenseTeamIds,
     },
-    surprises,
-    disappointments,
+    surprises: insights.surprises,
+    disappointments: insights.disappointments,
+    defenseTable: insights.defenseTable,
+  };
+}
+
+/**
+ * Estado provisional de las categorías "de tabla" (sorpresas, decepciones,
+ * valla, goleador) SIN exigir que la final haya terminado. Para transparencia
+ * durante el torneo: con la final y el 3er puesto ya definidos, las candidatas
+ * de los equipos eliminados son firmes; valla y goleador pueden moverse con
+ * los partidos que restan.
+ */
+export async function resolveProvisionalOutcome(): Promise<ProvisionalOutcome> {
+  const insights = await computeInsights(null);
+
+  // Equipos con partidos pendientes (finalistas / 3er puesto): su profundidad
+  // todavía puede crecer, así que evaluarlos como sorpresa/decepción sería
+  // ruido ("Argentina decepción" con la final por jugarse). Se excluyen de las
+  // candidatas provisionales; entran recién en el resolver final.
+  const pending = await db
+    .select({ homeTeamId: matches.homeTeamId, awayTeamId: matches.awayTeamId })
+    .from(matches)
+    .where(sql`${matches.status} != 'finished'`);
+  const stillPlaying = new Set<number>();
+  for (const m of pending) {
+    if (m.homeTeamId != null) stillPlaying.add(m.homeTeamId);
+    if (m.awayTeamId != null) stillPlaying.add(m.awayTeamId);
+  }
+
+  return {
+    surprises: insights.surprises.filter((c) => !stillPlaying.has(c.teamId)),
+    disappointments: insights.disappointments.filter((c) => !stillPlaying.has(c.teamId)),
+    defenseTable: insights.defenseTable,
+    topScorerPlayerIds: insights.topScorerPlayerIds,
+    maxGoals: insights.maxGoals,
   };
 }
 

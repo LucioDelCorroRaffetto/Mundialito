@@ -7,14 +7,21 @@
  * liberan los puntos tiene que quedar claro por qué Alemania es decepción y
  * Portugal no, por qué Cabo Verde es sorpresa y Bosnia no).
  *
- * Devuelve { resolved: false } hasta que la final esté finished — mismo
- * criterio que el resolver de puntos.
+ * Hasta que la final esté finished devuelve `resolved:false` PERO con un
+ * bloque `provisional`: sorpresas/decepciones al día de hoy (firmes para los
+ * eliminados — su profundidad ya no cambia), la tabla de la valla menos
+ * vencida (PJ / goles en contra / promedio) y el goleador parcial. Para que
+ * la definición de cada categoría sea transparente antes de liberar puntos.
  */
 import type { Request, Response } from 'express';
 import { inArray } from 'drizzle-orm';
 import { db } from '../../../db/index.js';
 import { teams, players } from '../../../db/schema/index.js';
-import { resolveTournamentOutcomeDetailed } from '../../../services/tournament-resolver.js';
+import {
+  resolveTournamentOutcomeDetailed,
+  resolveProvisionalOutcome,
+  type DefenseRow,
+} from '../../../services/tournament-resolver.js';
 import type { CategoryCandidate } from '../../../lib/tournament-scoring.js';
 
 const DEPTH_LABEL = [
@@ -59,30 +66,101 @@ function explainDisappointment(c: CategoryCandidate, rivalName: string | null): 
   return `Quedó 1 ronda por debajo de lo esperado (${expected} → ${reached}), pero perdió contra un rival de su nivel o superior: caer ajustado ante un grande no es decepcionar.`;
 }
 
-export async function getTournamentOutcomeHandler(_req: Request, res: Response): Promise<void> {
-  const detailed = await resolveTournamentOutcomeDetailed();
-  if (!detailed) {
-    res.json({ resolved: false });
-    return;
+/** Junta todos los teamIds referenciados para resolverlos en una sola query. */
+function collectTeamIds(
+  candidates: CategoryCandidate[],
+  defenseTable: DefenseRow[],
+  extra: Array<number | null | undefined>,
+): Set<number> {
+  const ids = new Set<number>();
+  for (const id of extra) if (id != null) ids.add(id);
+  for (const c of candidates) {
+    ids.add(c.teamId);
+    if (c.meritRivalId != null) ids.add(c.meritRivalId);
+    if (c.upsetLossRivalId != null) ids.add(c.upsetLossRivalId);
   }
-  const { outcome, surprises, disappointments } = detailed;
+  for (const d of defenseTable) ids.add(d.teamId);
+  return ids;
+}
 
-  const teamIds = new Set<number>();
-  for (const id of [outcome.championTeamId, outcome.runnerUpTeamId, outcome.thirdPlaceTeamId])
-    if (id != null) teamIds.add(id);
-  for (const id of outcome.bestDefenseTeamIds) teamIds.add(id);
-  for (const c of [...surprises, ...disappointments]) {
-    teamIds.add(c.teamId);
-    if (c.meritRivalId != null) teamIds.add(c.meritRivalId);
-    if (c.upsetLossRivalId != null) teamIds.add(c.upsetLossRivalId);
-  }
-  const teamRows = teamIds.size
+async function teamMapFor(ids: Set<number>): Promise<Map<number, TeamRef>> {
+  const rows = ids.size
     ? await db
         .select({ id: teams.id, code: teams.code, name: teams.name })
         .from(teams)
-        .where(inArray(teams.id, [...teamIds]))
+        .where(inArray(teams.id, [...ids]))
     : [];
-  const teamById = new Map<number, TeamRef>(teamRows.map((t) => [t.id, t]));
+  return new Map(rows.map((t) => [t.id, t]));
+}
+
+function serializeCandidates(
+  candidates: CategoryCandidate[],
+  teamById: Map<number, TeamRef>,
+  explain: (c: CategoryCandidate, rivalName: string | null) => string,
+  rivalIdOf: (c: CategoryCandidate) => number | null | undefined,
+) {
+  return candidates.map((c) => ({
+    team: teamById.get(c.teamId) ?? null,
+    included: c.included,
+    gap: c.gap,
+    reason: explain(c, rivalIdOf(c) != null ? teamById.get(rivalIdOf(c)!)?.name ?? null : null),
+  }));
+}
+
+/** Tabla de valla lista para mostrar: solo los que califican (≥ octavos). */
+function serializeDefense(defenseTable: DefenseRow[], teamById: Map<number, TeamRef>) {
+  return defenseTable
+    .filter((d) => d.qualifies)
+    .map((d) => ({
+      team: teamById.get(d.teamId) ?? null,
+      played: d.played,
+      goalsAgainst: d.ga,
+      avg: Number(d.avg.toFixed(3)),
+    }));
+}
+
+export async function getTournamentOutcomeHandler(_req: Request, res: Response): Promise<void> {
+  const detailed = await resolveTournamentOutcomeDetailed();
+
+  if (!detailed) {
+    // Torneo en curso: estado provisional para transparencia de categorías.
+    const prov = await resolveProvisionalOutcome();
+    const teamById = await teamMapFor(
+      collectTeamIds([...prov.surprises, ...prov.disappointments], prov.defenseTable, []),
+    );
+    const playerRows = prov.topScorerPlayerIds.length
+      ? await db
+          .select({ id: players.id, name: players.name })
+          .from(players)
+          .where(inArray(players.id, prov.topScorerPlayerIds))
+      : [];
+    res.json({
+      resolved: false,
+      provisional: {
+        surprises: serializeCandidates(prov.surprises, teamById, explainSurprise, (c) => c.meritRivalId),
+        disappointments: serializeCandidates(
+          prov.disappointments,
+          teamById,
+          explainDisappointment,
+          (c) => c.upsetLossRivalId,
+        ),
+        defenseTable: serializeDefense(prov.defenseTable, teamById),
+        topScorers: playerRows.map((p) => ({ ...p, goals: prov.maxGoals })),
+      },
+    });
+    return;
+  }
+
+  const { outcome, surprises, disappointments, defenseTable } = detailed;
+
+  const teamById = await teamMapFor(
+    collectTeamIds([...surprises, ...disappointments], defenseTable, [
+      outcome.championTeamId,
+      outcome.runnerUpTeamId,
+      outcome.thirdPlaceTeamId,
+      ...outcome.bestDefenseTeamIds,
+    ]),
+  );
   const ref = (id: number | null): TeamRef | null => (id == null ? null : teamById.get(id) ?? null);
 
   const playerRows = outcome.topScorerPlayerIds.length
@@ -99,20 +177,13 @@ export async function getTournamentOutcomeHandler(_req: Request, res: Response):
     thirdPlace: ref(outcome.thirdPlaceTeamId),
     topScorers: playerRows,
     bestDefense: outcome.bestDefenseTeamIds.map((id) => ref(id)).filter(Boolean),
-    surprises: surprises.map((c) => ({
-      team: ref(c.teamId),
-      included: c.included,
-      gap: c.gap,
-      reason: explainSurprise(c, c.meritRivalId != null ? teamById.get(c.meritRivalId)?.name ?? null : null),
-    })),
-    disappointments: disappointments.map((c) => ({
-      team: ref(c.teamId),
-      included: c.included,
-      gap: c.gap,
-      reason: explainDisappointment(
-        c,
-        c.upsetLossRivalId != null ? teamById.get(c.upsetLossRivalId)?.name ?? null : null,
-      ),
-    })),
+    defenseTable: serializeDefense(defenseTable, teamById),
+    surprises: serializeCandidates(surprises, teamById, explainSurprise, (c) => c.meritRivalId),
+    disappointments: serializeCandidates(
+      disappointments,
+      teamById,
+      explainDisappointment,
+      (c) => c.upsetLossRivalId,
+    ),
   });
 }
