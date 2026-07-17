@@ -287,6 +287,27 @@ FIFA.com no necesita key.
 > Orden cronológico inverso (lo nuevo arriba). Cada entrada: **qué cambió y por qué**.
 > Agregá una entrada cada vez que cambies un comportamiento por una razón.
 
+### 2026-07-16 (4) — Colapsar Oloráculo y outcome (feedback: "vista muy cargada")
+
+Segundo pase de feedback sobre `/tournament-predictions`: liga + Oloráculo +
+resultados de Copa + 7 pick cards apilados se sentía denso incluso con el
+restyle anterior. Solo presentacional. `tsc`=0, 50 tests, build OK.
+
+- **`ForecastTopCandidates`** (antes siempre expandido con la tabla de 8
+  filas visible): ahora colapsado por defecto. El header muestra un teaser de
+  una línea ("Favorito: {equipo} ({%})") en vez de la tabla completa; tocar
+  el header la despliega. El toggle interno "Ver top 20" sigue igual, adentro.
+- **`TournamentOutcomeCard`**: mismo tratamiento. Colapsado por defecto con
+  teaser dinámico en el header (`Campeón: X` si resolved, o
+  `N cenicientos · M decepciones definidos` en provisional). Todo el resto
+  (podio, tabla de valla, candidatas) quedó igual, solo detrás del toggle.
+- Los 7 pick cards (`openSection`, un solo acordeón abierto a la vez) ya
+  estaban colapsados por defecto — no se tocaron, son la tarea principal de
+  la página.
+- Patrón reusado: mismo `slideUpVariants` + `AnimatePresence` + chevron que
+  ya usan `LeagueHistorySection`/`LeagueCopaPicksSection` — consistencia
+  entre todas las secciones colapsables de la app.
+
 ### 2026-07-16 (3) — Restyle de picks de Copa y outcome (feedback: "no es amigable")
 
 El dueño vio la entrega anterior (texto plano, ✓/✗ crudos, chips de una sola

@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
   ArrowLeft, Clock, CheckCircle2, Search, X, XCircle, Trophy, Users, Lock,
-  Medal, Award, Goal, Shield, Sparkles, TrendingDown, type LucideIcon,
+  Medal, Award, Goal, Shield, Sparkles, TrendingDown, ChevronDown, type LucideIcon,
 } from 'lucide-react';
 
 // ─── Tournament-level lock ────────────────────────────────────────────────────
@@ -31,7 +31,7 @@ import { SkeletonList } from '@/shared/components/skeleton';
 import { toast } from 'sonner';
 import type { Player, Team } from '@/shared/types/api';
 import { TeamFlag } from '@/shared/components/ui/team-flag';
-import { staggerContainer, staggerItem, useMotionPrefs } from '@/shared/lib/motion';
+import { staggerContainer, staggerItem, slideUpVariants, useMotionPrefs } from '@/shared/lib/motion';
 
 interface LocalPicks {
   championTeamId: number | null;
@@ -344,82 +344,114 @@ function pct(v: number) { return (v * 100).toFixed(0) + '%'; }
 /**
  * Modelo estadístico completo — Monte Carlo del Oloráculo con bracket
  * de knockout (R32 → Final). Ordenado por % de ganar el torneo.
+ *
+ * Colapsado por defecto: la página ya apila liga + este modelo + resultados
+ * de Copa + el formulario de picks, y mostrar la tabla completa de entrada
+ * la hacía sentir sobrecargada. El header siempre muestra el favorito actual
+ * como teaser, así se ve lo esencial sin tener que abrir nada.
  */
 function ForecastTopCandidates() {
   const { data, isLoading } = useTournamentForecast();
   const { reduced } = useMotionPrefs();
+  const [open, setOpen] = useState(false);
   const [expanded, setExpanded] = useState(false);
   if (isLoading || !data || data.length === 0) return null;
 
   const top = data.slice(0, expanded ? 20 : 8);
+  const favorite = data[0];
 
   return (
     <div className="mx-4 mb-3 rounded-xl bg-elevated border border-border overflow-hidden">
-      <div className="flex items-center justify-between px-3 pt-3 pb-2">
-        <div>
-          <p className="text-sm-s font-semibold text-text">Oloráculo</p>
-          <p className="text-[10px] text-muted">Monte Carlo · Poisson + Elo · 5 000 simulaciones</p>
-        </div>
-        <button
-          type="button"
-          onClick={() => setExpanded((v) => !v)}
-          className="text-xs-s text-accent font-semibold"
-        >
-          {expanded ? 'Ver menos' : 'Ver más'}
-        </button>
-      </div>
-
-      {/* Header */}
-      <div className="grid text-[10px] font-semibold text-muted uppercase px-3 pb-1 border-b border-border"
-        style={{ gridTemplateColumns: '1.5rem 1.2rem 1fr repeat(6, 2.6rem)' }}>
-        <span>#</span>
-        <span />
-        <span>Equipo</span>
-        {FORECAST_ROUNDS.map((r) => (
-          <span key={r.key} className="text-center">{r.label}</span>
-        ))}
-      </div>
-
-      {/* Rows */}
-      <motion.div
-        className="flex flex-col divide-y divide-border"
-        variants={staggerContainer(reduced, 0.025)}
-        initial="initial"
-        animate="animate"
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        className="w-full flex items-center gap-2.5 px-3 py-3 text-left"
       >
-        {top.map((row, i) => (
-          <motion.div
-            key={row.teamId}
-            variants={staggerItem(reduced)}
-            className="grid items-center px-3 py-1.5 text-xs-s"
-            style={{ gridTemplateColumns: '1.5rem 1.2rem 1fr repeat(6, 2.6rem)' }}
-          >
-            <span className="text-muted font-bold tabular-nums">{i + 1}</span>
-            <TeamFlag code={row.teamCode} emoji={row.teamFlag} size={16} />
-            <span className="text-text font-semibold truncate pr-1">{row.teamName}</span>
-            {FORECAST_ROUNDS.map((r) => {
-              const val = row[r.key];
-              const isChamp = r.key === 'winTournament';
-              return (
-                <span
-                  key={r.key}
-                  className={`text-center tabular-nums font-semibold ${
-                    isChamp
-                      ? 'text-amber-500'
-                      : val >= 0.5
-                      ? 'text-emerald-500'
-                      : val >= 0.2
-                      ? 'text-text'
-                      : 'text-muted'
-                  }`}
+        <span className="flex-shrink-0 w-8 h-8 rounded-full bg-accent-soft flex items-center justify-center">
+          <Sparkles size={15} className="text-accent" />
+        </span>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm-s font-semibold text-text">Oloráculo</p>
+          <p className="text-[10px] text-muted truncate">
+            {open ? 'Monte Carlo · Poisson + Elo · 5 000 simulaciones' : (
+              <>
+                Favorito: <TeamFlag code={favorite.teamCode} emoji={favorite.teamFlag} size={16} className="inline-block align-[-3px] mx-0.5" />
+                <span className="font-semibold text-text">{favorite.teamName}</span> ({pct(favorite.winTournament)})
+              </>
+            )}
+          </p>
+        </div>
+        <ChevronDown size={16} className={cn('text-muted transition-transform flex-shrink-0', open && 'rotate-180')} />
+      </button>
+
+      <AnimatePresence initial={false}>
+        {open && (
+          <motion.div variants={slideUpVariants(reduced, 8)} initial="initial" animate="animate" exit="exit">
+            <div className="flex items-center justify-end px-3 pb-2">
+              <button
+                type="button"
+                onClick={() => setExpanded((v) => !v)}
+                className="text-xs-s text-accent font-semibold"
+              >
+                {expanded ? 'Ver menos' : 'Ver top 20'}
+              </button>
+            </div>
+
+            {/* Header */}
+            <div className="grid text-[10px] font-semibold text-muted uppercase px-3 pb-1 border-b border-border"
+              style={{ gridTemplateColumns: '1.5rem 1.2rem 1fr repeat(6, 2.6rem)' }}>
+              <span>#</span>
+              <span />
+              <span>Equipo</span>
+              {FORECAST_ROUNDS.map((r) => (
+                <span key={r.key} className="text-center">{r.label}</span>
+              ))}
+            </div>
+
+            {/* Rows */}
+            <motion.div
+              className="flex flex-col divide-y divide-border"
+              variants={staggerContainer(reduced, 0.025)}
+              initial="initial"
+              animate="animate"
+            >
+              {top.map((row, i) => (
+                <motion.div
+                  key={row.teamId}
+                  variants={staggerItem(reduced)}
+                  className="grid items-center px-3 py-1.5 text-xs-s"
+                  style={{ gridTemplateColumns: '1.5rem 1.2rem 1fr repeat(6, 2.6rem)' }}
                 >
-                  {pct(val)}
-                </span>
-              );
-            })}
+                  <span className="text-muted font-bold tabular-nums">{i + 1}</span>
+                  <TeamFlag code={row.teamCode} emoji={row.teamFlag} size={16} />
+                  <span className="text-text font-semibold truncate pr-1">{row.teamName}</span>
+                  {FORECAST_ROUNDS.map((r) => {
+                    const val = row[r.key];
+                    const isChamp = r.key === 'winTournament';
+                    return (
+                      <span
+                        key={r.key}
+                        className={`text-center tabular-nums font-semibold ${
+                          isChamp
+                            ? 'text-amber-500'
+                            : val >= 0.5
+                            ? 'text-emerald-500'
+                            : val >= 0.2
+                            ? 'text-text'
+                            : 'text-muted'
+                        }`}
+                      >
+                        {pct(val)}
+                      </span>
+                    );
+                  })}
+                </motion.div>
+              ))}
+            </motion.div>
           </motion.div>
-        ))}
-      </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
@@ -557,9 +589,16 @@ function PodiumTile({
  * jugada muestra el resultado firme; antes, el estado PROVISIONAL (sorpresas/
  * decepciones al día de hoy, tabla de valla y goleador parcial) para que la
  * definición de cada categoría sea transparente antes de liberar los puntos.
+ *
+ * Colapsado por defecto (mismo motivo que el Oloráculo arriba): la página ya
+ * apila liga + modelo + esto + el formulario de picks, y con la valla, las
+ * candidatas y el podio siempre abiertos se sentía sobrecargada. El header
+ * muestra un teaser de una línea con lo esencial.
  */
 function TournamentOutcomeCard() {
   const { data } = useTournamentOutcome();
+  const { reduced } = useMotionPrefs();
+  const [open, setOpen] = useState(false);
   if (!data) return null;
 
   const provisional = !data.resolved ? data.provisional : undefined;
@@ -573,9 +612,22 @@ function TournamentOutcomeCard() {
     ? (data.topScorers ?? []).map((p) => p.name).join(', ') || undefined
     : (provisional?.topScorers ?? []).map((p) => `${p.name} (${p.goals})`).join(', ') || undefined;
 
+  const includedSurprises = (surprises ?? []).filter((c) => c.included).length;
+  const includedDisappointments = (disappointments ?? []).filter((c) => c.included).length;
+  const teaser = data.resolved
+    ? `Campeón: ${data.champion?.name ?? '—'}`
+    : includedSurprises + includedDisappointments > 0
+      ? `${includedSurprises} cenicientos · ${includedDisappointments} decepciones definidos`
+      : 'Sorpresas, decepciones y valla al día';
+
   return (
     <div className="mx-4 mb-4 rounded-xl bg-elevated border border-accent-border overflow-hidden">
-      <div className="flex items-center gap-2 px-4 pt-4 pb-1">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        className="w-full flex items-center gap-2 px-4 py-3.5 text-left"
+      >
         <span className="flex-shrink-0 w-8 h-8 rounded-full bg-accent-soft flex items-center justify-center">
           <Trophy size={16} className="text-accent" />
         </span>
@@ -583,11 +635,7 @@ function TournamentOutcomeCard() {
           <p className="text-sm-s font-bold text-text">
             {data.resolved ? 'Resultados del torneo' : 'Así viene la Copa'}
           </p>
-          {!data.resolved && (
-            <p className="text-[10px] text-muted leading-snug">
-              Se termina de definir con la final
-            </p>
-          )}
+          <p className="text-[10px] text-muted truncate">{teaser}</p>
         </div>
         {!data.resolved && (
           <span className="flex-shrink-0 text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded bg-accent-soft text-accent">
@@ -599,69 +647,76 @@ function TournamentOutcomeCard() {
             Definitivo
           </span>
         )}
-      </div>
+        <ChevronDown size={16} className={cn('text-muted transition-transform flex-shrink-0', open && 'rotate-180')} />
+      </button>
 
-      {!data.resolved && (
-        <p className="px-4 pb-3 text-xs-s text-muted leading-snug">
-          Los puntos se liberan cuando termine la final. Las sorpresas y decepciones de los equipos ya
-          eliminados no cambian más; la valla y el goleador todavía pueden moverse con los partidos
-          que faltan.
-        </p>
-      )}
+      <AnimatePresence initial={false}>
+        {open && (
+          <motion.div variants={slideUpVariants(reduced, 8)} initial="initial" animate="animate" exit="exit">
+            {!data.resolved && (
+              <p className="px-4 pb-3 text-xs-s text-muted leading-snug">
+                Los puntos se liberan cuando termine la final. Las sorpresas y decepciones de los
+                equipos ya eliminados no cambian más; la valla y el goleador todavía pueden moverse
+                con los partidos que faltan.
+              </p>
+            )}
 
-      <div className="px-4 pb-1">
-        {data.resolved && (
-          <div className="grid grid-cols-2 gap-2 mb-3">
-            <PodiumTile icon={Trophy} iconClass="bg-amber-400/20 text-amber-500" label="Campeón" team={data.champion} />
-            <PodiumTile icon={Medal} iconClass="bg-slate-400/20 text-slate-400" label="Finalista" team={data.runnerUp} />
-            <PodiumTile icon={Award} iconClass="bg-orange-500/20 text-orange-500" label="Tercer puesto" team={data.thirdPlace} />
-            <PodiumTile icon={Goal} iconClass="bg-emerald-500/20 text-emerald-500" label="Goleador" text={scorerText} />
-          </div>
-        )}
+            <div className="px-4 pb-1">
+              {data.resolved && (
+                <div className="grid grid-cols-2 gap-2 mb-3">
+                  <PodiumTile icon={Trophy} iconClass="bg-amber-400/20 text-amber-500" label="Campeón" team={data.champion} />
+                  <PodiumTile icon={Medal} iconClass="bg-slate-400/20 text-slate-400" label="Finalista" team={data.runnerUp} />
+                  <PodiumTile icon={Award} iconClass="bg-orange-500/20 text-orange-500" label="Tercer puesto" team={data.thirdPlace} />
+                  <PodiumTile icon={Goal} iconClass="bg-emerald-500/20 text-emerald-500" label="Goleador" text={scorerText} />
+                </div>
+              )}
 
-        {!data.resolved && scorerText && (
-          <div className="mb-3">
-            <PodiumTile icon={Goal} iconClass="bg-emerald-500/20 text-emerald-500" label="Goleador parcial" text={scorerText} />
-          </div>
-        )}
+              {!data.resolved && scorerText && (
+                <div className="mb-3">
+                  <PodiumTile icon={Goal} iconClass="bg-emerald-500/20 text-emerald-500" label="Goleador parcial" text={scorerText} />
+                </div>
+              )}
 
-        <DefenseTableBlock rows={defenseTable} provisional={!data.resolved} />
+              <DefenseTableBlock rows={defenseTable} provisional={!data.resolved} />
 
-        {(surprises?.length ?? 0) > 0 && (
-          <div className="mb-4">
-            <div className="flex items-center gap-1.5 mb-2">
-              <Sparkles size={14} className="text-violet-400" />
-              <p className="text-sm-s font-semibold text-text">Cenicientos — quiénes y por qué</p>
+              {(surprises?.length ?? 0) > 0 && (
+                <div className="mb-4">
+                  <div className="flex items-center gap-1.5 mb-2">
+                    <Sparkles size={14} className="text-violet-400" />
+                    <p className="text-sm-s font-semibold text-text">Cenicientos — quiénes y por qué</p>
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    {surprises!.map((c) => (
+                      <OutcomeCandidateRow key={c.team?.id ?? c.reason} c={c} />
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {(disappointments?.length ?? 0) > 0 && (
+                <div className="mb-1">
+                  <div className="flex items-center gap-1.5 mb-2">
+                    <TrendingDown size={14} className="text-red-400" />
+                    <p className="text-sm-s font-semibold text-text">Decepciones — quiénes y por qué</p>
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    {disappointments!.map((c) => (
+                      <OutcomeCandidateRow key={c.team?.id ?? c.reason} c={c} />
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
-            <div className="flex flex-col gap-1.5">
-              {surprises!.map((c) => (
-                <OutcomeCandidateRow key={c.team?.id ?? c.reason} c={c} />
-              ))}
-            </div>
-          </div>
-        )}
 
-        {(disappointments?.length ?? 0) > 0 && (
-          <div className="mb-1">
-            <div className="flex items-center gap-1.5 mb-2">
-              <TrendingDown size={14} className="text-red-400" />
-              <p className="text-sm-s font-semibold text-text">Decepciones — quiénes y por qué</p>
-            </div>
-            <div className="flex flex-col gap-1.5">
-              {disappointments!.map((c) => (
-                <OutcomeCandidateRow key={c.team?.id ?? c.reason} c={c} />
-              ))}
-            </div>
-          </div>
+            <p className="px-4 pb-4 pt-2 text-xs-s text-muted leading-snug border-t border-border mt-1">
+              Acertás la categoría si tu elegida es <span className="text-text font-semibold">cualquiera</span>{' '}
+              de las marcadas <CheckCircle2 size={11} className="inline text-green-500 -mt-0.5" />. Las
+              marcadas <XCircle size={11} className="inline text-muted -mt-0.5" /> estuvieron cerca pero
+              no calificaron — el porqué está en cada una.
+            </p>
+          </motion.div>
         )}
-      </div>
-
-      <p className="px-4 pb-4 pt-2 text-xs-s text-muted leading-snug border-t border-border mt-1">
-        Acertás la categoría si tu elegida es <span className="text-text font-semibold">cualquiera</span>{' '}
-        de las marcadas <CheckCircle2 size={11} className="inline text-green-500 -mt-0.5" />. Las marcadas{' '}
-        <XCircle size={11} className="inline text-muted -mt-0.5" /> estuvieron cerca pero no calificaron
-        — el porqué está en cada una.
-      </p>
+      </AnimatePresence>
     </div>
   );
 }
