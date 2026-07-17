@@ -59,17 +59,32 @@ export async function resolveTournamentOutcomeDetailed(): Promise<DetailedOutcom
       homeScore: matches.homeScore,
       awayScore: matches.awayScore,
       status: matches.status,
+      penaltyWinner: matches.penaltyWinner,
     })
     .from(matches)
     .where(eq(matches.round, 'final'))
     .get();
 
+  // Un KO cerrado en empate puede estar resuelto igual si el admin cargó el
+  // lado ganador de la tanda vía `penalty_winner` (sin bump del score — el
+  // mecanismo usado en el match 96 de octavos). Sin esto, una final cerrada
+  // así jamás resolvería las predicciones de Copa.
+  const winnerSide = (m: {
+    homeScore: number | null;
+    awayScore: number | null;
+    penaltyWinner: 'home' | 'away' | null;
+  }): 'home' | 'away' | null => {
+    if (m.homeScore == null || m.awayScore == null) return null;
+    if (m.homeScore > m.awayScore) return 'home';
+    if (m.homeScore < m.awayScore) return 'away';
+    return m.penaltyWinner ?? null; // empate ⇒ shootout aún sin resolver
+  };
+
+  const finalWinner = finalMatch ? winnerSide(finalMatch) : null;
   if (
     !finalMatch ||
     finalMatch.status !== 'finished' ||
-    finalMatch.homeScore == null ||
-    finalMatch.awayScore == null ||
-    finalMatch.homeScore === finalMatch.awayScore || // empate ⇒ shootout aún sin resolver
+    finalWinner == null ||
     finalMatch.homeTeamId == null ||
     finalMatch.awayTeamId == null
   ) {
@@ -77,9 +92,9 @@ export async function resolveTournamentOutcomeDetailed(): Promise<DetailedOutcom
   }
 
   const championTeamId =
-    finalMatch.homeScore > finalMatch.awayScore ? finalMatch.homeTeamId : finalMatch.awayTeamId;
+    finalWinner === 'home' ? finalMatch.homeTeamId : finalMatch.awayTeamId;
   const runnerUpTeamId =
-    finalMatch.homeScore > finalMatch.awayScore ? finalMatch.awayTeamId : finalMatch.homeTeamId;
+    finalWinner === 'home' ? finalMatch.awayTeamId : finalMatch.homeTeamId;
 
   // ── Tercer puesto: ganador del partido por el bronce, si ya se jugó ──────────
   const thirdMatch = await db
@@ -89,21 +104,18 @@ export async function resolveTournamentOutcomeDetailed(): Promise<DetailedOutcom
       homeScore: matches.homeScore,
       awayScore: matches.awayScore,
       status: matches.status,
+      penaltyWinner: matches.penaltyWinner,
     })
     .from(matches)
     .where(eq(matches.round, 'third'))
     .get();
 
   let thirdPlaceTeamId: number | null = null;
-  if (
-    thirdMatch &&
-    thirdMatch.status === 'finished' &&
-    thirdMatch.homeScore != null &&
-    thirdMatch.awayScore != null &&
-    thirdMatch.homeScore !== thirdMatch.awayScore
-  ) {
-    thirdPlaceTeamId =
-      thirdMatch.homeScore > thirdMatch.awayScore ? thirdMatch.homeTeamId : thirdMatch.awayTeamId;
+  if (thirdMatch && thirdMatch.status === 'finished') {
+    const side = winnerSide(thirdMatch);
+    if (side != null) {
+      thirdPlaceTeamId = side === 'home' ? thirdMatch.homeTeamId : thirdMatch.awayTeamId;
+    }
   }
 
   // ── Profundidad alcanzada + goles recibidos por equipo ──────────────────────

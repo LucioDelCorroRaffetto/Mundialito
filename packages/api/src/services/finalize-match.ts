@@ -16,7 +16,7 @@ import { matches, predictions } from '../db/schema/index.js';
 import { calculatePoints, scoringResult } from '../lib/scoring.js';
 import { recomputeAllFantasyPoints } from './fantasy-scoring-service.js';
 import { broadcastMatchUpdate } from '../ws/broadcast.js';
-import { checkAchievements } from './achievement-service.js';
+import { checkAchievements, finalizeFantasyLegends } from './achievement-service.js';
 import { resolveTournamentPredictions } from './tournament-resolver.js';
 
 export interface FinalizeResult {
@@ -89,7 +89,12 @@ export async function finalizeMatchFromFinalWhistle(matchId: number): Promise<Fi
   }
 
   // Si lo que se cerró fue la final, puntuar las predicciones de Copa
-  // (campeón, goleador, etc.). Idempotente; no-op si la final no está firme.
+  // (campeón, goleador, etc.) y otorgar fantasy_legend. Idempotentes; el
+  // resolver es no-op si la final no está firme (empate a la espera de la
+  // tanda — en ese caso el bump de penales de sync-scores/sync-espn dispara
+  // la resolución en su propio tick). Sin el finalizeFantasyLegends acá, el
+  // camino primario (cierre por pitazo FIFA, que se adelanta a las fuentes)
+  // dejaba el logro sin otorgar: sync-scores nunca veía la transición.
   if (m.round === 'final') {
     try {
       const { resolved, updated: tpUpdated } = await resolveTournamentPredictions();
@@ -98,6 +103,14 @@ export async function finalizeMatchFromFinalWhistle(matchId: number): Promise<Fi
       }
     } catch (err) {
       console.error('[finalize-match] tournament predictions resolve failed:', err);
+    }
+    try {
+      const winners = await finalizeFantasyLegends();
+      if (winners.length > 0) {
+        console.log(`[finalize-match] fantasy_legend awarded to ${winners.length} user(s):`, winners);
+      }
+    } catch (err) {
+      console.error('[finalize-match] fantasy_legend finalize failed:', err);
     }
   }
 

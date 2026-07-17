@@ -8,6 +8,7 @@ import { calculatePoints, scoringResult } from '../../../lib/scoring.js';
 import { recomputeAllFantasyPoints } from '../../../services/fantasy-scoring-service.js';
 import { broadcastMatchUpdate } from '../../../ws/broadcast.js';
 import { checkAchievements, finalizeFantasyLegends } from '../../../services/achievement-service.js';
+import { resolveTournamentPredictions } from '../../../services/tournament-resolver.js';
 
 export const updateMatchSchema = z.object({
   homeScore: z.number().int().min(0).max(30).optional(),
@@ -109,6 +110,18 @@ export async function updateMatchHandler(req: Request, res: Response) {
       finalizeFantasyLegends().catch((err) => {
         console.error('[update-match] fantasy_legend finalize failed:', err);
       });
+      // Re-resolver las predicciones de Copa: una corrección manual del score
+      // de la final (que además setea score_locked y suprime los triggers de
+      // los syncs) debe re-puntuar campeón/goleador/etc. Idempotente.
+      resolveTournamentPredictions()
+        .then(({ resolved, updated }) => {
+          if (resolved && updated > 0) {
+            console.log(`[update-match] predicciones de Copa re-puntuadas: ${updated} filas`);
+          }
+        })
+        .catch((err) => {
+          console.error('[update-match] tournament predictions resolve failed:', err);
+        });
     }
   }
 

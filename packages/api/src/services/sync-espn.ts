@@ -23,8 +23,9 @@ import {
 } from '../lib/score-sync.js';
 import { recomputeAllFantasyPoints } from './fantasy-scoring-service.js';
 import { broadcastMatchUpdate } from '../ws/broadcast.js';
-import { checkAchievements } from './achievement-service.js';
+import { checkAchievements, finalizeFantasyLegends } from './achievement-service.js';
 import { syncFifaStatsForMatch } from './sync-fifa-stats.js';
+import { resolveTournamentPredictions } from './tournament-resolver.js';
 import type { SyncScoresResult } from './sync-scores.js';
 
 // ─── ESPN response types ──────────────────────────────────────────────────────
@@ -404,6 +405,33 @@ export async function syncScoresFromEspn(date: string): Promise<SyncScoresResult
       await recomputeAllFantasyPoints();
     } catch (err) {
       errors.push(`Fantasy recompute failed: ${String(err)}`);
+    }
+
+    // Cierre de torneo por el camino ESPN: si la final quedó finished (incluye
+    // el tick del bump de penales, que además setea scoreLocked y por lo tanto
+    // suprime el disparo equivalente de sync-scores), otorgar fantasy_legend y
+    // puntuar las predicciones de Copa. Ambos son idempotentes; sin esto, una
+    // final resuelta vía ESPN dejaba campeón/goleador sin puntuar hasta correr
+    // el script a mano.
+    try {
+      const finalMatch = await db
+        .select({ status: matches.status })
+        .from(matches)
+        .where(eq(matches.round, 'final'))
+        .limit(1)
+        .get();
+      if (finalMatch?.status === 'finished') {
+        const winners = await finalizeFantasyLegends();
+        if (winners.length > 0) {
+          console.log(`[sync-espn] fantasy_legend awarded to ${winners.length} user(s):`, winners);
+        }
+        const { resolved, updated } = await resolveTournamentPredictions();
+        if (resolved && updated > 0) {
+          console.log(`[sync-espn] predicciones de Copa puntuadas: ${updated} filas`);
+        }
+      }
+    } catch (err) {
+      errors.push(`Tournament finalize (ESPN path) failed: ${String(err)}`);
     }
   }
 

@@ -287,7 +287,56 @@ FIFA.com no necesita key.
 > Orden cronológico inverso (lo nuevo arriba). Cada entrada: **qué cambió y por qué**.
 > Agregá una entrada cada vez que cambies un comportamiento por una razón.
 
-### 2026-07-03 — Backlog técnico menor (Sesión 8 de `PLAN-MEJORAS.md`, última del plan)
+### 2026-07-16 — Auditoría de cierre de torneo: backfill final/3er puesto + gaps del resolver de Copa y fantasy_legend
+
+Revisión pedida por el dueño: "que al terminar el Mundial todo se actualice
+solo". Se auditó el camino completo final→resolver→wrapped y se verificó prod
+(read-only via `.env.ro`).
+
+**✅ Lo bueno (hecho y verificado — `tsc` API = 0, 130 tests verdes, /health OK):**
+- **Backfill de equipos aplicado en prod** (`backfill-knockout-teams.ts --apply`):
+  la final (#104) y el 3er puesto (#103) estaban **TBD vs TBD** con las semis ya
+  jugadas — sin equipos, `findMatch` (por identidad) no matcheaba y la final NO
+  se habría sincronizado sola. Ahora: #103 FRA-ENG, #104 ESP-ARG (verificado
+  contra FIFA live + resultado de semis). `fifa_id_match/stage` ya estaban
+  mapeados para TODOS los KO (backfill:fifa al día — no hace falta re-correrlo).
+- **Fix `finalize-match.ts`**: el camino primario (cierre por pitazo FIFA) NUNCA
+  otorgaba `fantasy_legend` — solo vivía en sync-scores, que tras el cierre por
+  FIFA no ve transición (statusChanged/scoreChanged=false → continue). Ahora el
+  bloque `round === 'final'` también llama `finalizeFantasyLegends()`.
+- **Fix `sync-espn.ts`**: el camino ESPN no llamaba NI al resolver de Copa NI a
+  fantasy_legend. Peor: el bump de penales por ESPN setea `scoreLocked=1`, que
+  suprime para siempre el trigger equivalente de sync-scores (scoreChanged
+  nunca más). Ahora, con `anyMatchFinished` y la final finished, dispara ambos.
+- **Fix `update-match.ts` (admin)**: corregir el score de la final a mano ahora
+  también re-resuelve las predicciones de Copa (antes solo fantasy_legend; el
+  `score_locked` que setea el admin suprimía los triggers de los syncs).
+- **Fix `tournament-resolver.ts`**: el resolver determinaba campeón/3ro SOLO por
+  score y devolvía null en empate. Pero el admin usa `penalty_winner` (lado
+  ganador sin bump — así se cerró el #96 de octavos, 0-0 pen). Una final cerrada
+  así jamás resolvía la Copa. Ahora `winnerSide()` cae a `penaltyWinner` si el
+  score está empatado (final Y 3er puesto).
+- **Verificado ya sano**: cadena FIFA whistle→finalize→resolver p/ final decidida
+  en 90'/ET; bump de penales por football-data → resolver+legends (sync-scores);
+  wrapped gate (`round='final'` finished), banner home (`useTournamentPhase` con
+  allMatches limit 200, cap del endpoint = 200 OK), push `send-wrapped-ready`
+  (run-daily 12:00 UTC, idempotente vía `worker_flags` — la tabla existe en prod),
+  worker deadline-reminders cubre la fecha 'final' (`['third','final']`).
+
+**⚠️ Lo malo / pendiente:**
+- 🔴 **Los 4 fixes NO están commiteados ni deployados** — deployar ENTRE HOY y
+  el 18/7 (no hay partidos hasta el 3er puesto). Sin deploy, la final por penales
+  vía ESPN o el fantasy_legend por pitazo FIFA quedan manuales
+  (`resolve-tournament-predictions.ts` / `POST /admin/finalize-fantasy`).
+- 🟡 **`.env.ro` tiene los valores CRUZADOS**: `TURSO_DATABASE_URL` contiene el
+  JWT y `TURSO_AUTH_TOKEN` la URL libsql. Corregir el archivo (los scripts que
+  lo usen a ciegas revientan con URL_INVALID).
+- 🟡 `use-tournament-phase.ts:38` filtra `round !== '3rd'` pero la API manda
+  `'third'` — filtro muerto. Hoy es inofensivo (el loop solo mira r32..final),
+  pero el literal está mal; el tipo de `mock.ts` también dice `'3rd'`.
+- 🟡 Wrapped sigue sin walkthrough real (login Google) — validar `?preview=1`
+  como admin antes del 19/7.
+- 🟢 `tournament_predictions`: 63 filas, 0 puntuadas (esperado hasta la final).
 
 Detalle completo de los 6 ítems en la tabla "Registro de sesiones" de
 `PLAN-MEJORAS.md` (no repetido acá). Resumen: lock in-memory de `/sync`
