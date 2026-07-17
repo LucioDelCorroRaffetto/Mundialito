@@ -1,7 +1,10 @@
 import { useState, useEffect, memo } from 'react';
 import { useParams, useNavigate, Navigate, Link } from 'react-router-dom';
 import { motion, LayoutGroup, AnimatePresence } from 'framer-motion';
-import { ArrowLeft, Share2, Users, Trophy, ChevronRight, ChevronDown, Pencil, X, Check, Swords } from 'lucide-react';
+import {
+  ArrowLeft, Share2, Users, Trophy, ChevronRight, ChevronDown, Pencil, X, Check, Swords,
+  Medal, Award, Goal, Shield, Sparkles, TrendingDown, type LucideIcon,
+} from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/shared/lib/cn';
 import { ShareSheet } from '@/shared/components/share-sheet';
@@ -269,31 +272,59 @@ function LeagueHistorySection({
   );
 }
 
-/** Un pick de equipo como chip bandera+código; '—' si no eligió. */
-function PickChip({
-  label,
-  teamId,
-  teamMap,
-  text,
-}: {
+/** Config visual de cada categoría de Copa: ícono, color y de dónde sale el valor. */
+const COPA_CATEGORIES: Array<{
+  key: keyof Pick<
+    LeagueTournamentPick,
+    'championTeamId' | 'runnerUpTeamId' | 'thirdPlaceTeamId' | 'revelationTeamId' | 'surpriseEliminatedTeamId' | 'bestDefenseTeamId'
+  > | 'topScorerName';
   label: string;
+  icon: LucideIcon;
+  iconClass: string;
+  chipClass: string;
+}> = [
+  { key: 'championTeamId', label: 'Campeón', icon: Trophy, iconClass: 'text-amber-500', chipClass: 'bg-amber-500/10 border-amber-500/20' },
+  { key: 'runnerUpTeamId', label: 'Finalista', icon: Medal, iconClass: 'text-slate-400', chipClass: 'bg-slate-400/10 border-slate-400/20' },
+  { key: 'thirdPlaceTeamId', label: 'Tercer puesto', icon: Award, iconClass: 'text-orange-500', chipClass: 'bg-orange-500/10 border-orange-500/20' },
+  { key: 'topScorerName', label: 'Goleador', icon: Goal, iconClass: 'text-emerald-500', chipClass: 'bg-emerald-500/10 border-emerald-500/20' },
+  { key: 'revelationTeamId', label: 'Ceniciento', icon: Sparkles, iconClass: 'text-violet-400', chipClass: 'bg-violet-400/10 border-violet-400/20' },
+  { key: 'surpriseEliminatedTeamId', label: 'Decepción', icon: TrendingDown, iconClass: 'text-red-400', chipClass: 'bg-red-400/10 border-red-400/20' },
+  { key: 'bestDefenseTeamId', label: 'Valla menos vencida', icon: Shield, iconClass: 'text-sky-500', chipClass: 'bg-sky-500/10 border-sky-500/20' },
+];
+
+/** Un pick como pill con ícono de categoría + bandera/nombre; '—' si no eligió. */
+function PickChip({
+  cat,
+  teamId,
+  text,
+  teamMap,
+}: {
+  cat: (typeof COPA_CATEGORIES)[number];
   teamId?: number | null;
-  teamMap: ReturnType<typeof useTeamMap>['data'];
   text?: string | null;
+  teamMap: ReturnType<typeof useTeamMap>['data'];
 }) {
   const team = teamId != null ? teamMap?.get(teamId) : undefined;
+  const Icon = cat.icon;
+  const filled = !!team || !!text;
   return (
-    <span className="inline-flex items-center gap-1 text-xs-s text-muted whitespace-nowrap">
-      <span aria-hidden>{label}</span>
+    <span
+      title={cat.label}
+      className={cn(
+        'inline-flex items-center gap-1.5 pl-1.5 pr-2 py-1 rounded-full border text-xs-s whitespace-nowrap',
+        filled ? cat.chipClass : 'bg-elevated border-border',
+      )}
+    >
+      <Icon size={12} className={filled ? cat.iconClass : 'text-muted/60'} aria-label={cat.label} />
       {team ? (
-        <>
+        <span className="inline-flex items-center gap-1 font-semibold text-text">
           <TeamFlag code={team.code} emoji={team.flag} size={16} />
-          <span className="font-semibold text-text">{team.code}</span>
-        </>
+          {team.code}
+        </span>
       ) : text ? (
-        <span className="font-semibold text-text truncate max-w-[9rem]">{text}</span>
+        <span className="font-semibold text-text truncate max-w-[8rem]">{text}</span>
       ) : (
-        <span>—</span>
+        <span className="text-muted">sin elegir</span>
       )}
     </span>
   );
@@ -321,39 +352,54 @@ function LeagueCopaPicksSection({
   if (picks.length === 0) return null;
 
   const anyScored = picks.some((p) => p.points != null);
-
-  const row = (p: LeagueTournamentPick) => (
-    <div
-      key={p.userId}
-      className={cn(
-        'px-4 py-2.5 border-t border-border first:border-t-0',
-        p.userId === currentUserId && 'bg-accent-soft/40',
-      )}
-    >
-      <div className="flex items-center gap-2 mb-1">
-        {p.avatarUrl ? (
-          <img src={p.avatarUrl} alt="" loading="lazy" className="w-5 h-5 rounded-full object-cover flex-shrink-0" />
-        ) : (
-          <span className="w-5 h-5 rounded-full bg-elevated border border-border flex-shrink-0" />
-        )}
-        <span className="text-sm-s font-semibold text-text truncate">{p.username}</span>
-        {anyScored && (
-          <span className="ml-auto text-sm-s font-bold text-accent tabular-nums">
-            {p.points != null ? `+${p.points}` : '—'}
-          </span>
-        )}
-      </div>
-      <div className="flex flex-wrap gap-x-3 gap-y-1 pl-7">
-        <PickChip label="🏆" teamId={p.championTeamId} teamMap={teamMap} />
-        <PickChip label="🥈" teamId={p.runnerUpTeamId} teamMap={teamMap} />
-        <PickChip label="🥉" teamId={p.thirdPlaceTeamId} teamMap={teamMap} />
-        <PickChip label="⚽" teamMap={teamMap} text={p.topScorerName} />
-        <PickChip label="✨" teamId={p.revelationTeamId} teamMap={teamMap} />
-        <PickChip label="📉" teamId={p.surpriseEliminatedTeamId} teamMap={teamMap} />
-        <PickChip label="🧤" teamId={p.bestDefenseTeamId} teamMap={teamMap} />
-      </div>
-    </div>
+  // Orden: el propio user primero (para verse sin scrollear), después el
+  // orden que ya vino del server (puntos desc cuando hay, alfabético si no).
+  const sortedPicks = [...picks].sort((a, b) =>
+    a.userId === currentUserId ? -1 : b.userId === currentUserId ? 1 : 0,
   );
+
+  const row = (p: LeagueTournamentPick) => {
+    const isMe = p.userId === currentUserId;
+    return (
+      <div
+        key={p.userId}
+        className={cn(
+          'p-3 rounded-xl border',
+          isMe ? 'bg-accent-soft/50 border-accent-border' : 'bg-card border-border',
+        )}
+      >
+        <div className="flex items-center gap-2 mb-2">
+          {p.avatarUrl ? (
+            <img src={p.avatarUrl} alt="" loading="lazy" className="w-6 h-6 rounded-full object-cover flex-shrink-0" />
+          ) : (
+            <span className="w-6 h-6 rounded-full bg-elevated border border-border flex items-center justify-center text-[10px] font-bold text-muted flex-shrink-0">
+              {p.username.slice(0, 1).toUpperCase()}
+            </span>
+          )}
+          <span className="text-sm-s font-semibold text-text truncate">
+            {p.username}
+            {isMe && <span className="text-muted font-normal"> (vos)</span>}
+          </span>
+          {anyScored && (
+            <span className="ml-auto flex-shrink-0 text-sm-s font-bold text-accent tabular-nums">
+              {p.points != null ? `+${p.points} pts` : '—'}
+            </span>
+          )}
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          {COPA_CATEGORIES.map((cat) => (
+            <PickChip
+              key={cat.key}
+              cat={cat}
+              teamId={cat.key === 'topScorerName' ? undefined : (p[cat.key] as number | null)}
+              text={cat.key === 'topScorerName' ? p.topScorerName : undefined}
+              teamMap={teamMap}
+            />
+          ))}
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div className="border-t border-border">
@@ -361,10 +407,16 @@ function LeagueCopaPicksSection({
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
-        className="w-full flex items-center justify-between px-4 py-3 text-sm-s font-semibold text-text"
+        className="w-full flex items-center gap-2 px-4 py-3 text-sm-s font-semibold text-text"
       >
-        Picks de Copa
-        <ChevronDown size={16} className={cn('text-muted transition-transform', open && 'rotate-180')} />
+        <Trophy size={15} className="text-accent flex-shrink-0" />
+        <span className="flex-1 text-left">Picks de Copa</span>
+        {anyScored && (
+          <span className="text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-500">
+            Puntuado
+          </span>
+        )}
+        <ChevronDown size={16} className={cn('text-muted transition-transform flex-shrink-0', open && 'rotate-180')} />
       </button>
       <AnimatePresence initial={false}>
         {open && (
@@ -373,16 +425,14 @@ function LeagueCopaPicksSection({
             initial="initial"
             animate="animate"
             exit="exit"
-            className="pb-2"
+            className="px-4 pb-4"
           >
-            <p className="px-4 pb-2 text-xs-s text-muted leading-snug">
-              🏆 campeón · 🥈 finalista · 🥉 tercero · ⚽ goleador · ✨ ceniciento · 📉 decepción ·
-              🧤 valla menos vencida.{' '}
+            <p className="pb-3 text-xs-s text-muted leading-snug">
               {anyScored
                 ? 'Los puntos de Copa ya están liberados y suman a la tabla.'
                 : 'Los puntos se liberan cuando termine la final.'}
             </p>
-            {picks.map(row)}
+            <div className="flex flex-col gap-2">{sortedPicks.map(row)}</div>
           </motion.div>
         )}
       </AnimatePresence>

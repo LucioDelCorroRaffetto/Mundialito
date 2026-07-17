@@ -41,7 +41,7 @@ export function useMyTournamentPredictions() {
   });
 }
 
-interface OutcomeTeamRef {
+export interface OutcomeTeamRef {
   id: number;
   code: string;
   name: string;

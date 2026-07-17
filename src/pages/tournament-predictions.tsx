@@ -1,7 +1,10 @@
-import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Clock, CheckCircle2, Search, X, Trophy, Users, Lock } from 'lucide-react';
+import {
+  ArrowLeft, Clock, CheckCircle2, Search, X, XCircle, Trophy, Users, Lock,
+  Medal, Award, Goal, Shield, Sparkles, TrendingDown, type LucideIcon,
+} from 'lucide-react';
 
 // ─── Tournament-level lock ────────────────────────────────────────────────────
 // Cierre extendido hasta el cierre de la fase de grupos (2026-06-19 18:55 UTC).
@@ -20,6 +23,7 @@ import {
   useTournamentOutcome,
   type OutcomeCandidate,
   type DefenseTableRow,
+  type OutcomeTeamRef,
 } from '@/shared/hooks/use-tournament-predictions';
 import { useMyLeagues } from '@/shared/hooks/use-leagues';
 import { useTournamentForecast } from '@/shared/hooks/use-forecasts';
@@ -420,19 +424,26 @@ function ForecastTopCandidates() {
   );
 }
 
-/** Fila de candidata a sorpresa/decepción con su veredicto y porqué. */
+/**
+ * Tarjeta de una candidata a sorpresa/decepción con su veredicto y porqué.
+ * Las que califican quedan resaltadas (borde + check verde); las rechazadas
+ * se ven apagadas pero con la explicación igual visible — el punto es que el
+ * "no" también se entienda, no solo el "sí".
+ */
 function OutcomeCandidateRow({ c }: { c: OutcomeCandidate }) {
   return (
-    <div className="flex items-start gap-2">
-      <span
-        className={cn(
-          'flex-shrink-0 mt-0.5 text-xs font-bold',
-          c.included ? 'text-green-400' : 'text-muted',
-        )}
-        aria-label={c.included ? 'Entra' : 'No entra'}
-      >
-        {c.included ? '✓' : '✗'}
-      </span>
+    <div
+      className={cn(
+        'flex items-start gap-2.5 p-2.5 rounded-lg border',
+        c.included ? 'bg-card border-border' : 'bg-transparent border-transparent opacity-70',
+      )}
+    >
+      {c.included ? (
+        <CheckCircle2 size={18} className="flex-shrink-0 mt-0.5 text-green-500" aria-label="Entra en la categoría" />
+      ) : (
+        <XCircle size={18} className="flex-shrink-0 mt-0.5 text-muted" aria-label="No entra en la categoría" />
+      )}
+      {c.team && <TeamFlag code={c.team.code} size={20} className="flex-shrink-0 mt-0.5" />}
       <div className="min-w-0">
         <p className={cn('text-sm-s font-semibold', c.included ? 'text-text' : 'text-muted')}>
           {c.team?.name ?? '—'}
@@ -443,43 +454,100 @@ function OutcomeCandidateRow({ c }: { c: OutcomeCandidate }) {
   );
 }
 
-/** Tabla de la valla menos vencida: PJ / goles en contra / promedio. */
+/**
+ * Tabla de la valla menos vencida: ranking con PJ / goles en contra /
+ * promedio. El líder queda resaltado con un pill verde y borde propio,
+ * el resto en filas neutras — mismo lenguaje visual que el resto de rankings
+ * de la app (stats, leaderboard).
+ */
 function DefenseTableBlock({ rows, provisional }: { rows: DefenseTableRow[]; provisional: boolean }) {
   if (rows.length === 0) return null;
   const best = rows[0]?.avg;
   return (
     <div className="mb-4">
-      <p className="text-sm-s font-semibold text-text mb-2">
-        Valla menos vencida — cómo viene{provisional ? '' : ' (final)'}
-      </p>
-      <div
-        className="grid items-center gap-y-1 text-xs-s"
-        style={{ gridTemplateColumns: '1fr 2.4rem 2.4rem 3.2rem' }}
-      >
-        <span className="text-muted">Equipo (llegó a octavos)</span>
-        <span className="text-muted text-center">PJ</span>
-        <span className="text-muted text-center">GC</span>
-        <span className="text-muted text-right">Prom.</span>
-        {rows.map((d) => {
+      <div className="flex items-center gap-1.5 mb-2">
+        <Shield size={14} className="text-sky-500" />
+        <p className="text-sm-s font-semibold text-text">
+          Valla menos vencida{provisional ? ' — cómo viene' : ''}
+        </p>
+      </div>
+      <div className="flex flex-col gap-1">
+        {rows.map((d, i) => {
           const leads = d.avg === best;
           return (
-            <Fragment key={d.team?.id ?? `${d.played}-${d.goalsAgainst}`}>
-              <span className={cn('truncate pr-1 font-semibold', leads ? 'text-text' : 'text-muted')}>
+            <div
+              key={d.team?.id ?? `${d.played}-${d.goalsAgainst}`}
+              className={cn(
+                'flex items-center gap-2.5 px-2.5 py-2 rounded-lg border',
+                leads ? 'bg-emerald-500/10 border-emerald-500/30' : 'bg-card border-border',
+              )}
+            >
+              <span className="w-4 text-center text-xs-s font-bold text-muted tabular-nums">{i + 1}</span>
+              {d.team && <TeamFlag code={d.team.code} size={20} />}
+              <span className={cn('flex-1 min-w-0 truncate text-sm-s font-semibold', leads ? 'text-text' : 'text-muted')}>
                 {d.team?.name ?? '—'}
               </span>
-              <span className={cn('text-center tabular-nums', leads ? 'text-text' : 'text-muted')}>{d.played}</span>
-              <span className={cn('text-center tabular-nums', leads ? 'text-text' : 'text-muted')}>{d.goalsAgainst}</span>
-              <span className={cn('text-right tabular-nums font-semibold', leads ? 'text-green-400' : 'text-muted')}>
+              <span className="text-xs-s text-muted tabular-nums whitespace-nowrap">
+                {d.goalsAgainst} GC · {d.played} PJ
+              </span>
+              <span
+                className={cn(
+                  'flex-shrink-0 px-2 py-0.5 rounded-full text-xs-s font-bold tabular-nums',
+                  leads ? 'bg-emerald-500 text-white' : 'bg-elevated text-muted',
+                )}
+              >
                 {d.avg.toFixed(2)}
               </span>
-            </Fragment>
+            </div>
           );
         })}
       </div>
       <p className="text-xs-s text-muted mt-1.5 leading-snug">
-        Menor promedio de goles en contra, entre los que llegaron al menos a octavos. Los penales de
-        una tanda no cuentan como goles.
+        Promedio de goles en contra entre los que llegaron al menos a octavos. Los penales de una
+        tanda no cuentan como goles.
       </p>
+    </div>
+  );
+}
+
+/** Tile de una categoría del podio: ícono en círculo + label + valor destacado. */
+function PodiumTile({
+  icon: Icon,
+  iconClass,
+  label,
+  team,
+  teams,
+  text,
+}: {
+  icon: LucideIcon;
+  iconClass: string;
+  label: string;
+  team?: OutcomeTeamRef | null;
+  teams?: Array<OutcomeTeamRef | null>;
+  text?: string;
+}) {
+  const teamList = teams ?? (team !== undefined ? [team] : []);
+  return (
+    <div className="flex items-center gap-2.5 p-2.5 rounded-lg bg-card border border-border">
+      <span className={cn('flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center', iconClass)}>
+        <Icon size={16} />
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className="text-[10px] uppercase tracking-wide text-muted font-semibold">{label}</p>
+        {teamList.length > 0 ? (
+          <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
+            {teamList.filter((t): t is OutcomeTeamRef => !!t).map((t) => (
+              <span key={t.id} className="inline-flex items-center gap-1 text-sm-s font-bold text-text">
+                <TeamFlag code={t.code} size={16} />
+                {t.code}
+              </span>
+            ))}
+            {teamList.length === 0 && <span className="text-sm-s font-bold text-muted">—</span>}
+          </div>
+        ) : (
+          <p className="text-sm-s font-bold text-text truncate mt-0.5">{text || '—'}</p>
+        )}
+      </div>
     </div>
   );
 }
@@ -501,86 +569,98 @@ function TournamentOutcomeCard() {
   const disappointments = data.resolved ? data.disappointments : provisional?.disappointments;
   const defenseTable = (data.resolved ? data.defenseTable : provisional?.defenseTable) ?? [];
 
-  const podium: Array<[string, string]> | null = data.resolved
-    ? [
-        ['Campeón', data.champion?.name ?? '—'],
-        ['Finalista', data.runnerUp?.name ?? '—'],
-        ['Tercer puesto', data.thirdPlace?.name ?? '—'],
-        ['Goleador', (data.topScorers ?? []).map((p) => p.name).join(', ') || '—'],
-        ['Valla menos vencida', (data.bestDefense ?? []).map((t) => t?.name).join(', ') || '—'],
-      ]
-    : null;
+  const scorerText = data.resolved
+    ? (data.topScorers ?? []).map((p) => p.name).join(', ') || undefined
+    : (provisional?.topScorers ?? []).map((p) => `${p.name} (${p.goals})`).join(', ') || undefined;
 
   return (
-    <div className="mx-4 mb-4 p-4 rounded-lg bg-elevated border border-accent-border">
-      <div className="flex items-center gap-2 mb-3">
-        <Trophy size={16} className="text-accent" />
-        <p className="text-sm-s font-semibold text-text">
-          {data.resolved ? 'Resultados del torneo' : 'Así viene la Copa'}
-        </p>
+    <div className="mx-4 mb-4 rounded-xl bg-elevated border border-accent-border overflow-hidden">
+      <div className="flex items-center gap-2 px-4 pt-4 pb-1">
+        <span className="flex-shrink-0 w-8 h-8 rounded-full bg-accent-soft flex items-center justify-center">
+          <Trophy size={16} className="text-accent" />
+        </span>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm-s font-bold text-text">
+            {data.resolved ? 'Resultados del torneo' : 'Así viene la Copa'}
+          </p>
+          {!data.resolved && (
+            <p className="text-[10px] text-muted leading-snug">
+              Se termina de definir con la final
+            </p>
+          )}
+        </div>
         {!data.resolved && (
-          <span className="text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded bg-accent-soft text-accent">
+          <span className="flex-shrink-0 text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded bg-accent-soft text-accent">
             Provisional
+          </span>
+        )}
+        {data.resolved && (
+          <span className="flex-shrink-0 text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-500">
+            Definitivo
           </span>
         )}
       </div>
 
       {!data.resolved && (
-        <p className="text-xs-s text-muted mb-3 leading-snug">
+        <p className="px-4 pb-3 text-xs-s text-muted leading-snug">
           Los puntos se liberan cuando termine la final. Las sorpresas y decepciones de los equipos ya
           eliminados no cambian más; la valla y el goleador todavía pueden moverse con los partidos
           que faltan.
         </p>
       )}
 
-      {podium && (
-        <div className="flex flex-col gap-1.5 mb-4">
-          {podium.map(([label, value]) => (
-            <div key={label} className="flex items-center justify-between gap-3">
-              <span className="text-sm-s text-muted">{label}</span>
-              <span className="text-sm-s font-bold text-text text-right">{value}</span>
+      <div className="px-4 pb-1">
+        {data.resolved && (
+          <div className="grid grid-cols-2 gap-2 mb-3">
+            <PodiumTile icon={Trophy} iconClass="bg-amber-400/20 text-amber-500" label="Campeón" team={data.champion} />
+            <PodiumTile icon={Medal} iconClass="bg-slate-400/20 text-slate-400" label="Finalista" team={data.runnerUp} />
+            <PodiumTile icon={Award} iconClass="bg-orange-500/20 text-orange-500" label="Tercer puesto" team={data.thirdPlace} />
+            <PodiumTile icon={Goal} iconClass="bg-emerald-500/20 text-emerald-500" label="Goleador" text={scorerText} />
+          </div>
+        )}
+
+        {!data.resolved && scorerText && (
+          <div className="mb-3">
+            <PodiumTile icon={Goal} iconClass="bg-emerald-500/20 text-emerald-500" label="Goleador parcial" text={scorerText} />
+          </div>
+        )}
+
+        <DefenseTableBlock rows={defenseTable} provisional={!data.resolved} />
+
+        {(surprises?.length ?? 0) > 0 && (
+          <div className="mb-4">
+            <div className="flex items-center gap-1.5 mb-2">
+              <Sparkles size={14} className="text-violet-400" />
+              <p className="text-sm-s font-semibold text-text">Cenicientos — quiénes y por qué</p>
             </div>
-          ))}
-        </div>
-      )}
-
-      {!data.resolved && (provisional?.topScorers?.length ?? 0) > 0 && (
-        <div className="flex items-center justify-between gap-3 mb-4">
-          <span className="text-sm-s text-muted">Goleador parcial</span>
-          <span className="text-sm-s font-bold text-text text-right">
-            {provisional!.topScorers.map((p) => `${p.name} (${p.goals})`).join(', ')}
-          </span>
-        </div>
-      )}
-
-      <DefenseTableBlock rows={defenseTable} provisional={!data.resolved} />
-
-      {(surprises?.length ?? 0) > 0 && (
-        <div className="mb-4">
-          <p className="text-sm-s font-semibold text-text mb-2">Cenicientos — quiénes y por qué</p>
-          <div className="flex flex-col gap-2.5">
-            {surprises!.map((c) => (
-              <OutcomeCandidateRow key={c.team?.id ?? c.reason} c={c} />
-            ))}
+            <div className="flex flex-col gap-1.5">
+              {surprises!.map((c) => (
+                <OutcomeCandidateRow key={c.team?.id ?? c.reason} c={c} />
+              ))}
+            </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {(disappointments?.length ?? 0) > 0 && (
-        <div>
-          <p className="text-sm-s font-semibold text-text mb-2">Decepciones — quiénes y por qué</p>
-          <div className="flex flex-col gap-2.5">
-            {disappointments!.map((c) => (
-              <OutcomeCandidateRow key={c.team?.id ?? c.reason} c={c} />
-            ))}
+        {(disappointments?.length ?? 0) > 0 && (
+          <div className="mb-1">
+            <div className="flex items-center gap-1.5 mb-2">
+              <TrendingDown size={14} className="text-red-400" />
+              <p className="text-sm-s font-semibold text-text">Decepciones — quiénes y por qué</p>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              {disappointments!.map((c) => (
+                <OutcomeCandidateRow key={c.team?.id ?? c.reason} c={c} />
+              ))}
+            </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
-      <p className="text-xs-s text-muted mt-3 leading-snug">
+      <p className="px-4 pb-4 pt-2 text-xs-s text-muted leading-snug border-t border-border mt-1">
         Acertás la categoría si tu elegida es <span className="text-text font-semibold">cualquiera</span>{' '}
-        de las marcadas con ✓. Las marcadas con ✗ estuvieron cerca pero no calificaron — el porqué está
-        en cada una.
+        de las marcadas <CheckCircle2 size={11} className="inline text-green-500 -mt-0.5" />. Las marcadas{' '}
+        <XCircle size={11} className="inline text-muted -mt-0.5" /> estuvieron cerca pero no calificaron
+        — el porqué está en cada una.
       </p>
     </div>
   );

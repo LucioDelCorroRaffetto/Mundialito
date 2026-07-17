@@ -287,6 +287,28 @@ FIFA.com no necesita key.
 > Orden cronológico inverso (lo nuevo arriba). Cada entrada: **qué cambió y por qué**.
 > Agregá una entrada cada vez que cambies un comportamiento por una razón.
 
+### 2026-07-16 (3) — Restyle de picks de Copa y outcome (feedback: "no es amigable")
+
+El dueño vio la entrega anterior (texto plano, ✓/✗ crudos, chips de una sola
+línea) y pidió mejorar el estilo. Solo presentacional — cero cambios de lógica
+ni de datos, mismos hooks/endpoints. `tsc` front = 0, 50 tests, build OK.
+
+- **`TournamentOutcomeCard`** (`tournament-predictions.tsx`): podio como grid
+  2×2 de tiles con ícono en círculo de color por categoría (🏆 Trophy ámbar,
+  Medal finalista, Award tercero, Goal goleador), badge "Provisional"/
+  "Definitivo" en el header. Tabla de valla pasó de grid de texto a filas tipo
+  ranking con rank number + bandera + pill de promedio (líder resaltado en
+  verde). Candidatas de sorpresa/decepción: `CheckCircle2`/`XCircle` de lucide
+  en vez de glifos ✓/✗ de texto, tarjeta con borde para las que califican.
+- **`LeagueCopaPicksSection`** (`league-detail.tsx`): los emoji crudos (🏆🥈🥉…)
+  como texto pasaron a `COPA_CATEGORIES` — config de ícono lucide + color por
+  categoría, reusada tanto para los chips como si se necesita en otro lado.
+  Cada miembro es ahora una card (antes fila con borde-top), tu propia fila
+  ordenada primero y con fondo distinguible, avatar con inicial de fallback en
+  vez de círculo vacío, badge "Puntuado" cuando hay points.
+- Sin cambios de datos/lógica — mismo `useTournamentOutcome`/
+  `useLeagueTournamentPicks`, mismos campos del resolver.
+
 ### 2026-07-16 (2) — Picks de Copa visibles por liga + outcome provisional + fix valla con penales
 
 Pedido del dueño: transparencia de las predicciones de Copa antes de la final.
