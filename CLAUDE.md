@@ -287,6 +287,49 @@ FIFA.com no necesita key.
 > Orden cronológico inverso (lo nuevo arriba). Cada entrada: **qué cambió y por qué**.
 > Agregá una entrada cada vez que cambies un comportamiento por una razón.
 
+### 2026-07-19 — Día de la final: celebración del campeón en la home + cierre del gap de reconcile
+
+Pedido del dueño para el último día: (1) celebración con fuegos artificiales en
+la home al anunciarse el campeón, (2) revisar que todas las asignaciones de
+puntos (Copa, fantasy) funcionen al terminar la final.
+
+**✅ Lo bueno (hecho y verificado — tsc API+front = 0, 130+50 tests, build OK):**
+- **Nuevo `ChampionCelebration`** (`src/shared/components/champion-celebration.tsx`):
+  hero dorado con bandera + nombre del campeón, 5 estallidos de fuegos
+  artificiales en loop (framer-motion casero, determinístico, solo
+  transform/opacity — mismo criterio que `ConfettiBurst`), sheen, podio
+  🥈/🥉 y CTA a /tournament. Con reduce-motion los fuegos no se montan.
+  En la home reemplaza al `CountdownHero` cuando hay campeón.
+- **Wiring**: `useTournamentOutcome` ganó `refetchWhileUnresolved` — cuando la
+  fase pasa a 'completed' (poll de matches 60s), la home pollea el outcome
+  cada 60s hasta que `resolved=true` y corta solo. Cadena: pitazo FIFA →
+  finalize → resolver → outcome resolved → celebración en ≤2 min.
+- **🐛 Gap cerrado en `reconcile-matches.ts`**: el auto-cierre de último
+  recurso (3h30) era el ÚNICO camino que NO llamaba `resolveTournamentPredictions`
+  ni `finalizeFantasyLegends` — si la final se cerraba por ahí, la Copa quedaba
+  sin puntuar. Ahora tiene el mismo bloque idempotente que sync-espn/sync-scores.
+  Con esto los 5 caminos de cierre están cubiertos (FIFA whistle, sync-scores,
+  sync-espn, admin update-match, reconcile) + scripts manuales de fallback.
+- **Fix `'3rd'`→`'third'`** (pendiente de la bitácora 2026-07-16): filtro muerto
+  de `use-tournament-phase.ts` corregido, tipo de `mock.ts`, y `ROUND_LABELS`
+  ganó la clave `third` (la API manda 'third'; el detalle del 3er puesto
+  mostraba la etiqueta de ronda vacía).
+- **`.env.ro` corregido** (valores estaban cruzados URL↔token, pendiente conocido).
+- **Verificado en prod (read-only)**: final #104 ESP-ARG scheduled 19:00 UTC con
+  `fifa_id_match/stage` mapeados y `score_locked=0`; 3er puesto #103 FRA 4-6 ENG
+  finished con 30 filas de stats FIFA; 63 tournament_predictions sin puntuar
+  (esperado); 70 predicciones de la final; 15 lineups de la fecha final;
+  fantasy_legend aún no otorgado (correcto); `worker_flags` existe. Render corre
+  commit con los 4 fixes de cierre del 16/7 (`/health` → 13cc7fa ⊇ 7d0150a). ✅
+
+**⚠️ Lo malo / pendiente:**
+- El harness visual del componente se verificó por DOM (55 partículas, estilos,
+  sin errores de consola) — el Browser pane de la sesión no pintaba
+  (visibility:hidden congela rAF), así que no hay screenshot. Mirarlo en vivo.
+- Wrapped sigue sin walkthrough real con login Google (pendiente desde el 3/7).
+- Los screenshots de flagcdn pueden tardar en el primer paint del hero (lazy) —
+  fallback a emoji ya cubierto por TeamFlag.
+
 ### 2026-07-16 (4) — Colapsar Oloráculo y outcome (feedback: "vista muy cargada")
 
 Segundo pase de feedback sobre `/tournament-predictions`: liga + Oloráculo +

@@ -32,10 +32,10 @@ export function useTournamentPhase(matches: Match[]): TournamentPhase {
   return useMemo((): TournamentPhase => {
     if (matches.length === 0) return { kind: 'loading' };
 
-    // '3rd' (tercer puesto) corre en paralelo a la final — excluirlo evita
+    // 'third' (tercer puesto) corre en paralelo a la final — excluirlo evita
     // que distorsione la detección de fase cuando solo queda ese partido.
     const knockoutMatches = matches.filter(
-      (m) => m.round !== 'group' && m.round !== '3rd',
+      (m) => m.round !== 'group' && m.round !== 'third',
     );
 
     // Iterar en reversa (final → r32) para retornar la fase más avanzada

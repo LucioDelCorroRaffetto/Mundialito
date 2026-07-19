@@ -28,6 +28,8 @@ import {
 import { R32_LABELS } from '@/shared/data/bracket';
 import { KnockoutPhaseBanner } from '@/shared/components/knockout-phase-banner';
 import { WrappedBanner } from '@/shared/components/wrapped-banner';
+import { ChampionCelebration } from '@/shared/components/champion-celebration';
+import { useTournamentOutcome } from '@/shared/hooks/use-tournament-predictions';
 
 /** Un equipo "real" es uno ya definido en la DB — no el placeholder TBD/??? que
  *  se muestra mientras un cruce de eliminación todavía no tiene rivales. */
@@ -515,6 +517,16 @@ export function HomePage() {
 
   const apiMatches = matchesResponse?.data ?? [];
   const phase = useTournamentPhase(allMatchesResponse?.data ?? []);
+  // Anuncio del campeón: cuando la fase pasa a 'completed' (el poll de matches
+  // detecta la final finished), empezamos a pollear el outcome hasta que el
+  // resolver del back lo marque resuelto — ahí la home muestra la celebración.
+  const { data: tournamentOutcome } = useTournamentOutcome({
+    refetchWhileUnresolved: phase.kind === 'completed',
+  });
+  const champion =
+    phase.kind === 'completed' && tournamentOutcome?.resolved && tournamentOutcome.champion
+      ? tournamentOutcome.champion
+      : null;
   // Proyección del cuadro para saber qué cruces de eliminación ya se pueden
   // pronosticar aunque la DB los tenga como TBD — mismo criterio que el detalle
   // de partido. Reusa queries cacheados, no agrega red.
@@ -644,8 +656,18 @@ export function HomePage() {
             );
           })()}
 
-          {/* Countdown */}
-          <CountdownHero nextMatch={nextMatch} liveMatches={liveMatches} teamMap={teamMap} />
+          {/* Hero: celebración del campeón cuando la final ya se resolvió;
+              countdown / próximos partidos el resto del torneo. */}
+          {champion ? (
+            <ChampionCelebration
+              champion={champion}
+              runnerUp={tournamentOutcome?.runnerUp}
+              thirdPlace={tournamentOutcome?.thirdPlace}
+              teamMap={teamMap}
+            />
+          ) : (
+            <CountdownHero nextMatch={nextMatch} liveMatches={liveMatches} teamMap={teamMap} />
+          )}
 
           {/* Indicador de fase knockout */}
           {(phase.kind === 'knockout' || phase.kind === 'completed') && (

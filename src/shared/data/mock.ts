@@ -9,7 +9,7 @@ export interface Match {
   id: number;
   matchNumber: number;
   matchday: number;
-  round: 'group' | 'r32' | 'r16' | 'qf' | 'sf' | '3rd' | 'final';
+  round: 'group' | 'r32' | 'r16' | 'qf' | 'sf' | 'third' | 'final';
   group?: string;
   homeTeam: Team;
   awayTeam: Team;
@@ -293,7 +293,8 @@ export const RARITY_COLOR: Record<string, string> = {
 
 export const ROUND_LABELS: Record<string, string> = {
   group: 'Fase de Grupos', r32: 'Ronda de 32', r16: 'Octavos de Final',
-  qf: 'Cuartos de Final', sf: 'Semifinal', '3rd': 'Tercer Puesto', final: 'Final',
+  // La API manda 'third' para el tercer puesto; '3rd' queda por compat con mocks.
+  qf: 'Cuartos de Final', sf: 'Semifinal', third: 'Tercer Puesto', '3rd': 'Tercer Puesto', final: 'Final',
 };
 
 export interface TournamentPrediction {

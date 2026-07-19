@@ -13,8 +13,9 @@ import { eq, sql } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import { matches, predictions } from '../db/schema/index.js';
 import { calculatePoints, scoringResult } from '../lib/scoring.js';
-import { checkAchievements } from './achievement-service.js';
+import { checkAchievements, finalizeFantasyLegends } from './achievement-service.js';
 import { recomputeAllFantasyPoints } from './fantasy-scoring-service.js';
+import { resolveTournamentPredictions } from './tournament-resolver.js';
 import { syncFifaStatsForMatch } from './sync-fifa-stats.js';
 
 const FIVE_MIN_MS  = 5 * 60 * 1000;
@@ -154,6 +155,31 @@ export async function reconcileMatchStatuses(): Promise<ReconcileResult> {
       await recomputeAllFantasyPoints();
     } catch (err) {
       result.errors.push(`fantasy recompute: ${String(err)}`);
+    }
+
+    // Cierre de torneo por el camino reconcile: si la final quedó finished por
+    // el auto-cierre de 3h30 (ambos feeds sin FT y FIFA sin pitazo), este era
+    // el ÚNICO camino que no otorgaba fantasy_legend ni puntuaba la Copa.
+    // Mismo bloque idempotente que sync-espn/sync-scores.
+    try {
+      const finalMatch = await db
+        .select({ status: matches.status })
+        .from(matches)
+        .where(eq(matches.round, 'final'))
+        .limit(1)
+        .get();
+      if (finalMatch?.status === 'finished') {
+        const winners = await finalizeFantasyLegends();
+        if (winners.length > 0) {
+          console.log(`[reconcile] fantasy_legend awarded to ${winners.length} user(s):`, winners);
+        }
+        const { resolved, updated } = await resolveTournamentPredictions();
+        if (resolved && updated > 0) {
+          console.log(`[reconcile] predicciones de Copa puntuadas: ${updated} filas`);
+        }
+      }
+    } catch (err) {
+      result.errors.push(`tournament finalize (reconcile path): ${String(err)}`);
     }
   }
 

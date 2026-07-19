@@ -87,8 +87,12 @@ export interface TournamentOutcomeData {
  * Resultado resuelto del torneo con las explicaciones de sorpresa/decepción.
  * `resolved` queda false hasta que se juegue la final; recién ahí el back
  * libera los puntos y este endpoint devuelve el porqué de cada sí y cada no.
+ *
+ * `refetchWhileUnresolved`: para consumidores que esperan el anuncio del
+ * campeón en vivo (la home el día de la final) — repollea cada 60s hasta que
+ * `resolved` sea true y ahí corta solo. El resto usa el staleTime de 5 min.
  */
-export function useTournamentOutcome() {
+export function useTournamentOutcome(opts?: { refetchWhileUnresolved?: boolean }) {
   return useQuery({
     queryKey: ['tournament-outcome'],
     queryFn: async () => {
@@ -96,6 +100,9 @@ export function useTournamentOutcome() {
       return data;
     },
     staleTime: 5 * 60 * 1000,
+    refetchInterval: opts?.refetchWhileUnresolved
+      ? (query) => (query.state.data?.resolved ? false : 60_000)
+      : undefined,
   });
 }
 
